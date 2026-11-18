@@ -22,7 +22,7 @@ Servidor de **Minecraft: Bedrock Edition** escrito em **Rust**, da Rede CeresMC.
 - Multiplayer básico: lista de jogadores com skin, ver os outros andando, chat, voo no criativo.
 - Quebrar e colocar blocos, visível para todos e salvo no LevelDB a cada 5 segundos.
 - Inventário criativo: abrir, pegar itens do menu criativo, mover, dividir, trocar e descartar.
-- Comandos com autocompletar: `/help`, `/list`, `/worlds`, `/say`, `/gamemode`, `/tp`, `/world`, `/time`, `/save-all`, `/stop`, `/op`, `/deop`. Operadores ficam em `ops.txt`; o console também aceita comandos.
+- Comandos com autocompletar: `/help`, `/list`, `/worlds`, `/say`, `/gamemode`, `/tp`, `/world`, `/time`, `/save-all`, `/stop`, `/op`, `/deop`. Operadores ficam em `ops.txt`, mas só valem depois da verificação Xbox (até lá, `allow-unverified-ops=on` liga isso para testes locais, sabendo que qualquer um pode usar qualquer nome). O console sempre aceita todos os comandos.
 - Ctrl+C ou `/stop` salvam os mundos antes de desligar.
 
 ## Compilar e rodar

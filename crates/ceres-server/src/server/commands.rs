@@ -310,9 +310,16 @@ impl Server {
                     self.ops.remove(&lower);
                 }
                 self.save_ops();
+                let effective = give && self.cfg.allow_unverified_ops;
+                if give && !effective {
+                    self.reply(
+                        sender,
+                        "§eSalvo no ops.txt, mas só vale depois da verificação Xbox (ou com allow-unverified-ops=on).",
+                    );
+                }
                 if let Some(sid) = self.find_player(pname) {
                     if let Some(p) = self.players.get_mut(&sid) {
-                        p.op = give;
+                        p.op = effective;
                     }
                     let abilities = protocol::update_abilities(&self.abilities_of(self.players.get(&sid).unwrap()));
                     self.players.get_mut(&sid).unwrap().out.push(abilities);

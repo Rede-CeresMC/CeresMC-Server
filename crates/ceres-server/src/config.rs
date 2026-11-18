@@ -22,6 +22,9 @@ pub struct Config {
     pub difficulty: i32,
     pub level_name: String,
     pub chunks_per_tick: usize,
+    /// Names in ops.txt get operator rights even though logins are not verified yet (anyone can
+    /// pick any name). Only for local testing.
+    pub allow_unverified_ops: bool,
 }
 
 impl Config {
@@ -59,6 +62,7 @@ impl Config {
             },
             level_name: get("level-name", "world"),
             chunks_per_tick: 8,
+            allow_unverified_ops: matches!(get("allow-unverified-ops", "off").as_str(), "on" | "true" | "1"),
         }
     }
 }

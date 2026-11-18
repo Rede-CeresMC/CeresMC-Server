@@ -24,6 +24,12 @@ fn main() {
         ceres_protocol::PROTOCOL
     );
 
+    if cfg.allow_unverified_ops {
+        eprintln!(
+            "[Server] WARNING: allow-unverified-ops is on: anyone who joins with a name from ops.txt is an operator"
+        );
+    }
+
     let gd = GameData::load(&root.join("data")).unwrap_or_else(|e| fail("Failed to load vanilla data", e));
     println!(
         "[Data] {} block states, {} block definitions, {} creative items",

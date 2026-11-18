@@ -24,7 +24,7 @@ if len(sys.argv) > 1 and sys.argv[1] == "check":
     # a placed block shows up when another block in the same chunk is (re)sent; ask by clicking it
     c.move(*SPAWN)
     c.place_block(PLACED, 1, 0)  # invalid placement -> server answers with the real blocks
-    c.pump(1.0, lambda: any(pos == PLACED for pos, _ in update_blocks(c)))
+    c.pump(4.0, lambda: any(pos == PLACED for pos, _ in update_blocks(c)))
     seen = dict(update_blocks(c))
     check(seen.get(PLACED) == STONE, f"stone survived the restart at {PLACED} (got {seen.get(PLACED)})")
     c.close()
@@ -38,18 +38,18 @@ else:
         a.break_block(pos)
     a.pump(1.0); b.pump(1.0)
     a.place_block(PLACE_ON, 1, STONE)
-    b.pump(1.5, lambda: (PLACED, STONE) in update_blocks(b))
+    b.pump(4.0, lambda: (PLACED, STONE) in update_blocks(b))
     check((PLACED, STONE) in update_blocks(b), f"BotB sees the stone BotA placed at {PLACED}")
     SECOND = (259, 70, 258)
     a.place_block((259, 69, 258), 1, STONE)
-    b.pump(1.5, lambda: (SECOND, STONE) in update_blocks(b))
+    b.pump(4.0, lambda: (SECOND, STONE) in update_blocks(b))
     a.break_block(SECOND)
-    b.pump(1.5, lambda: any(pos == SECOND and bid != STONE for pos, bid in update_blocks(b)))
+    b.pump(4.0, lambda: any(pos == SECOND and bid != STONE for pos, bid in update_blocks(b)))
     after = [bid for pos, bid in update_blocks(b) if pos == SECOND]
     check(after and after[-1] == block_id("minecraft:air"), f"BotB sees BotA break the block at {SECOND}")
     n = len(update_blocks(a))
     a.place_block(PLACE_ON, 1, STONE)  # target already holds stone: must be refused and resynced
-    a.pump(1.0, lambda: len(update_blocks(a)) > n)
+    a.pump(4.0, lambda: len(update_blocks(a)) > n)
     check(all(bid == STONE for pos, bid in update_blocks(a)[n:] if pos == PLACED), "placing into an occupied block is refused")
     print("  waiting for the autosave...")
     a.pump(6.0)

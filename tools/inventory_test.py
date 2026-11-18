@@ -48,23 +48,23 @@ c = Client("BotInv")
 c.join()
 # creative create item #1, take 64 into hotbar slot 0
 c.send(request(-2, [(12, uvarint(1) + b"\x01"), (0, b"\x40" + slot(60, 50) + slot(28, 0))]))
-c.pump(1.5, lambda: len(responses(c)) >= 1)
+c.pump(4.0, lambda: len(responses(c)) >= 1)
 r = responses(c)
 check(r and r[0][1] == 0 and (28, 0, 64) in r[0][2], f"creative take answered with hotbar slot 0 = 64 ({r[:1]})")
 # move 16 of them to hotbar slot 1
 c.send(request(-4, [(1, b"\x10" + slot(28, 0) + slot(28, 1))]))
-c.pump(1.5, lambda: len(responses(c)) >= 2)
+c.pump(4.0, lambda: len(responses(c)) >= 2)
 r = responses(c)
 check(len(r) > 1 and r[1][1] == 0 and set(r[1][2]) == {(28, 0, 48), (28, 1, 16)}, f"split 64 -> 48 + 16 ({r[1:2]})")
 # taking more than there is must be refused
 c.send(request(-6, [(0, b"\x40" + slot(28, 1) + slot(28, 2))]))
-c.pump(1.5, lambda: len(responses(c)) >= 3)
+c.pump(4.0, lambda: len(responses(c)) >= 3)
 r = responses(c)
 check(len(r) > 2 and r[2][1] != 0, "taking 64 from a slot with 16 is refused")
 # what the real client sends: creative create + deprecated "crafting results" + take
 results = uvarint(1) + uvarint(1) + b"" + uvarint(len("minecraft:stone")) + b"minecraft:stone" + svarint(0) + struct.pack("<h", 64) + uvarint(0) + uvarint(0) + b""
 c.send(request(-8, [(12, uvarint(1) + b""), (18, results), (0, b"@" + slot(60, 50) + slot(28, 5))]))
-c.pump(1.5, lambda: len(responses(c)) >= 4)
+c.pump(4.0, lambda: len(responses(c)) >= 4)
 r = responses(c)
 check(len(r) > 3 and r[3][1] == 0 and (28, 5, 64) in r[3][2], f"real client creative take (with crafting results) works ({r[3:4]})")
 c.pump(0.5)

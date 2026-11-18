@@ -26,6 +26,7 @@ motd=CeresMC Test
 server-port=$PORT
 gamemode=creative
 level-name=world
+allow-unverified-ops=on
 view-distance=4
 EOF
 

@@ -49,7 +49,8 @@ impl Server {
                     .map(str::to_string)
                     .unwrap_or_else(|| format!("Player{sid}"));
                 // TODO: verify the auth chain (xbox-auth) and enable encryption
-                p.op = self.ops.contains(&name.to_ascii_lowercase());
+                // logins are not verified yet: a name alone must not grant operator rights
+                p.op = self.cfg.allow_unverified_ops && self.ops.contains(&name.to_ascii_lowercase());
                 p.name = name;
                 p.entity_id = self.next_entity_id;
                 self.next_entity_id += 1;

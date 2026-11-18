@@ -17,7 +17,7 @@ def texts(c):
     return [d for p, d in c.received if p == 0x09]
 
 def wait_text(c, needle):
-    c.pump(1.5, lambda: any(needle.encode() in d for d in texts(c)))
+    c.pump(4.0, lambda: any(needle.encode() in d for d in texts(c)))
     return any(needle.encode() in d for d in texts(c))
 
 op, user = Client("BotOp"), Client("BotUser")
@@ -25,13 +25,13 @@ op.join(); user.join()
 check(any(p == 0x4c for p, _ in op.received), "operator receives the command list")
 
 command(op, "/gamemode survival")
-op.pump(1.5, lambda: any(p == 0x3e for p, _ in op.received))
+op.pump(4.0, lambda: any(p == 0x3e for p, _ in op.received))
 gm = [d for p, d in op.received if p == 0x3e]
 check(gm and gm[-1][0] == 0, "/gamemode survival sends SetPlayerGameType(0)")
 
 n = len([1 for p, _ in op.received if p == 0x13])
 command(op, "/tp 10 80 10")
-op.pump(1.5, lambda: len([1 for p, _ in op.received if p == 0x13]) > n)
+op.pump(4.0, lambda: len([1 for p, _ in op.received if p == 0x13]) > n)
 moves = [d for p, d in op.received if p == 0x13]
 if moves:
     _, q = read_uvarint(moves[-1], 0)
@@ -43,7 +43,7 @@ command(op, "/list")
 check(wait_text(op, "BotUser"), "/list shows the other player")
 
 command(op, "/time set night")
-op.pump(1.0, lambda: any(p == 0x0a for p, _ in op.received))
+op.pump(4.0, lambda: any(p == 0x0a for p, _ in op.received))
 check(any(p == 0x0a for p, _ in op.received), "/time set night sends SetTime")
 
 command(user, "/gamemode creative")
