@@ -30,6 +30,7 @@ BotCraft
 BotMiner
 BotFood
 BotEffect
+BotFurnace
 " > "$RUN/ops.txt"
 cat > "$RUN/server.properties" <<EOF
 motd=CeresMC Test
@@ -57,6 +58,7 @@ python -I tools/crafting_test.py || status=1
 python -I tools/mining_test.py || status=1
 python -I tools/food_test.py || status=1
 python -I tools/effects_test.py || status=1
+python -I tools/furnace_test.py || status=1
 python -I tools/gameplay_test.py || status=1
 
 stop_server

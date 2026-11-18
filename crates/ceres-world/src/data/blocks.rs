@@ -57,6 +57,12 @@ impl GameData {
         self.block_ids.get(&nbt::state_key(&info.name, Some(&st))).copied()
     }
 
+    /// The same block state under another name (furnace -> lit_furnace), if it exists.
+    pub fn with_name(&self, id: i32, name: &str) -> Option<i32> {
+        let info = self.block_states.get(&id)?;
+        self.block_ids.get(&nbt::state_key(name, Some(&info.states))).copied()
+    }
+
     /// Finds the default state of a block by name ("stone" or "minecraft:stone").
     pub fn default_block(&self, name: &str) -> Option<i32> {
         let full = if name.contains(':') { name.to_string() } else { format!("minecraft:{name}") };

@@ -17,6 +17,11 @@ const CONTAINER_SLOTS: usize = 27;
 pub(crate) fn container_kind(name: &str) -> Option<(u8, &'static str, bool)> {
     match name {
         "minecraft:crafting_table" => Some((WORKBENCH_UI, "", false)),
+        "minecraft:furnace" | "minecraft:lit_furnace" => Some((furnace::UI_FURNACE, "Furnace", false)),
+        "minecraft:blast_furnace" | "minecraft:lit_blast_furnace" => {
+            Some((furnace::UI_BLAST_FURNACE, "BlastFurnace", false))
+        }
+        "minecraft:smoker" | "minecraft:lit_smoker" => Some((furnace::UI_SMOKER, "Smoker", false)),
         "minecraft:chest" | "minecraft:trapped_chest" => Some((block_container::CHEST, "Chest", true)),
         "minecraft:barrel" => Some((block_container::BARREL, "Barrel", false)),
         n if n.ends_with("shulker_box") => Some((block_container::SHULKER_BOX, "ShulkerBox", true)),
@@ -73,12 +78,17 @@ pub(crate) fn item_from_vanilla(t: &Tag, gd: &GameData) -> Option<ItemDesc> {
     Some(ItemDesc { id: info.id, count, meta, stack_id: 0, block_runtime_id, extra })
 }
 
-fn items_from_tile(tile: Option<&Tag>, gd: &GameData) -> Vec<ItemDesc> {
-    let mut items = vec![ItemDesc::default(); CONTAINER_SLOTS];
+/// Slots of a container kind.
+fn slot_count(ui: u8) -> usize {
+    if furnace::is_furnace_ui(ui) { 3 } else { CONTAINER_SLOTS }
+}
+
+pub(crate) fn items_from_tile(tile: Option<&Tag>, gd: &GameData, slots: usize) -> Vec<ItemDesc> {
+    let mut items = vec![ItemDesc::default(); slots];
     if let Some(list) = tile.and_then(|t| t.get("Items")).and_then(|t| t.as_list()) {
         for entry in list {
             let Some(slot) = entry.get("Slot").and_then(|v| v.as_i64()) else { continue };
-            if (0..CONTAINER_SLOTS as i64).contains(&slot) {
+            if (0..slots as i64).contains(&slot) {
                 if let Some(it) = item_from_vanilla(entry, gd) {
                     items[slot as usize] = it;
                 }
@@ -88,7 +98,7 @@ fn items_from_tile(tile: Option<&Tag>, gd: &GameData) -> Vec<ItemDesc> {
     items
 }
 
-fn items_to_list(items: &[ItemDesc], gd: &GameData) -> Tag {
+pub(crate) fn items_to_list(items: &[ItemDesc], gd: &GameData) -> Tag {
     Tag::List(
         10,
         items
@@ -119,8 +129,15 @@ impl Server {
         let mut items = if workbench {
             Vec::new()
         } else {
+            // a working furnace holds the newest contents itself
+            if furnace::is_furnace_ui(ui) && !self.furnaces.contains_key(&(world, pos)) {
+                self.wake_furnace(world, pos, ui);
+            }
             let tile = self.worlds.worlds[world].get_block_entity(pos, &self.gd);
-            items_from_tile(tile.as_ref(), &self.gd)
+            match self.furnaces.get(&(world, pos)) {
+                Some(f) if furnace::is_furnace_ui(ui) => f.items(),
+                _ => items_from_tile(tile.as_ref(), &self.gd, slot_count(ui)),
+            }
         };
         let Some(p) = self.players.get_mut(&sid) else { return false };
         for it in items.iter_mut().filter(|it| !it.is_empty()) {
@@ -131,7 +148,8 @@ impl Server {
         if workbench {
             p.out.push(protocol::open_block_container(window, protocol::WINDOW_TYPE_WORKBENCH, pos));
         } else {
-            p.out.push(protocol::open_block_container(window, protocol::WINDOW_TYPE_CONTAINER, pos));
+            let ty = if furnace::is_furnace_ui(ui) { furnace::furnace_window_type(ui) } else { protocol::WINDOW_TYPE_CONTAINER };
+            p.out.push(protocol::open_block_container(window, ty, pos));
             p.out.push(protocol::inventory_content(window as u32, &items));
         }
         p.inventory.container = Some(OpenContainer { ui, window, world, pos, items, changed: false });
@@ -178,6 +196,13 @@ impl Server {
         });
         tile.set("Items", items_to_list(&items, &self.gd));
         self.worlds.worlds[world].set_block_entity(pos, tile, &self.gd);
+        // a furnace starts working on what the player put in
+        if let Some((ui, _, _)) = container_kind(self.gd.block_name(block)).filter(|(u, _, _)| furnace::is_furnace_ui(*u)) {
+            match self.furnaces.get_mut(&(world, pos)) {
+                Some(f) => f.set_items(items.clone()),
+                None => self.wake_furnace(world, pos, ui),
+            }
+        }
         // everyone else looking at the same container sees the new contents
         let others: Vec<SessionId> = self
             .players
@@ -207,7 +232,13 @@ impl Server {
         let Some(p) = self.players.get_mut(&sid) else { return };
         let Some(c) = p.inventory.container.take() else { return };
         if by_server {
-            let ty = if c.ui == WORKBENCH_UI { protocol::WINDOW_TYPE_WORKBENCH } else { protocol::WINDOW_TYPE_CONTAINER };
+            let ty = if c.ui == WORKBENCH_UI {
+                protocol::WINDOW_TYPE_WORKBENCH
+            } else if furnace::is_furnace_ui(c.ui) {
+                furnace::furnace_window_type(c.ui)
+            } else {
+                protocol::WINDOW_TYPE_CONTAINER
+            };
             p.out.push(protocol::container_close(c.window, ty, true));
         }
         let block = self.worlds.worlds[c.world].get_block(c.pos, &self.gd);
@@ -220,8 +251,15 @@ impl Server {
     /// Items stored in a container block, removed from it (used when the block is broken).
     pub(crate) fn take_container_items(&mut self, world: usize, pos: [i32; 3]) -> Vec<ItemDesc> {
         let tile = self.worlds.worlds[world].get_block_entity(pos, &self.gd);
-        let items: Vec<ItemDesc> =
-            items_from_tile(tile.as_ref(), &self.gd).into_iter().filter(|i| !i.is_empty()).collect();
+        let block = self.worlds.worlds[world].get_block(pos, &self.gd);
+        let slots = container_kind(self.gd.block_name(block)).map_or(CONTAINER_SLOTS, |(ui, _, _)| slot_count(ui));
+        let items: Vec<ItemDesc> = match self.furnaces.remove(&(world, pos)) {
+            Some(f) => f.items(),
+            None => items_from_tile(tile.as_ref(), &self.gd, slots),
+        }
+        .into_iter()
+        .filter(|i| !i.is_empty())
+        .collect();
         // close the window for anyone looking at it
         let viewers: Vec<SessionId> = self
             .players

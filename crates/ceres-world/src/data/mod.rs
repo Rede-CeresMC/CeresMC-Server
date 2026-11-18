@@ -12,7 +12,7 @@ use std::rc::Rc;
 mod biomes;
 mod blocks;
 mod creative;
-mod recipes;
+pub mod recipes;
 mod mining;
 pub use mining::{BreakInfo, Tool, ToolInfo};
 mod voxel_shapes;
@@ -63,6 +63,8 @@ pub struct GameData {
     /// recipe network id -> recipe, to check crafts
     pub recipes: HashMap<i32, Recipe>,
     pub item_tags: HashMap<String, std::collections::HashSet<String>>,
+    /// smelting recipes: (furnace kind, input) -> outputs
+    pub smelting: recipes::Smelting,
     /// block name -> hardness, right tool and needed tier
     pub break_info: HashMap<String, BreakInfo>,
     pub creative_item_count: usize,
@@ -330,6 +332,7 @@ impl GameData {
             crafting_data: crafting.packet,
             recipes: crafting.recipes,
             item_tags: crafting.item_tags,
+            smelting: crafting.smelting,
             break_info: mining::load_break_info(dir)?,
             block_ids,
             block_states,

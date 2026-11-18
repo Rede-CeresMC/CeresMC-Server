@@ -102,7 +102,11 @@ pub(crate) struct CraftingTables {
     pub(crate) packet: Vec<u8>,
     pub(crate) recipes: HashMap<i32, Recipe>,
     pub(crate) item_tags: HashMap<String, HashSet<String>>,
+    pub(crate) smelting: Smelting,
 }
+
+/// (furnace kind, input item) -> [(input aux or any, output)]
+pub type Smelting = HashMap<(String, String), Vec<(Option<i32>, ItemDesc)>>;
 
 pub(crate) fn load_recipes(dir: &Path, items: &HashMap<String, ItemInfo>) -> Res<CraftingTables> {
     let tags_json: serde_json::Value = serde_json::from_slice(
@@ -127,6 +131,7 @@ pub(crate) fn load_recipes(dir: &Path, items: &HashMap<String, ItemInfo>) -> Res
     let mut shapeless_n = 0u32;
     let mut recipes = HashMap::new();
     let mut net_id = 0i32;
+    let mut smelting: Smelting = HashMap::new();
 
     for r in data["recipes"].as_array().ok_or("recipes.json: no recipes")? {
         let ty = r["type"].as_i64().unwrap_or(-1);
@@ -202,6 +207,11 @@ pub(crate) fn load_recipes(dir: &Path, items: &HashMap<String, ItemInfo>) -> Res
                 r["input"].as_array().map(|a| a.iter().filter_map(ingredient_of).collect()).unwrap_or_default();
             if inputs.is_empty() {
                 continue;
+            }
+            if matches!(block, "furnace" | "blast_furnace" | "smoker" | "campfire" | "soul_campfire") {
+                if let [(Ingredient::Name { name: input, aux }, _)] = inputs.as_slice() {
+                    smelting.entry((block.to_string(), input.clone())).or_default().push((*aux, first.clone()));
+                }
             }
             net_id += 1;
             shapeless.string(name);
@@ -279,7 +289,7 @@ pub(crate) fn load_recipes(dir: &Path, items: &HashMap<String, ItemInfo>) -> Res
         w.uvarint(0); // material reducer recipes
         w.bool(true); // clean recipes
     });
-    Ok(CraftingTables { packet, recipes, item_tags })
+    Ok(CraftingTables { packet, recipes, item_tags, smelting })
 }
 
 impl GameData {

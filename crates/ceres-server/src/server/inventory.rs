@@ -69,7 +69,10 @@ enum Loc {
 
 fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
     if let Some(c) = open {
-        if s.container == c.ui {
+        // furnaces split their three slots over three UI ids (input, fuel, result)
+        let furnace_slot = super::furnace::is_furnace_ui(c.ui)
+            && matches!(s.container, super::furnace::UI_FUEL | super::furnace::UI_RESULT);
+        if s.container == c.ui || furnace_slot {
             return ((s.slot as usize) < c.items.len()).then_some(Loc::Container(s.slot as usize));
         }
     }
@@ -390,6 +393,10 @@ impl Inventory {
                     if source.is_empty() || source.count < count as u16 {
                         return None;
                     }
+                    // nothing can be put into a furnace's result slot
+                    if dst.container == super::furnace::UI_RESULT {
+                        return None;
+                    }
                     let dst_loc = locate(&dst, self.container.as_ref())?;
                     let max_stack = if matches!(dst_loc, Loc::Armor(_)) { 1 } else { gd.max_stack(source.id) as u16 };
                     let mut target = self.slot_ref(dst_loc).clone();
@@ -419,6 +426,9 @@ impl Inventory {
                     touched.push(dst);
                 }
                 StackAction::Swap { a, b } => {
+                    if a.container == super::furnace::UI_RESULT || b.container == super::furnace::UI_RESULT {
+                        return None;
+                    }
                     let (la, lb) = (locate(&a, self.container.as_ref())?, locate(&b, self.container.as_ref())?);
                     let (mut sa, mut sb) = (self.slot_ref(la).clone(), self.slot_ref(lb).clone());
                     if matches!(la, Loc::Armor(_)) && !sb.is_empty() && sb.count > 1 {

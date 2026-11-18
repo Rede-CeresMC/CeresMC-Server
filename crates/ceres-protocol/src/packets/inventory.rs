@@ -675,6 +675,19 @@ pub const BLOCK_EVENT: u32 = 0x1a;
 /// WindowTypes::CONTAINER
 pub const WINDOW_TYPE_CONTAINER: u8 = 0;
 pub const WINDOW_TYPE_WORKBENCH: u8 = 1;
+pub const WINDOW_TYPE_FURNACE: u8 = 2;
+pub const WINDOW_TYPE_BLAST_FURNACE: u8 = 27;
+pub const WINDOW_TYPE_SMOKER: u8 = 28;
+pub const CONTAINER_SET_DATA: u32 = 0x33;
+
+/// ContainerSetData: a window property (furnace progress and fuel, brewing time...).
+pub fn container_set_data(window: u8, property: i32, value: i32) -> Vec<u8> {
+    crate::packet(CONTAINER_SET_DATA, |w| {
+        w.u8(window);
+        w.varint(property);
+        w.varint(value);
+    })
+}
 
 /// Opens a block container window (chest, barrel, shulker box) at `pos`.
 pub fn open_block_container(window_id: u8, window_type: u8, pos: [i32; 3]) -> Vec<u8> {

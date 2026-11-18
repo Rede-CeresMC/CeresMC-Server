@@ -8,6 +8,7 @@ mod containers;
 mod durability;
 mod effects;
 mod food;
+mod furnace;
 mod handler;
 mod inventory;
 mod items;
@@ -110,6 +111,8 @@ pub struct Server {
     moderation: moderation::Moderation,
     next_entity_id: i64,
     ticks: u64,
+    /// furnaces with something to do, by (world, position)
+    furnaces: HashMap<(usize, [i32; 3]), furnace::FurnaceState>,
     tick_ms: VecDeque<f32>,
     started_at: Instant,
     /// lowercase names from ops.txt
@@ -141,6 +144,7 @@ impl Server {
             moderation: moderation::Moderation::load(),
             next_entity_id: 1,
             ticks: 0,
+            furnaces: HashMap::new(),
             tick_ms: VecDeque::with_capacity(100),
             started_at: Instant::now(),
             ops: load_ops(),
