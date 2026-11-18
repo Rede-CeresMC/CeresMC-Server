@@ -1,0 +1,7 @@
+motd=CeresMC Server
+server-port=19132
+max-players=20
+gamemode=creative
+difficulty=peaceful
+level-name=world
+view-distance=10

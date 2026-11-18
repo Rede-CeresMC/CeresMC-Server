@@ -1,0 +1,11 @@
+[package]
+name = "ceres-protocol"
+description = "Bedrock protocol packets and batch codec"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ceres-codec.workspace = true
+flate2.workspace = true

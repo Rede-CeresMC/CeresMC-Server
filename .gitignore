@@ -1,0 +1,16 @@
+# build
+/target
+
+# runtime data (each server has its own)
+/worlds/
+/server.properties
+/server.out
+/*.log
+/debug/
+
+# editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

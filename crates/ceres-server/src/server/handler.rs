@@ -1,0 +1,133 @@
+//! Packet handling: login flow, resource packs, StartGame, input and chat.
+
+use super::*;
+use base64::Engine;
+
+impl Server {
+    pub(crate) fn handle_packet(&mut self, sid: SessionId, buf: &[u8]) -> Res<()> {
+        let mut r = R::new(buf);
+        let pid = r.uvarint()? & 0x3ff;
+        let Some(p) = self.players.get_mut(&sid) else { return Ok(()) };
+        if ceres_net::debug_enabled() && p.state != State::Spawned && pid != id::PLAYER_AUTH_INPUT {
+            println!("[Debug] {sid} <- 0x{pid:02x} ({} bytes) in {:?}", buf.len(), p.state);
+        }
+        match (p.state, pid) {
+            (State::AwaitNetworkSettings, id::REQUEST_NETWORK_SETTINGS) => {
+                let proto = r.u32_be()?;
+                if proto != protocol::PROTOCOL {
+                    println!("[Net] {} uses protocol {proto}, we speak {}", p.addr, protocol::PROTOCOL);
+                    let status = if proto < protocol::PROTOCOL {
+                        play_status::LOGIN_FAILED_CLIENT
+                    } else {
+                        play_status::LOGIN_FAILED_SERVER
+                    };
+                    p.out.push(protocol::play_status(status));
+                    p.close = Some("incompatible protocol".into());
+                    return Ok(());
+                }
+                // NetworkSettings itself goes out uncompressed; everything after is compressed
+                let batch = protocol::encode_batch(&[protocol::network_settings()], false);
+                if let Some(t) = self.transport(sid) {
+                    t.send(sid, &batch);
+                }
+                let p = self.players.get_mut(&sid).unwrap();
+                p.compression = true;
+                p.state = State::AwaitLogin;
+            }
+            (State::AwaitLogin, id::LOGIN) => {
+                let _proto = r.u32_be()?;
+                let blob_len = r.uvarint()? as usize;
+                let mut blob = R::new(r.take(blob_len)?);
+                let auth_len = blob.u32_le()? as usize;
+                let _auth_json = blob.take(auth_len)?;
+                let cd_len = blob.u32_le()? as usize;
+                let client_data = blob.take(cd_len)?;
+                let name = jwt_payload(client_data)
+                    .and_then(|v| v["ThirdPartyName"].as_str().map(str::to_string))
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| format!("Player{sid}"));
+                // TODO: verify the auth chain (xbox-auth) and enable encryption
+                p.name = name;
+                p.entity_id = self.next_entity_id;
+                self.next_entity_id += 1;
+                println!("[Game] {} is logging in from {}", p.name, p.addr);
+                p.out.push(protocol::play_status(play_status::LOGIN_SUCCESS));
+                p.out.push(protocol::resource_packs_info());
+                p.state = State::ResourcePacks;
+            }
+            (State::ResourcePacks, id::RESOURCE_PACK_CLIENT_RESPONSE) => {
+                let status = r.uvarint()?;
+                match status {
+                    2 => p.out.push(protocol::resource_pack_stack()), // have all packs
+                    3 => self.start_game(sid),                        // completed
+                    0 => self.kick(sid, "You must accept resource packs"),
+                    _ => {}
+                }
+            }
+            (State::PreSpawn | State::Spawned, id::REQUEST_CHUNK_RADIUS) => {
+                let requested = r.varint()?;
+                let radius = requested.clamp(2, self.cfg.view_distance);
+                p.radius = radius;
+                p.out.push(protocol::chunk_radius_updated(radius));
+                p.center = None; // force a full re-queue
+                self.update_view(sid);
+            }
+            (State::PreSpawn, id::SET_LOCAL_PLAYER_AS_INITIALIZED) => {
+                p.state = State::Spawned;
+                println!("[Game] {} spawned in \"{}\"", p.name, self.worlds.worlds[p.world].folder);
+                self.update_status();
+            }
+            (State::PreSpawn | State::Spawned, id::PLAYER_AUTH_INPUT) => {
+                let _pitch = r.f32_le()?;
+                let _yaw = r.f32_le()?;
+                let pos = [r.f32_le()?, r.f32_le()?, r.f32_le()?];
+                if pos.iter().all(|v| v.is_finite()) {
+                    p.pos = pos;
+                    self.update_view(sid);
+                }
+            }
+            (_, id::CLIENT_CACHE_STATUS) => {}
+            _ => {}
+        }
+        Ok(())
+    }
+
+    pub(crate) fn start_game(&mut self, sid: SessionId) {
+        let Some(p) = self.players.get_mut(&sid) else { return };
+        let world = &self.worlds.worlds[p.world];
+        let mut spawn = world.spawn;
+        if !(-64..=320).contains(&spawn[1]) {
+            spawn[1] = 100;
+        }
+        p.pos = [spawn[0] as f32 + 0.5, spawn[1] as f32 + 1.62, spawn[2] as f32 + 0.5];
+        p.out.push(self.gd.jigsaw_structures.clone());
+        p.out.push(self.gd.voxel_shapes.clone());
+        p.out.push(protocol::start_game(&protocol::StartGame {
+            entity_id: p.entity_id,
+            gamemode: self.cfg.gamemode,
+            position: p.pos,
+            pitch: 0.0,
+            yaw: 0.0,
+            spawn,
+            difficulty: self.cfg.difficulty,
+            time: world.time as i32,
+            world_name: &self.cfg.motd,
+            software: &self.software,
+            block_definitions: &self.gd.block_definitions,
+            block_definition_count: self.gd.block_definition_count,
+        }));
+        p.out.push(self.gd.item_registry.clone());
+        p.out.push(self.gd.actor_identifiers.clone());
+        p.out.push(self.gd.biome_definitions.clone());
+        p.state = State::PreSpawn;
+        p.radius = self.cfg.view_distance.min(8);
+        self.update_view(sid);
+    }
+}
+
+pub(crate) fn jwt_payload(token: &[u8]) -> Option<serde_json::Value> {
+    let s = std::str::from_utf8(token).ok()?;
+    let part = s.split('.').nth(1)?;
+    let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(part.trim_end_matches('=')).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}

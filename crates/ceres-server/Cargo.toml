@@ -1,0 +1,19 @@
+[package]
+name = "ceres-server"
+description = "CeresMC Server: Minecraft Bedrock server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "ceres"
+path = "src/main.rs"
+
+[dependencies]
+ceres-codec.workspace = true
+ceres-protocol.workspace = true
+ceres-net.workspace = true
+ceres-world.workspace = true
+base64.workspace = true
+serde_json.workspace = true
