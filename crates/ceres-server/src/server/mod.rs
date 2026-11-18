@@ -246,7 +246,8 @@ impl Server {
                         continue;
                     }
                     if let Err(e) = self.handle_batch(sid, &payload) {
-                        eprintln!("[Net] session {sid}: {e}");
+                        let who = self.players.get(&sid).map(|p| p.name.clone()).unwrap_or_default();
+                        crate::logfile::log(&format!("[Net] session {sid} ({who}): {e}"));
                         self.kick(sid, "Pacote inválido");
                     }
                 }
@@ -254,7 +255,7 @@ impl Server {
                     self.close_container(sid, false);
                     if let Some(p) = self.players.remove(&sid) {
                         if !p.name.is_empty() {
-                            println!("[Game] {} left ({reason})", p.name);
+                            crate::logfile::log(&format!("[Game] {} left ({reason})", p.name));
                         }
                         self.on_left(&p);
                     }
@@ -272,6 +273,7 @@ impl Server {
 
     pub(crate) fn kick(&mut self, sid: SessionId, msg: &str) {
         if let Some(p) = self.players.get_mut(&sid) {
+            crate::logfile::log(&format!("[Game] kicking {} ({}): {msg}", p.name, p.addr));
             p.out.push(protocol::disconnect(msg));
             p.close = Some(msg.to_string());
         }
@@ -304,7 +306,11 @@ impl Server {
             }
         }
         for pk in packets {
-            self.handle_packet(sid, &pk)?;
+            if let Err(e) = self.handle_packet(sid, &pk) {
+                let id = R::new(&pk).uvarint().map(|h| h & 0x3ff).unwrap_or(0);
+                let file = crate::logfile::dump_packet(sid, &pk).unwrap_or_default();
+                return Err(format!("packet 0x{id:02x} ({} bytes, saved to {file}): {e}", pk.len()));
+            }
         }
         Ok(())
     }

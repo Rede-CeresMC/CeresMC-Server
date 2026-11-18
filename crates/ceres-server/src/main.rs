@@ -2,6 +2,7 @@
 
 mod auth;
 mod config;
+mod logfile;
 mod server;
 
 use ceres_net::{NetherNetServer, RakNetServer, Transport};
@@ -14,6 +15,7 @@ fn fail(what: &str, e: impl std::fmt::Display) -> ! {
 }
 
 fn main() {
+    logfile::init();
     let started = std::time::Instant::now();
     let root = std::env::current_dir().expect("cwd");
     let cfg = Config::load(&root.join("server.properties"));

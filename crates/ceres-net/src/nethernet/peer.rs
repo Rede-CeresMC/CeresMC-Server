@@ -59,7 +59,11 @@ impl PeerConnectionEventHandler for H {
         match state {
             RTCPeerConnectionState::Failed => self.0.close("connection failed"),
             RTCPeerConnectionState::Closed => self.0.close("connection closed"),
-            RTCPeerConnectionState::Disconnected => self.0.close("connection lost"),
+            // "disconnected" is temporary (ICE checks missed for a few seconds) and usually comes
+            // back to "connected"; only "failed" is final, like altay's transport
+            RTCPeerConnectionState::Disconnected => {
+                println!("[NetherNet] session {}: connection unstable, waiting for it to recover", self.0.sid);
+            }
             _ => {}
         }
     }
