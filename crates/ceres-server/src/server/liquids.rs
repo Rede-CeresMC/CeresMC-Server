@@ -261,6 +261,8 @@ impl Server {
             };
             let air = self.gd.air_id;
             self.change_block(world, pos, air);
+            let sound = if kind == Liquid::Water { "bucket.fill.water" } else { "bucket.fill.lava" };
+            self.liquid_sound(world, pos, sound);
             if kind == Liquid::Water { "minecraft:water_bucket" } else { "minecraft:lava_bucket" }
         } else {
             let kind = empty_into.unwrap();
@@ -276,6 +278,8 @@ impl Server {
                 return true;
             };
             self.set_liquid(world, pos, kind, 0);
+            let sound = if kind == Liquid::Water { "bucket.empty.water" } else { "bucket.empty.lava" };
+            self.liquid_sound(world, pos, sound);
             "minecraft:bucket"
         };
         self.swing_arm(sid);
@@ -308,6 +312,11 @@ impl Server {
         }
         self.broadcast_equipment(sid);
         true
+    }
+
+    fn liquid_sound(&mut self, world: usize, pos: [i32; 3], sound: &str) {
+        let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
+        self.broadcast(&protocol::level_sound_event(sound, center, -1), |_, q| q.world == world);
     }
 
     fn resync_held(&mut self, sid: SessionId) {

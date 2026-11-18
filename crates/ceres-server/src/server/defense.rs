@@ -79,7 +79,7 @@ impl Server {
     /// A blocked hit makes the shield sound and wears the shield.
     pub(crate) fn shield_blocks(&mut self, victim: SessionId, from: [f32; 3], damage: f32, axe: bool) -> bool {
         let Some(p) = self.players.get(&victim) else { return false };
-        if !p.actor_state.blocking {
+        if !p.actor_state.blocking || p.dead || p.state != State::Spawned {
             return false;
         }
         // only hits from the front half
@@ -89,7 +89,14 @@ impl Server {
         if look[0] * to[0] + look[1] * to[1] <= 0.0 {
             return false;
         }
+        // hits within the invulnerability frames are absorbed silently (no sound, no wear)
+        if p.hurt_cooldown > 0 {
+            return true;
+        }
         let (world, pos) = (p.world, p.pos);
+        if let Some(p) = self.players.get_mut(&victim) {
+            p.hurt_cooldown = 10;
+        }
         self.broadcast(&protocol::level_sound_event("item.shield.block", pos, -1), |_, q| q.world == world);
         // vanilla: 1 + damage durability for hits of 3 or more
         if damage >= 3.0 {

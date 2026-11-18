@@ -82,7 +82,7 @@ guard.pump(0.3); foe.pump(0.3)
 guard.sneak(True)
 guard.pump(0.3)
 guard.move(X, 71.62, Z + 2, yaw=180.0)   # the sneak input carried no rotation
-guard.pump(0.5)
+guard.pump(1.2)  # the shield goes up on the next server tick
 n = len(guard.received)
 attack(foe, guard_eid)
 guard.pump(1.0); foe.pump(0.2)

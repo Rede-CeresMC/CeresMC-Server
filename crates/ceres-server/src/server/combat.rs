@@ -291,12 +291,15 @@ impl Server {
         let kb = [dx / len * push, 0.36, dz / len * push];
         let msg = format!("§c{} foi morto por {}", vic.name, att.name);
         let attacker_pos = att.pos;
+        let (victim_pos, world) = (vic.pos, vic.world);
         let axe = self.gd.tool_info(held.id).is_some_and(|t| t.tool == ceres_world::Tool::Axe);
         self.swing_arm(attacker_sid);
         if self.shield_blocks(victim_sid, attacker_pos, dmg, axe) {
             return;
         }
         if self.damage_player(victim_sid, dmg, &msg, false, Some(kb)) {
+            // only hits that count make the hit sound
+            self.broadcast(&protocol::level_sound_event("attack.strong", victim_pos, -1), |_, q| q.world == world);
             self.wear_held_item(attacker_sid, true);
             self.exhaust(attacker_sid, food::exhaustion::ATTACK);
         }

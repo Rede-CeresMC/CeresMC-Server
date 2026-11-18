@@ -252,12 +252,28 @@ impl Server {
                 self.change_block(world, clicked, toggled);
                 self.toggle_partner(world, clicked, toggled);
                 let center = [clicked[0] as f32 + 0.5, clicked[1] as f32 + 0.5, clicked[2] as f32 + 0.5];
-                let ev = if self.gd.block_name(clicked_id).ends_with("lever") {
-                    level_event::SOUND_CLICK
+                let name = self.gd.block_name(clicked_id).to_string();
+                let opened = self
+                    .gd
+                    .block_states
+                    .get(&toggled)
+                    .and_then(|s| s.states.get("open_bit"))
+                    .and_then(|t| t.as_i64())
+                    == Some(1);
+                let sound = if name.ends_with("trapdoor") {
+                    Some(if opened { "trapdoor.open" } else { "trapdoor.close" })
+                } else if name.ends_with("door") {
+                    Some(if opened { "door.open" } else { "door.close" })
                 } else {
-                    level_event::SOUND_DOOR
+                    None
                 };
-                self.broadcast(&protocol::level_event(ev, center, 0), |_, q| q.world == world);
+                match sound {
+                    Some(s) => self.broadcast(&protocol::level_sound_event(s, center, toggled), |_, q| q.world == world),
+                    None => {
+                        let ev = if name.ends_with("lever") { level_event::SOUND_CLICK } else { level_event::SOUND_DOOR };
+                        self.broadcast(&protocol::level_event(ev, center, 0), |_, q| q.world == world);
+                    }
+                }
                 self.swing_arm(sid);
                 if let Some(t) = side(clicked, face) {
                     self.resync(sid, t);

@@ -73,6 +73,8 @@ fn food_effects(name: &str) -> &'static [(u8, u8, u32, u32)] {
     }
 }
 
+const ACTOR_EVENT_EATING_ITEM: u8 = 57;
+
 pub(crate) mod exhaustion {
     pub const SPRINT_PER_BLOCK: f32 = 0.1;
     pub const JUMP: f32 = 0.05;
@@ -175,6 +177,12 @@ impl Server {
         if name == "minecraft:potion" {
             self.apply_potion(sid, held.meta, 1.0);
         }
+        if name != "minecraft:potion" && name != "minecraft:milk_bucket" && name != "minecraft:honey_bottle" {
+            if let Some(p) = self.players.get(&sid) {
+                let (world, pos) = (p.world, p.pos);
+                self.broadcast(&protocol::level_sound_event("burp", pos, -1), |_, q| q.world == world);
+            }
+        }
         for &(id, amp, secs, chance) in food_effects(&name) {
             if rand::random::<u32>() % 100 < chance {
                 self.add_effect(sid, id, amp, Some(secs), true);
@@ -224,7 +232,15 @@ impl Server {
             let need = self.gd.items_by_id.get(&p.inventory.held_item().id).and_then(|i| food_of(&i.name)).map(|f| f.ticks);
             match need {
                 Some(n) if ticks.saturating_sub(start) >= n => self.finish_eating(sid),
-                Some(_) => {}
+                Some(_) => {
+                    // every 4 ticks: eating particles and sound for everyone around
+                    if ticks.saturating_sub(start) % 4 == 0 {
+                        let held = p.inventory.held_item();
+                        let data = ((held.id as i32) << 16) | (held.meta as i32 & 0xffff);
+                        let (world, eid) = (p.world, p.entity_id);
+                        self.broadcast(&protocol::actor_event(eid, ACTOR_EVENT_EATING_ITEM, data), |_, q| q.world == world);
+                    }
+                }
                 None => p.eating = None, // switched to something that is not food
             }
         }

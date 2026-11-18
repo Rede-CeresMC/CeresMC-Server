@@ -126,7 +126,28 @@ pub(crate) fn items_to_list(items: &[ItemDesc], gd: &GameData) -> Tag {
     )
 }
 
+/// Vanilla open/close sound of a container block.
+fn container_sound(name: &str, open: bool) -> Option<&'static str> {
+    Some(match (name, open) {
+        ("minecraft:chest" | "minecraft:trapped_chest", true) => "chest.open",
+        ("minecraft:chest" | "minecraft:trapped_chest", false) => "chest.closed",
+        ("minecraft:barrel", true) => "block.barrel.open",
+        ("minecraft:barrel", false) => "block.barrel.close",
+        (n, true) if n.ends_with("shulker_box") => "shulkerbox.open",
+        (n, false) if n.ends_with("shulker_box") => "shulkerbox.closed",
+        _ => return None,
+    })
+}
+
 impl Server {
+    fn play_container_sound(&mut self, world: usize, pos: [i32; 3], open: bool) {
+        let block = self.worlds.worlds[world].get_block(pos, &self.gd);
+        if let Some(sound) = container_sound(self.gd.block_name(block), open) {
+            let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
+            self.broadcast(&protocol::level_sound_event(sound, center, -1), |_, q| q.world == world);
+        }
+    }
+
     /// Opens the container at `pos` for a player. Returns false if the block is not a container.
     pub(crate) fn open_container(&mut self, sid: SessionId, pos: [i32; 3]) -> bool {
         let Some(p) = self.players.get(&sid) else { return false };
@@ -177,6 +198,9 @@ impl Server {
             p.out.push(protocol::inventory_content(window as u32, &items));
         }
         p.inventory.container = Some(OpenContainer { ui, window, world, pos, pair, items, changed: false });
+        if self.container_viewers(world, pos) == 1 {
+            self.play_container_sound(world, pos, true);
+        }
         if lid {
             let viewers = self.container_viewers(world, pos);
             for half in std::iter::once(pos).chain(pair) {
@@ -299,6 +323,9 @@ impl Server {
                 _ => window_type_of(c.ui, tile_id),
             };
             p.out.push(protocol::container_close(c.window, ty, true));
+        }
+        if self.container_viewers(c.world, c.pos) == 0 {
+            self.play_container_sound(c.world, c.pos, false);
         }
         let block = self.worlds.worlds[c.world].get_block(c.pos, &self.gd);
         if let Some((_, _, true)) = container_kind(self.gd.block_name(block)) {

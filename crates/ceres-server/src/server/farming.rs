@@ -149,7 +149,13 @@ impl Server {
     fn tool_used(&mut self, sid: SessionId, pos: [i32; 3], sound: &str) {
         let Some(world) = self.players.get(&sid).map(|p| p.world) else { return };
         let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
-        self.broadcast(&protocol::level_sound_event(sound, center, -1), |_, q| q.world == world);
+        // hoe, shovel and axe: "item.use.on" with the resulting block, like vanilla
+        let (name, data) = if sound == "use" {
+            ("item.use.on", self.worlds.worlds[world].get_block(pos, &self.gd))
+        } else {
+            (sound, -1)
+        };
+        self.broadcast(&protocol::level_sound_event(name, center, data), |_, q| q.world == world);
         self.swing_arm(sid);
         self.wear_held(sid, 1);
     }
