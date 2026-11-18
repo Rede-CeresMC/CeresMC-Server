@@ -325,7 +325,7 @@ pub fn add_falling_block(entity_id: i64, pos: [f32; 3], block: i32) -> Vec<u8> {
 }
 
 /// AddActor for a projectile (snowball, egg, ender pearl, arrow) with its shooter.
-pub fn add_projectile(entity_id: i64, kind: &str, pos: [f32; 3], motion: [f32; 3], owner: i64) -> Vec<u8> {
+pub fn add_projectile(entity_id: i64, kind: &str, pos: [f32; 3], motion: [f32; 3], owner: i64, potion: Option<i16>) -> Vec<u8> {
     packet(ADD_ACTOR, |w| {
         w.varlong(entity_id);
         w.uvarlong(entity_id as u64);
@@ -337,11 +337,17 @@ pub fn add_projectile(entity_id: i64, kind: &str, pos: [f32; 3], motion: [f32; 3
             w.f32_le(0.0);
         }
         w.uvarint(0); // attributes
-        w.uvarint(1); // metadata
+        w.uvarint(if potion.is_some() { 2 } else { 1 }); // metadata
         w.uvarint(5); // OWNER_EID (long)
         w.uvarint(7);
         w.u8(7);
         w.varlong(owner);
+        if let Some(aux) = potion {
+            w.uvarint(36); // POTION_AUX_VALUE (short): which potion, for its colour
+            w.uvarint(1);
+            w.u8(1);
+            w.i16_le(aux);
+        }
         w.uvarint(0);
         w.uvarint(0);
         w.uvarint(0);

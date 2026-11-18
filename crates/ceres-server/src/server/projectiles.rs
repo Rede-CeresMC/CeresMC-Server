@@ -20,6 +20,8 @@ pub(crate) enum Kind {
     Egg,
     EnderPearl,
     Arrow,
+    SplashPotion,
+    LingeringPotion,
 }
 
 impl Kind {
@@ -29,10 +31,14 @@ impl Kind {
             Kind::Egg => "minecraft:egg",
             Kind::EnderPearl => "minecraft:ender_pearl",
             Kind::Arrow => "minecraft:arrow",
+            Kind::SplashPotion | Kind::LingeringPotion => "minecraft:splash_potion",
         }
     }
     fn gravity(self) -> f32 {
-        if self == Kind::Arrow { 0.05 } else { 0.03 }
+        match self {
+            Kind::Arrow | Kind::SplashPotion | Kind::LingeringPotion => 0.05,
+            _ => 0.03,
+        }
     }
 }
 
@@ -48,6 +54,8 @@ pub(crate) struct Projectile {
     power: u8,
     punch: u8,
     pickup: bool,
+    /// potion type of a thrown potion
+    potion: u32,
 }
 
 fn throwable(name: &str) -> Option<Kind> {
@@ -55,6 +63,8 @@ fn throwable(name: &str) -> Option<Kind> {
         "minecraft:snowball" => Some(Kind::Snowball),
         "minecraft:egg" => Some(Kind::Egg),
         "minecraft:ender_pearl" => Some(Kind::EnderPearl),
+        "minecraft:splash_potion" => Some(Kind::SplashPotion),
+        "minecraft:lingering_potion" => Some(Kind::LingeringPotion),
         _ => None,
     }
 }
@@ -81,7 +91,8 @@ impl Server {
         true
     }
 
-    fn launch(&mut self, sid: SessionId, kind: Kind, speed: f32, power: u8, punch: u8, pickup: bool) {
+    #[allow(clippy::too_many_arguments)]
+    fn launch(&mut self, sid: SessionId, kind: Kind, speed: f32, power: u8, punch: u8, pickup: bool, potion: u32) {
         let Some(p) = self.players.get(&sid) else { return };
         let (world, pos, rot) = (p.world, p.pos, p.rot);
         let dir = look_vector(rot[0], rot[1]);
@@ -89,13 +100,14 @@ impl Server {
         let start = [pos[0] + dir[0] * 0.5, pos[1] - 0.1 + dir[1] * 0.5, pos[2] + dir[2] * 0.5];
         let eid = self.next_entity_id;
         self.next_entity_id += 1;
-        self.broadcast(&protocol::add_projectile(eid, kind.entity(), start, motion, sid_owner_eid(self, sid)), |_, q| {
+        let aux = matches!(kind, Kind::SplashPotion | Kind::LingeringPotion).then_some(potion as i16);
+        self.broadcast(&protocol::add_projectile(eid, kind.entity(), start, motion, sid_owner_eid(self, sid), aux), |_, q| {
             q.world == world
         });
         let center = start;
         let sound = if kind == Kind::Arrow { "bow" } else { "throw" };
         self.broadcast(&protocol::level_sound_event(sound, center, -1), |_, q| q.world == world);
-        self.projectiles.push(Projectile { entity_id: eid, world, kind, owner: sid, pos: start, motion, age: 0, power, punch, pickup });
+        self.projectiles.push(Projectile { entity_id: eid, world, kind, owner: sid, pos: start, motion, age: 0, power, punch, pickup, potion });
     }
 
     /// Click in the air with a throwable: throw it. Returns true when the held item was one.
@@ -113,7 +125,9 @@ impl Server {
             }
             return true;
         }
-        self.launch(sid, kind, 1.5, 0, 0, false);
+        // potions are thrown a little slower and higher than snowballs
+        let speed = if matches!(kind, Kind::SplashPotion | Kind::LingeringPotion) { 0.5 } else { 1.5 };
+        self.launch(sid, kind, speed, 0, 0, false, held.meta);
         self.consume_held(sid, gm);
         self.swing_arm(sid);
         true
@@ -176,7 +190,7 @@ impl Server {
         }
         let power = blocks::enchant_level(&bow, ENCHANT_POWER);
         let punch = blocks::enchant_level(&bow, ENCHANT_PUNCH);
-        self.launch(sid, Kind::Arrow, force * 3.0, power, punch, pickup);
+        self.launch(sid, Kind::Arrow, force * 3.0, power, punch, pickup, 0);
         self.wear_held(sid, 1);
     }
 
@@ -286,6 +300,9 @@ impl Server {
                         self.spawn_item(pr.world, back, [0.0; 3], item, 10);
                     }
                 }
+            }
+            Kind::SplashPotion | Kind::LingeringPotion => {
+                self.burst_potion(pr.world, at, pr.potion, pr.kind == Kind::LingeringPotion, target);
             }
             Kind::Snowball | Kind::Egg => {
                 if let Some(victim) = target {

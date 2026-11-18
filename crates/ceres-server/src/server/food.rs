@@ -50,6 +50,7 @@ pub(crate) fn food_of(name: &str) -> Option<Food> {
         "chicken" | "mutton" => food(2.0, 1.2),
         "cod" | "salmon" => food(2.0, 0.4),
         "rotten_flesh" => food(4.0, 0.8),
+        "potion" => Food { always: true, residue: Some("minecraft:glass_bottle"), ..food(0.0, 0.0) },
         "milk_bucket" => Food { always: true, residue: Some("minecraft:bucket"), ..food(0.0, 0.0) },
         "spider_eye" => food(2.0, 3.2),
         "sweet_berries" | "glow_berries" => food(2.0, 0.4),
@@ -170,6 +171,9 @@ impl Server {
         let name = info.name.clone();
         if name == "minecraft:milk_bucket" {
             self.clear_effects(sid);
+        }
+        if name == "minecraft:potion" {
+            self.apply_potion(sid, held.meta, 1.0);
         }
         for &(id, amp, secs, chance) in food_effects(&name) {
             if rand::random::<u32>() % 100 < chance {

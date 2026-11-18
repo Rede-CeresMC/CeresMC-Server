@@ -22,6 +22,7 @@ mod liquids;
 mod loot;
 mod moderation;
 mod players;
+mod potions;
 mod projectiles;
 mod skin;
 mod sleep;

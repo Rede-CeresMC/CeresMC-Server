@@ -175,7 +175,15 @@ impl Server {
     }
 
     fn apply_instant(&mut self, sid: SessionId, id: u8, amplifier: u8) {
-        let amount = 4.0 * 2f32.powi(amplifier.min(10) as i32);
+        self.apply_instant_scaled(sid, id, amplifier, 1.0);
+    }
+
+    /// Instant effects at a fraction of their strength (splash potions further away).
+    pub(crate) fn apply_instant_scaled(&mut self, sid: SessionId, id: u8, amplifier: u8, strength: f32) {
+        let amount = 4.0 * 2f32.powi(amplifier.min(10) as i32) * strength.clamp(0.0, 1.0);
+        if amount <= 0.0 {
+            return;
+        }
         match id {
             effect::INSTANT_HEALTH => {
                 let Some(p) = self.players.get_mut(&sid) else { return };

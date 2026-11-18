@@ -150,9 +150,18 @@ class Client:
         return out
 
     def connect(self):
-        self.s.settimeout(2)
-        self.s.sendto(b"\x05" + MAGIC + b"\x0b" + b"\x00" * (1400 - 18), self.addr)
-        d, _ = self.s.recvfrom(2048); assert d[0] == 0x06, d
+        # the first offline request can be lost under load: try a few times
+        for attempt in range(4):
+            self.s.settimeout(2)
+            self.s.sendto(bytes([5]) + MAGIC + bytes([11]) + bytes(1400 - 18), self.addr)
+            try:
+                d, _ = self.s.recvfrom(2048)
+            except socket.timeout:
+                if attempt == 3:
+                    raise
+                continue
+            if d[0] == 0x06:
+                break
         mtu = struct.unpack(">H", d[26:28])[0]
         port = self.addr[1]
         self.s.sendto(b"\x07" + MAGIC + b"\x04" + bytes([128, 255, 255, 254]) + struct.pack(">H", port)
