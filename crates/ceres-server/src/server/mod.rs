@@ -11,6 +11,7 @@ mod defense;
 mod doublechest;
 mod durability;
 mod effects;
+mod enchanting;
 mod environment;
 mod falling;
 mod farming;

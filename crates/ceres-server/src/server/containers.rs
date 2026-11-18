@@ -18,6 +18,7 @@ pub(crate) fn container_kind(name: &str) -> Option<(u8, &'static str, bool)> {
     match name {
         "minecraft:crafting_table" => Some((WORKBENCH_UI, "", false)),
         "minecraft:stonecutter_block" => Some((STONECUTTER_UI, "", false)),
+        "minecraft:enchanting_table" => Some((enchanting::ENCHANT_UI, "", false)),
         "minecraft:furnace" | "minecraft:lit_furnace" => Some((furnace::UI_FURNACE, "Furnace", false)),
         "minecraft:blast_furnace" | "minecraft:lit_blast_furnace" => {
             Some((furnace::UI_BLAST_FURNACE, "BlastFurnace", false))
@@ -199,7 +200,11 @@ impl Server {
         p.window_counter = p.window_counter % 99 + 1;
         let window = p.window_counter;
         if workbench {
-            let ty = if ui == STONECUTTER_UI { protocol::WINDOW_TYPE_STONECUTTER } else { protocol::WINDOW_TYPE_WORKBENCH };
+            let ty = match ui {
+                STONECUTTER_UI => protocol::WINDOW_TYPE_STONECUTTER,
+                enchanting::ENCHANT_UI => protocol::WINDOW_TYPE_ENCHANTMENT,
+                _ => protocol::WINDOW_TYPE_WORKBENCH,
+            };
             p.out.push(protocol::open_block_container(window, ty, pos));
         } else {
             p.out.push(protocol::open_block_container(window, window_type_of(ui, tile_id), pos));
@@ -242,7 +247,7 @@ impl Server {
     pub(crate) fn sync_container(&mut self, sid: SessionId) {
         let Some(p) = self.players.get_mut(&sid) else { return };
         let Some(c) = p.inventory.container.as_mut() else { return };
-        if !c.changed || c.ui == WORKBENCH_UI || c.ui == STONECUTTER_UI {
+        if !c.changed || c.ui == WORKBENCH_UI || c.ui == STONECUTTER_UI || c.ui == enchanting::ENCHANT_UI {
             return;
         }
         c.changed = false;
@@ -335,6 +340,7 @@ impl Server {
             let ty = match c.ui {
                 WORKBENCH_UI => protocol::WINDOW_TYPE_WORKBENCH,
                 STONECUTTER_UI => protocol::WINDOW_TYPE_STONECUTTER,
+                enchanting::ENCHANT_UI => protocol::WINDOW_TYPE_ENCHANTMENT,
                 _ => window_type_of(c.ui, tile_id),
             };
             p.out.push(protocol::container_close(c.window, ty, true));

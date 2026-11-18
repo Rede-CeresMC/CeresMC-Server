@@ -23,6 +23,14 @@ pub(crate) struct Inventory {
     crafted: Option<ItemDesc>,
     /// input slot of an open stonecutter
     pub(crate) cutter: ItemDesc,
+    /// enchanting table slots and the options shown for the item in it
+    pub(crate) enchant_input: ItemDesc,
+    pub(crate) enchant_lapis: ItemDesc,
+    pub(crate) enchant_offers: Vec<super::enchanting::EnchantOffer>,
+    /// levels to take after an enchantment was bought in the last request
+    pub(crate) enchant_paid: Option<u32>,
+    /// the player's level, for enchanting costs
+    pub(crate) player_level: u32,
 }
 
 /// UI id given to an open crafting table: it has no slots of its own (the grid is `craft_grid`).
@@ -63,6 +71,11 @@ impl Default for Inventory {
             craft_grid: std::array::from_fn(|_| ItemDesc::default()),
             crafted: None,
             cutter: ItemDesc::default(),
+            enchant_input: ItemDesc::default(),
+            enchant_lapis: ItemDesc::default(),
+            enchant_offers: Vec::new(),
+            enchant_paid: None,
+            player_level: 0,
         }
     }
 }
@@ -76,6 +89,8 @@ enum Loc {
     Container(usize),
     Craft(usize),
     Cutter,
+    EnchantInput,
+    EnchantLapis,
 }
 
 fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
@@ -97,6 +112,16 @@ fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
         container::ARMOR => (s.slot < 4).then_some(Loc::Armor(s.slot as usize)),
         container::OFFHAND => (s.slot == 0).then_some(Loc::Offhand),
         container::CURSOR => (s.slot == 0).then_some(Loc::Cursor),
+        super::enchanting::UI_ENCHANT_INPUT | super::enchanting::UI_ENCHANT_LAPIS => {
+            if !open.is_some_and(|c| c.ui == super::enchanting::ENCHANT_UI) {
+                return None;
+            }
+            match (s.container, s.slot) {
+                (super::enchanting::UI_ENCHANT_INPUT, super::enchanting::SLOT_ENCHANT_INPUT) => Some(Loc::EnchantInput),
+                (super::enchanting::UI_ENCHANT_LAPIS, super::enchanting::SLOT_ENCHANT_LAPIS) => Some(Loc::EnchantLapis),
+                _ => None,
+            }
+        }
         STONECUTTER_INPUT => {
             (open.is_some_and(|c| c.ui == STONECUTTER_UI) && s.slot == STONECUTTER_INPUT_SLOT).then_some(Loc::Cutter)
         }
@@ -160,6 +185,8 @@ impl Inventory {
             Loc::Container(i) => &self.container.as_ref().expect("open container").items[i],
             Loc::Craft(i) => &self.craft_grid[i],
             Loc::Cutter => &self.cutter,
+            Loc::EnchantInput => &self.enchant_input,
+            Loc::EnchantLapis => &self.enchant_lapis,
         }
     }
 
@@ -176,6 +203,8 @@ impl Inventory {
             Loc::Cursor => self.cursor = item,
             Loc::Craft(i) => self.craft_grid[i] = item,
             Loc::Cutter => self.cutter = item,
+            Loc::EnchantInput => self.enchant_input = item,
+            Loc::EnchantLapis => self.enchant_lapis = item,
             Loc::Container(i) => {
                 if let Some(c) = self.container.as_mut() {
                     c.items[i] = item;
@@ -309,7 +338,10 @@ impl Inventory {
             self.container.clone(),
             self.craft_grid.clone(),
             self.cutter.clone(),
+            self.enchant_input.clone(),
+            self.enchant_lapis.clone(),
         );
+        self.enchant_paid = None;
         let res = self.apply_inner(req, creative, gd);
         self.crafted = None;
         if res.is_none() {
@@ -322,6 +354,9 @@ impl Inventory {
             self.container = backup.6;
             self.craft_grid = backup.7;
             self.cutter = backup.8;
+            self.enchant_input = backup.9;
+            self.enchant_lapis = backup.10;
+            self.enchant_paid = None;
         }
         res
     }
@@ -337,6 +372,8 @@ impl Inventory {
         // crafting: the recipe of this request and the ingredients the client says it used up
         let mut recipe: Option<(&ceres_world::Recipe, u16)> = None;
         let mut consumed: Vec<ItemDesc> = Vec::new();
+        // enchanting table: index of the option bought
+        let mut enchant_choice: Option<usize> = None;
 
         for action in &req.actions {
             match *action {
@@ -353,6 +390,27 @@ impl Inventory {
                         block_runtime_id: ce.block_runtime_id,
                         extra: ce.extra.clone(),
                     });
+                }
+                StackAction::CraftRecipe { net_id, .. }
+                    if self.enchant_offers.iter().any(|o| o.net_id == net_id) =>
+                {
+                    let open_ui = self.container.as_ref().map(|c| c.ui);
+                    let i = self.enchant_offers.iter().position(|o| o.net_id == net_id)?;
+                    let offer = self.enchant_offers[i].clone();
+                    if open_ui != Some(super::enchanting::ENCHANT_UI) || recipe.is_some() || enchant_choice.is_some() {
+                        return None;
+                    }
+                    // levels and lapis (creative players need neither)
+                    let lapis_ok = self.enchant_lapis.count as usize > i
+                        && gd.items_by_id.get(&self.enchant_lapis.id).is_some_and(|it| it.name == "minecraft:lapis_lazuli");
+                    if !creative && (self.player_level < offer.cost || self.player_level < i as u32 + 1 || !lapis_ok) {
+                        return None;
+                    }
+                    if self.enchant_input.is_empty() {
+                        return None;
+                    }
+                    self.crafted = Some(super::enchanting::enchanted(&self.enchant_input, &offer, gd));
+                    enchant_choice = Some(i);
                 }
                 StackAction::CraftRecipe { net_id, reps, .. } => {
                     let r = gd.recipes.get(&net_id)?;
@@ -372,7 +430,7 @@ impl Inventory {
                     recipe = Some((r, reps as u16));
                 }
                 StackAction::Consume { count, src } => {
-                    if recipe.is_none() || count == 0 {
+                    if (recipe.is_none() && enchant_choice.is_none()) || count == 0 {
                         return None;
                     }
                     let loc = locate(&src, self.container.as_ref())?;
@@ -534,9 +592,19 @@ impl Inventory {
             }
         }
 
-        let craft_ok = match recipe {
-            Some((r, reps)) => ingredients_match(r, reps, consumed, gd),
-            None => consumed.is_empty(),
+        let craft_ok = match (recipe, enchant_choice) {
+            (Some((r, reps)), _) => ingredients_match(r, reps, consumed, gd),
+            // enchanting: exactly the item, plus 1-3 lapis (none in creative)
+            (None, Some(i)) => {
+                let item_used = consumed.iter().filter(|c| gd.items_by_id.get(&c.id).is_none_or(|it| it.name != "minecraft:lapis_lazuli")).map(|c| c.count).sum::<u16>();
+                let lapis_used = consumed.iter().filter(|c| gd.items_by_id.get(&c.id).is_some_and(|it| it.name == "minecraft:lapis_lazuli")).map(|c| c.count).sum::<u16>();
+                let ok = item_used == 1 && (creative || lapis_used as usize == i + 1);
+                if ok {
+                    self.enchant_paid = Some(i as u32 + 1);
+                }
+                ok
+            }
+            (None, None) => consumed.is_empty(),
         };
         if !craft_ok {
             return None;
@@ -560,6 +628,12 @@ impl Inventory {
         if !self.cutter.is_empty() {
             out.push(std::mem::take(&mut self.cutter));
         }
+        for slot in [&mut self.enchant_input, &mut self.enchant_lapis] {
+            if !slot.is_empty() {
+                out.push(std::mem::take(slot));
+            }
+        }
+        self.enchant_offers.clear();
         out
     }
 
@@ -781,6 +855,8 @@ impl Server {
         }
         let Some(p) = self.players.get_mut(&sid) else { return };
         let creative = p.gamemode == 1;
+        p.inventory.player_level = p.xp_level;
+        let enchant_before = p.inventory.enchant_input.clone();
         let result = p.inventory.apply(&req, creative, &self.gd);
         if result.is_none() && ceres_net::debug_enabled() {
             println!("[Debug] {sid}: refused item stack request {:?}", req.actions);
@@ -790,6 +866,13 @@ impl Server {
             None => (false, Vec::new(), Vec::new()),
         };
         p.out.push(protocol::item_stack_response(req.id, ok, &slots));
+        let paid = p.inventory.enchant_paid.is_some();
+        let input_changed = p.inventory.enchant_input != enchant_before;
+        if ok && paid {
+            self.finish_enchanting(sid);
+        } else if ok && input_changed {
+            self.refresh_enchant_offers(sid);
+        }
         if ok {
             self.broadcast_equipment(sid);
             self.sync_container(sid);

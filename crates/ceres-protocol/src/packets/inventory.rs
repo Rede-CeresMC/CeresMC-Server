@@ -676,6 +676,7 @@ pub const BLOCK_EVENT: u32 = 0x1a;
 pub const WINDOW_TYPE_CONTAINER: u8 = 0;
 pub const WINDOW_TYPE_WORKBENCH: u8 = 1;
 pub const WINDOW_TYPE_FURNACE: u8 = 2;
+pub const WINDOW_TYPE_ENCHANTMENT: u8 = 3;
 pub const WINDOW_TYPE_BREWING_STAND: u8 = 4;
 pub const WINDOW_TYPE_HOPPER: u8 = 8;
 pub const WINDOW_TYPE_STONECUTTER: u8 = 29;

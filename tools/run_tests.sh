@@ -44,6 +44,7 @@ BotGuard
 BotFoe
 BotBrew
 BotMusic
+BotEnchant
 " > "$RUN/ops.txt"
 cat > "$RUN/server.properties" <<EOF
 motd=CeresMC Test
@@ -87,6 +88,7 @@ python -I tools/noclip_test.py || status=1
 python -I tools/defense_test.py || status=1
 python -I tools/brewing_test.py || status=1
 python -I tools/music_test.py || status=1
+python -I tools/enchanting_test.py || status=1
 python -I tools/gameplay_test.py || status=1
 
 stop_server
