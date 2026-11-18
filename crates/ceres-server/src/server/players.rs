@@ -108,6 +108,24 @@ impl Server {
             self.broadcast(&pk, |other, q| other != sid && q.world == world);
         }
         self.update_view(sid);
+        if !spawned {
+            return Ok(());
+        }
+        match protocol::read_auth_input_tail(r) {
+            Ok(tail) => {
+                if let Some(u) = tail.use_item {
+                    self.on_use_item(sid, u);
+                }
+                for (action, pos, _face) in tail.block_actions {
+                    self.on_block_action(sid, action, pos);
+                }
+            }
+            Err(e) => {
+                if ceres_net::debug_enabled() {
+                    eprintln!("[Debug] {sid}: could not read PlayerAuthInput tail: {e}");
+                }
+            }
+        }
         Ok(())
     }
 

@@ -91,6 +91,11 @@ impl Server {
             }
             (State::PreSpawn | State::Spawned, id::PLAYER_AUTH_INPUT) => self.on_input(sid, &mut r)?,
             (State::Spawned, protocol::mp::TEXT) => self.on_text(sid, &mut r)?,
+            (State::Spawned, protocol::INVENTORY_TRANSACTION) => {
+                if let Some(u) = protocol::read_inventory_transaction(&mut r)? {
+                    self.on_use_item(sid, u);
+                }
+            }
             (_, id::CLIENT_CACHE_STATUS) => {}
             (_, 0x9c) => {
                 // PacketViolationWarning: the client rejected something we sent

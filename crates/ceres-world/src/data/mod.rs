@@ -7,6 +7,7 @@ use ceres_protocol::{id, packet};
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::Path;
+use std::rc::Rc;
 
 mod biomes;
 mod voxel_shapes;
@@ -17,6 +18,8 @@ use voxel_shapes::*;
 pub struct GameData {
     /// state key (see nbt::state_key) -> hashed network runtime id
     pub block_ids: HashMap<String, i32>,
+    /// network id -> little-endian NBT {name, states, version} as stored in worlds
+    pub state_nbt: HashMap<i32, Rc<[u8]>>,
     pub air_id: i32,
     pub fallback_id: i32,
     pub block_definitions: Vec<u8>,
@@ -46,10 +49,19 @@ impl GameData {
         // ---- block palette
         let palette = load_gz_nbt(&dir.join("block_palette.nbt"))?;
         let mut block_ids = HashMap::new();
+        let mut state_nbt = HashMap::new();
         for b in palette.get("blocks").and_then(|t| t.as_list()).ok_or("block_palette: no blocks")? {
             let name = b.get("name").and_then(|t| t.as_str()).ok_or("block without name")?;
             let nid = b.get("network_id").and_then(|t| t.as_i64()).ok_or("block without network_id")? as i32;
             block_ids.insert(nbt::state_key(name, b.get("states")), nid);
+            let disk = Tag::Compound(vec![
+                ("name".into(), Tag::String(name.to_string())),
+                ("states".into(), b.get("states").cloned().unwrap_or_else(Tag::empty_compound)),
+                ("version".into(), b.get("version").cloned().unwrap_or(Tag::Int(0))),
+            ]);
+            let mut w = W::new();
+            nbt::write_root(&mut w, "", &disk, Flavor::LittleEndian);
+            state_nbt.insert(nid, Rc::from(w.0));
         }
         let air_id = *block_ids.get("minecraft:air").ok_or("no air in palette")?;
         let fallback_id = block_ids.get("minecraft:info_update").copied().unwrap_or(air_id);
@@ -111,6 +123,7 @@ impl GameData {
 
         Ok(GameData {
             block_ids,
+            state_nbt,
             air_id,
             fallback_id,
             block_definitions: bd.0,

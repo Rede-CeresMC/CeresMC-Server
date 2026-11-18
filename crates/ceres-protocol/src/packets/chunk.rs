@@ -35,3 +35,17 @@ pub fn level_chunk(x: i32, z: i32, sub_chunk_count: u32, payload: &[u8]) -> Vec<
     w.bool(false); // client biome update
     w.0
 }
+
+pub const UPDATE_BLOCK: u32 = 0x15;
+
+/// Changes one block on the client (FLAG_NETWORK, normal data layer).
+pub fn update_block(pos: [i32; 3], block_id: i32) -> Vec<u8> {
+    packet(UPDATE_BLOCK, |w| {
+        w.varint(pos[0]);
+        w.varint(pos[1]);
+        w.varint(pos[2]);
+        w.uvarint(block_id as u32);
+        w.uvarint(0b0010); // flags: network
+        w.uvarint(0); // data layer: normal
+    })
+}

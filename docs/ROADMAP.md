@@ -10,7 +10,7 @@
 ## Fase 1: jogável (em andamento)
 - [x] Lista de jogadores com skin, ver outros jogadores se movendo, chat
 - [x] Voo no criativo (UpdateAbilities)
-- [ ] Quebrar e colocar blocos, salvando no LevelDB
+- [x] Quebrar e colocar blocos, salvando no LevelDB (orientação de blocos, colisão e blocos substituíveis pendentes)
 - [ ] Inventário, menu criativo, ItemStackRequest
 - [ ] Comandos: `/tp`, `/gamemode`, `/give`, `/world`
 - [ ] Verificação Xbox / token de identidade

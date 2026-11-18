@@ -20,6 +20,7 @@ Servidor de **Minecraft: Bedrock Edition** escrito em **Rust**, da Rede CeresMC.
 - Lê mundos vanilla (LevelDB) e envia os chunks; o chunk já comprimido fica em cache e é compartilhado entre jogadores.
 - Vários mundos carregados a partir de `worlds/`.
 - Multiplayer básico: lista de jogadores com skin, ver os outros andando, chat, voo no criativo.
+- Quebrar e colocar blocos, visível para todos e salvo no LevelDB a cada 5 segundos.
 
 ## Compilar e rodar
 
@@ -39,6 +40,7 @@ Teste rápido sem abrir o jogo (precisa do servidor rodando): dois bots entram, 
 
 ```sh
 python tools/smoke_client.py
+python tools/blocks_test.py          # depois de reiniciar o servidor: python tools/blocks_test.py check
 ```
 
 ## Estrutura

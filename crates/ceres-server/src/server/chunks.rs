@@ -2,6 +2,9 @@
 
 use super::*;
 
+/// Changed chunks are written to disk every 5 seconds.
+const SAVE_INTERVAL_TICKS: u64 = 100;
+
 impl Server {
     /// Re-queues chunks when the player crosses a chunk border.
     pub(crate) fn update_view(&mut self, sid: SessionId) {
@@ -33,6 +36,10 @@ impl Server {
     }
 
     pub(crate) fn tick(&mut self) {
+        self.ticks += 1;
+        if self.ticks % SAVE_INTERVAL_TICKS == 0 {
+            self.save_worlds();
+        }
         let sids: Vec<SessionId> = self.players.keys().copied().collect();
         for sid in sids {
             let Some(p) = self.players.get_mut(&sid) else { continue };

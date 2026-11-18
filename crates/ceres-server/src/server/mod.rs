@@ -1,5 +1,6 @@
 //! Game layer: player sessions, login flow and chunk streaming. Single-threaded tick loop.
 
+mod blocks;
 mod chunks;
 mod handler;
 mod players;
@@ -56,6 +57,7 @@ pub struct Server {
     owner: HashMap<SessionId, usize>,
     players: HashMap<SessionId, Player>,
     next_entity_id: i64,
+    ticks: u64,
     software: String,
 }
 
@@ -71,6 +73,7 @@ impl Server {
             owner: HashMap::new(),
             players: HashMap::new(),
             next_entity_id: 1,
+            ticks: 0,
             software: format!("Ceres-RS {}", env!("CARGO_PKG_VERSION")),
         }
     }

@@ -199,3 +199,67 @@ class Client:
 
     def ids(self):
         return [NAMES.get(pid, hex(pid)) for pid, _ in self.received]
+
+
+def svarint(v):
+    return zz(v)
+
+
+def block_id(name):
+    """Hashed network id of a block's default state, read from data/block_palette.nbt."""
+    import gzip, os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "block_palette.nbt")
+    d = gzip.open(path).read()
+    needle = b"\x08\x00\x04name" + struct.pack(">H", len(name)) + name.encode()
+    p = d.find(needle)
+    q = d.rfind(b"\x03\x00\x0anetwork_id", 0, p)
+    return struct.unpack(">i", d[q + 13:q + 17])[0]
+
+
+def _block_pos(pos):
+    return b"".join(svarint(v) for v in pos)
+
+
+def _auth_input(c, block_actions=()):
+    x, y, z = c.pos
+    body = struct.pack("<ff", 0, 0) + struct.pack("<fff", x, y, z) + struct.pack("<fff", 0, 0, 0)
+    body += uvarint(0) + uvarint(1) + uvarint(0) + svarint(0) + struct.pack("<ff", 0, 0)
+    body += uvarint(1) + struct.pack("<fff", 0, 0, 0)
+    body += b"\x00\x00"  # no item interaction, no item stack request
+    if block_actions:
+        body += b"\x01" + uvarint(len(block_actions))
+        for action, pos, face in block_actions:
+            body += svarint(action) + _block_pos(pos) + svarint(face)
+    else:
+        body += b"\x00"
+    body += b"\x00\x00" + struct.pack("<ff", 0, 0) + struct.pack("<fff", 0, 0, 0) + struct.pack("<ff", 0, 0)
+    return uvarint(0x90) + body
+
+
+def break_block(c, pos):
+    c.send(_auth_input(c, [(13, pos, 1)]))  # CREATIVE_PLAYER_DESTROY_BLOCK
+
+
+def place_block(c, clicked, face, block):
+    item = struct.pack("<hH", 1, 1) + uvarint(0) + b"\x00" + uvarint(block & 0xffffffff) + uvarint(0)
+    data = svarint(0) + b"\x01" + _block_pos(clicked) + bytes([face]) + svarint(0) + b"\x00" + item
+    data += struct.pack("<fff", *c.pos) + struct.pack("<fff", 0.5, 1.0, 0.5) + uvarint(0) + b"\x01\x00"
+    c.send(uvarint(0x1e) + svarint(0) + b"\x00" + uvarint(2) + uvarint(0) + data)
+
+
+Client.break_block = break_block
+Client.place_block = place_block
+
+
+def update_blocks(c):
+    """[(pos, block id)] from every UpdateBlock received."""
+    out = []
+    for pid, d in c.received:
+        if pid != 0x15:
+            continue
+        p, vals = 0, []
+        for _ in range(3):
+            v, p = read_uvarint(d, p); vals.append((v >> 1) ^ -(v & 1))
+        bid, p = read_uvarint(d, p)
+        out.append((tuple(vals), struct.unpack("<i", struct.pack("<I", bid))[0]))
+    return out
