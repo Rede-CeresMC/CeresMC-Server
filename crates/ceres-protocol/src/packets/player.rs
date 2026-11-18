@@ -294,18 +294,42 @@ const F32_MAX: f32 = f32::MAX;
 /// Default player attributes (values from PocketMine's AttributeFactory). Without
 /// minecraft:movement the client walks at speed 0 and can only fly.
 pub fn update_attributes_health(entity_id: i64, health: f32) -> Vec<u8> {
-    update_attributes_vitals(entity_id, health, 20.0, 5.0, 0.0)
+    update_attributes_vitals(entity_id, health, 20.0, 5.0, 0.0, 0.0, 0.1)
+}
+
+pub const MOB_EFFECT: u32 = 0x1c;
+
+/// MobEffectPacket: add (1), modify (2) or remove (3) a status effect. Duration -1 = infinite.
+pub fn mob_effect(entity_id: i64, event: u8, effect: i32, amplifier: i32, particles: bool, duration: i32) -> Vec<u8> {
+    packet(MOB_EFFECT, |w| {
+        w.uvarlong(entity_id as u64);
+        w.u8(event);
+        w.varint(effect);
+        w.varint(amplifier);
+        w.bool(particles);
+        w.varint(duration);
+        w.uvarlong(0); // tick
+        w.bool(false); // ambient
+    })
 }
 
 /// Every player attribute, with the real health, hunger, saturation and exhaustion.
-pub fn update_attributes_vitals(entity_id: i64, health: f32, hunger: f32, saturation: f32, exhaustion: f32) -> Vec<u8> {
+pub fn update_attributes_vitals(
+    entity_id: i64,
+    health: f32,
+    hunger: f32,
+    saturation: f32,
+    exhaustion: f32,
+    absorption: f32,
+    movement: f32,
+) -> Vec<u8> {
     let attrs: [(&str, f32, f32, f32, f32); 12] = [
-        ("minecraft:absorption", 0.0, F32_MAX, 0.0, 0.0),
+        ("minecraft:absorption", 0.0, F32_MAX, absorption.max(0.0), 0.0),
         ("minecraft:player.saturation", 0.0, 20.0, saturation.clamp(0.0, 20.0), 5.0),
         ("minecraft:player.exhaustion", 0.0, 5.0, exhaustion.clamp(0.0, 5.0), 0.0),
         ("minecraft:knockback_resistance", 0.0, 1.0, 0.0, 0.0),
         ("minecraft:health", 0.0, 20.0, health.clamp(0.0, 20.0), 20.0),
-        ("minecraft:movement", 0.0, F32_MAX, 0.1, 0.1),
+        ("minecraft:movement", 0.0, F32_MAX, movement.max(0.0), 0.1),
         ("minecraft:player.hunger", 0.0, 20.0, hunger.clamp(0.0, 20.0), 20.0),
         ("minecraft:player.level", 0.0, 24791.0, 0.0, 0.0),
         ("minecraft:player.experience", 0.0, 1.0, 0.0, 0.0),

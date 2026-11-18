@@ -75,7 +75,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] `/gamemode`, `/tp`, `/list`, `/say`, `/help`
 - [x] 🔴 `/give` (itens reais no inventário)
 - [x] 🔴 `/world` (trocar/criar mundo) e `/worlds` (listar)
-- [~] 🟠 `/time` ✔, `/weather` ✔, `/kill` ✔, `/clear` ✔, `/setworldspawn` ✔, `/spawnpoint` ✔, `/difficulty` ✔ · `/effect`
+- [~] 🟠 `/time` ✔, `/weather` ✔, `/kill` ✔, `/clear` ✔, `/setworldspawn` ✔, `/spawnpoint` ✔, `/difficulty` ✔, `/effect` ✔
 - [x] 🟠 `/op`, `/deop`, `/stop`, `/save-all`, `/kick`, `/ban`, `/pardon`, `/whitelist`
 - [~] 🟠 Seletores: `@p`, `@a`, `@s`, `@r` ✔ · `@e` com argumentos
 - [x] 🟢 Comandos pelo console do servidor (stdin)
@@ -116,7 +116,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] Regeneração natural ✔ · fome, saturação, exaustão ✔ (correr, pular, lutar, apanhar, minerar; morrer de fome conforme a dificuldade)
 - [x] Combate PvP: dano por item, knockback, crítico, cooldown
 - [x] Armadura: proteção ✔ · durabilidade ✔ (gasta ao levar dano, quebra)
-- [ ] Efeitos de poção (MobEffect), duração e amplificador
+- [x] Efeitos (MobEffect): duração, nível, velocidade/lentidão, pressa/cansaço na mineração, força/fraqueza, resistência, absorção, regeneração, veneno, wither, fome, instantâneos; maçã dourada, baiacu, leite
 - [ ] Encantamentos: efeitos em dano, quebra, proteção, durabilidade
 - [~] Comida ✔ (tabela vanilla, tempo de comer conferido no servidor, tigela/garrafa de volta) · poções e leite
 - [ ] Experiência: orbes, níveis, gasto em encantar/bigorna

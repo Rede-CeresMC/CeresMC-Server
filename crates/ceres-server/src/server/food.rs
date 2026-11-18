@@ -50,10 +50,26 @@ pub(crate) fn food_of(name: &str) -> Option<Food> {
         "chicken" | "mutton" => food(2.0, 1.2),
         "cod" | "salmon" => food(2.0, 0.4),
         "rotten_flesh" => food(4.0, 0.8),
+        "milk_bucket" => Food { always: true, residue: Some("minecraft:bucket"), ..food(0.0, 0.0) },
         "spider_eye" => food(2.0, 3.2),
         "sweet_berries" | "glow_berries" => food(2.0, 0.4),
         _ => return None,
     })
+}
+
+/// Effects a food gives: (effect, amplifier, seconds, chance out of 100).
+fn food_effects(name: &str) -> &'static [(u8, u8, u32, u32)] {
+    use super::effects::effect::*;
+    match name.strip_prefix("minecraft:").unwrap_or(name) {
+        "golden_apple" => &[(REGENERATION, 1, 5, 100), (ABSORPTION, 0, 120, 100)],
+        "enchanted_golden_apple" => &[(REGENERATION, 1, 30, 100), (ABSORPTION, 3, 120, 100), (RESISTANCE, 0, 300, 100), (FIRE_RESISTANCE, 0, 300, 100)],
+        "pufferfish" => &[(HUNGER, 2, 15, 100), (NAUSEA, 0, 15, 100), (POISON, 1, 60, 100)],
+        "rotten_flesh" => &[(HUNGER, 0, 30, 80)],
+        "chicken" => &[(HUNGER, 0, 30, 30)],
+        "spider_eye" => &[(POISON, 0, 5, 100)],
+        "poisonous_potato" => &[(POISON, 0, 5, 60)],
+        _ => &[],
+    }
 }
 
 pub(crate) mod exhaustion {
@@ -68,7 +84,15 @@ pub(crate) mod exhaustion {
 
 impl Player {
     pub(crate) fn vitals_packet(&self) -> Vec<u8> {
-        protocol::update_attributes_vitals(self.entity_id, self.health, self.hunger, self.saturation, self.exhaustion)
+        protocol::update_attributes_vitals(
+            self.entity_id,
+            self.health,
+            self.hunger,
+            self.saturation,
+            self.exhaustion,
+            self.absorption,
+            self.movement_speed(),
+        )
     }
 
     pub(crate) fn reset_food(&mut self) {
@@ -135,9 +159,19 @@ impl Server {
         let creative = p.gamemode == 1;
         let pk = p.vitals_packet();
         p.out.push(pk);
+        let name = info.name.clone();
+        if name == "minecraft:milk_bucket" {
+            self.clear_effects(sid);
+        }
+        for &(id, amp, secs, chance) in food_effects(&name) {
+            if rand::random::<u32>() % 100 < chance {
+                self.add_effect(sid, id, amp, Some(secs), true);
+            }
+        }
         if creative {
             return;
         }
+        let Some(p) = self.players.get_mut(&sid) else { return };
         let mut rest = held.clone();
         rest.count -= 1;
         p.inventory.set_main(slot, if rest.count == 0 { ItemDesc::default() } else { rest });

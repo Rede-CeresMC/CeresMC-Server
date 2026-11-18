@@ -89,9 +89,15 @@ impl Server {
             return false;
         }
         let reduction = if bypass_armor { 0.0 } else { self.armor_reduction(p) };
-        let dmg = (raw_damage * (1.0 - reduction)).max(0.5);
+        let mut dmg = (raw_damage * (1.0 - reduction) * (1.0 - p.resistance())).max(0.5);
 
         let p = self.players.get_mut(&sid).unwrap();
+        // absorption hearts go first
+        if p.absorption > 0.0 {
+            let taken = p.absorption.min(dmg);
+            p.absorption -= taken;
+            dmg -= taken;
+        }
         p.hurt_cooldown = 10; // 0.5s invulnerability frames
         p.health = (p.health - dmg).max(0.0);
         if (p.gamemode == 0 || p.gamemode == 2) && !bypass_armor {
@@ -130,8 +136,11 @@ impl Server {
         p.fall_start_y = None;
         let (world, eid, pos) = (p.world, p.entity_id, p.pos);
         p.eating = None;
+        p.absorption = 0.0;
         let pk = p.vitals_packet();
         p.out.push(pk);
+        self.clear_effects(sid);
+        let Some(p) = self.players.get_mut(&sid) else { return };
 
         let dropped = if self.cfg.keep_inventory { Vec::new() } else { p.inventory.drain_all() };
         if !self.cfg.keep_inventory {
@@ -218,6 +227,7 @@ impl Server {
         } else {
             self.gd.items_by_id.get(&held.id).map(|i| item_attack_damage(&i.name)).unwrap_or(1.0)
         };
+        dmg = (dmg + att.attack_bonus()).max(0.0);
         if att.fall_start_y.is_some_and(|fy| fy - (att.pos[1] - EYE_HEIGHT) > 0.2) && !att.flying {
             dmg *= 1.5; // critical hit
         }
@@ -244,6 +254,9 @@ impl Server {
                 p.hurt_cooldown -= 1;
             }
             self.tick_food(sid);
+            if self.players.get(&sid).is_some_and(|p| p.gamemode != 1 && p.gamemode != 6) {
+                self.tick_effects(sid);
+            }
             let Some(p) = self.players.get_mut(&sid) else { continue };
             if p.dead {
                 continue;

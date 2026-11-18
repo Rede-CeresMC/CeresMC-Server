@@ -58,6 +58,7 @@ impl Server {
             ("TitleAction".to_string(), ["title", "subtitle", "actionbar", "clear"].map(String::from).to_vec()),
             ("WhitelistOp".to_string(), ["on", "off", "add", "remove", "list"].map(String::from).to_vec()),
             ("GameRule".to_string(), ["dodaylightcycle", "keepinventory", "pvp"].map(String::from).to_vec()),
+            ("Effect".to_string(), effects::EFFECT_NAMES.iter().map(|(n, _)| n.to_string()).collect()),
         ];
         let cmd = |name: &str, description: &str, overloads: Vec<Vec<Param>>| CommandSpec {
             name: name.into(),
@@ -97,6 +98,20 @@ impl Server {
             ),
             cmd("clear", "Limpa o inventário", vec![vec![Param::opt("jogador", T::Target)]]),
             cmd("kill", "Mata um jogador", vec![vec![Param::opt("jogador", T::Target)]]),
+            cmd(
+                "effect",
+                "Dá ou remove efeitos",
+                vec![
+                    vec![
+                        Param::new("jogador", T::Target),
+                        Param::new("efeito", T::Enum("Effect".into())),
+                        Param::opt("segundos", T::Int),
+                        Param::opt("nivel", T::Int),
+                        Param::opt("esconderParticulas", T::String),
+                    ],
+                    vec![Param::new("jogador", T::Target), Param::new("clear", T::String)],
+                ],
+            ),
             cmd(
                 "world",
                 "Vai para outro mundo ou cria um mundo (create <nome> [flat|void])",
@@ -468,6 +483,39 @@ impl Server {
                         self.reply(sender, &format!("§aInventário de {tname} limpo."));
                     }
                 }
+            }
+            "effect" => {
+                let usage = "§cUso: /effect <jogador> <efeito|clear> [segundos] [nível 0-255] [true]";
+                let (Some(target), Some(what)) = (args.first(), args.get(1)) else { return self.reply(sender, usage) };
+                let targets = self.resolve_targets(sender, Some(target));
+                if targets.is_empty() {
+                    return self.reply(sender, "§cNenhum jogador encontrado.");
+                }
+                if what.eq_ignore_ascii_case("clear") {
+                    for t in targets {
+                        self.clear_effects(t);
+                    }
+                    return self.reply(sender, "§aEfeitos removidos.");
+                }
+                let Some(id) = effects::effect_id(what) else { return self.reply(sender, "§cEfeito desconhecido.") };
+                let seconds = match args.get(2).map(|s| s.parse::<u32>()) {
+                    None => Some(30),
+                    Some(Ok(0)) => {
+                        for t in targets {
+                            self.remove_effect(t, id);
+                        }
+                        return self.reply(sender, &format!("§aEfeito {} removido.", effects::effect_name(id)));
+                    }
+                    Some(Ok(s)) => Some(s),
+                    Some(Err(_)) if args[2].eq_ignore_ascii_case("infinite") => None,
+                    Some(Err(_)) => return self.reply(sender, usage),
+                };
+                let Ok(level) = args.get(3).map_or(Ok(0), |s| s.parse::<u8>()) else { return self.reply(sender, usage) };
+                let particles = !args.get(4).is_some_and(|s| s.eq_ignore_ascii_case("true"));
+                for t in targets {
+                    self.add_effect(t, id, level, seconds, particles);
+                }
+                self.reply(sender, &format!("§aEfeito {} {} aplicado.", effects::effect_name(id), level + 1));
             }
             "kill" => {
                 let targets = self.resolve_targets(sender, args.first().copied());

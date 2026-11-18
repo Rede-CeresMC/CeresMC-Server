@@ -394,6 +394,7 @@ impl Server {
         let Some(needed) = self.gd.break_time(block, held.id, enchant_level(held, ENCHANT_EFFICIENCY)) else {
             return false; // unbreakable
         };
+        let needed = needed / p.mining_multiplier();
         let elapsed = match p.breaking {
             Some((at, since)) if at == pos => since.elapsed().as_secs_f32(),
             _ => 0.0,
@@ -410,7 +411,8 @@ impl Server {
         let Some(p) = self.players.get(&sid) else { return 20 };
         let block = self.worlds.worlds[p.world].get_block(pos, &self.gd);
         let held = p.inventory.held_item();
-        let secs = self.gd.break_time(block, held.id, enchant_level(held, ENCHANT_EFFICIENCY)).unwrap_or(0.0);
+        let secs = self.gd.break_time(block, held.id, enchant_level(held, ENCHANT_EFFICIENCY)).unwrap_or(0.0)
+            / p.mining_multiplier();
         ((secs * 20.0) as u32).max(1)
     }
 

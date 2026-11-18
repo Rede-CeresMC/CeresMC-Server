@@ -6,6 +6,7 @@ mod combat;
 mod commands;
 mod containers;
 mod durability;
+mod effects;
 mod food;
 mod handler;
 mod inventory;
@@ -62,6 +63,10 @@ pub(crate) struct Player {
     eating: Option<u64>,
     /// ate; waiting for the client's own end-of-use click
     awaiting_release: bool,
+    /// active status effects by id
+    effects: HashMap<u8, effects::Effect>,
+    /// extra hearts from Absorption, used up before health
+    absorption: f32,
     dead: bool,
     hurt_cooldown: u8,
     fall_start_y: Option<f32>,
@@ -209,6 +214,8 @@ impl Server {
                             food_timer: 0,
                             eating: None,
                             awaiting_release: false,
+                            effects: HashMap::new(),
+                            absorption: 0.0,
                             dead: false,
                             hurt_cooldown: 0,
                             fall_start_y: None,
