@@ -8,6 +8,19 @@ use super::*;
 static PENDING: std::sync::LazyLock<Mutex<HashMap<std::net::IpAddr, usize>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 const MAX_PENDING: usize = 64;
+
+/// The group an address counts in: the address itself for IPv4, its /64 for IPv6 (one host can
+/// use a whole /64).
+fn address_group(ip: std::net::IpAddr) -> std::net::IpAddr {
+    match ip {
+        std::net::IpAddr::V4(_) => ip,
+        std::net::IpAddr::V6(v6) => {
+            let mut seg = v6.segments();
+            seg[4..].fill(0);
+            std::net::IpAddr::V6(std::net::Ipv6Addr::from(seg))
+        }
+    }
+}
 const MAX_PENDING_PER_ADDRESS: usize = 8;
 /// a connection not up after this long is dropped, freeing its port
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -34,10 +47,10 @@ impl Handler {
     pub(crate) fn settle(&self) {
         if self.pending.swap(false, Ordering::SeqCst) {
             let mut map = PENDING.lock().unwrap();
-            if let Some(n) = map.get_mut(&self.peer.ip()) {
+            if let Some(n) = map.get_mut(&address_group(self.peer.ip())) {
                 *n = n.saturating_sub(1);
                 if *n == 0 {
-                    map.remove(&self.peer.ip());
+                    map.remove(&address_group(self.peer.ip()));
                 }
             }
         }
@@ -112,7 +125,15 @@ impl PeerConnectionEventHandler for H {
                     s.reliable = Some(dc.clone());
                 }
                 h.settle();
+                // opening and closing (handshake timeout) can race: whichever happened, the game
+                // never sees a session that is already closed
+                if h.closed.load(Ordering::SeqCst) {
+                    return;
+                }
                 if !h.opened.swap(true, Ordering::SeqCst) {
+                    if h.closed.load(Ordering::SeqCst) {
+                        return; // closed in between: close() already decided what the game saw
+                    }
                     crate::log(&format!("[NetherNet] {} opened a session ({})", h.peer, h.sid));
                     h.emit(NetEvent::Connected(h.sid, h.peer, h.identity.clone()));
                 }
@@ -207,11 +228,11 @@ pub(crate) async fn negotiate(
     let (gather_tx, mut gather_rx) = mpsc::unbounded_channel();
     {
         let mut map = PENDING.lock().unwrap();
-        let mine = map.get(&peer.ip()).copied().unwrap_or(0);
+        let mine = map.get(&address_group(peer.ip())).copied().unwrap_or(0);
         if mine >= MAX_PENDING_PER_ADDRESS || map.values().sum::<usize>() >= MAX_PENDING {
             return Err(format!("too many connections being set up ({} pending)", map.values().sum::<usize>()));
         }
-        *map.entry(peer.ip()).or_default() += 1;
+        *map.entry(address_group(peer.ip())).or_default() += 1;
     }
     let handler = Arc::new(Handler {
         sid,
@@ -277,6 +298,12 @@ pub(crate) async fn negotiate(
         .lock()
         .unwrap()
         .insert(sid, Session { pc: pc.clone(), reliable: None, max_payload: peer_max_message_size(&offer) });
+    // closed (timed out) while the peer connection was being built: do not keep it around
+    if handler.closed.load(Ordering::SeqCst) {
+        sessions.lock().unwrap().remove(&sid);
+        let _ = pc.close().await;
+        return Err("connection closed while it was being set up".into());
+    }
 
     let offer_copy = offer.clone();
     let result = async {
