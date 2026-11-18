@@ -37,6 +37,7 @@ export CERES_PORT=$PORT
 status=0
 python -I tools/smoke_client.py || status=1
 python -I tools/blocks_test.py || status=1
+python -I tools/inventory_test.py || status=1
 
 stop_server
 (cd "$RUN" && exec "$EXE" > server2.out 2>&1) &

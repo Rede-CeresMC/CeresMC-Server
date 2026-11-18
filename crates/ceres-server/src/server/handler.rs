@@ -8,7 +8,7 @@ impl Server {
         let mut r = R::new(buf);
         let pid = r.uvarint()? & 0x3ff;
         let Some(p) = self.players.get_mut(&sid) else { return Ok(()) };
-        if ceres_net::debug_enabled() && p.state != State::Spawned && pid != id::PLAYER_AUTH_INPUT {
+        if ceres_net::debug_enabled() && pid != id::PLAYER_AUTH_INPUT {
             println!("[Debug] {sid} <- 0x{pid:02x} ({} bytes) in {:?}", buf.len(), p.state);
         }
         match (p.state, pid) {
@@ -92,12 +92,18 @@ impl Server {
             (State::PreSpawn | State::Spawned, id::PLAYER_AUTH_INPUT) => self.on_input(sid, &mut r)?,
             (State::Spawned, protocol::mp::TEXT) => self.on_text(sid, &mut r)?,
             (State::PreSpawn | State::Spawned, protocol::ITEM_STACK_REQUEST) => {
-                // TODO: real inventories. For now every request is accepted as the client predicted it,
-                // which is what creative mode needs to take items from the creative menu.
-                if r.uvarint()? > 0 {
-                    let request_id = r.varint()?;
-                    p.out.push(protocol::item_stack_response_ok(request_id));
+                self.on_item_stack_request(sid, &mut r)?
+            }
+            (State::Spawned, protocol::INTERACT) => {
+                let action = r.u8()?;
+                let target = r.uvarlong()? as i64;
+                if action == protocol::INTERACT_OPEN_INVENTORY && target == p.entity_id {
+                    p.out.push(protocol::open_own_inventory(p.entity_id));
                 }
+            }
+            (State::Spawned, protocol::CONTAINER_CLOSE) => {
+                let (window, ty) = (r.u8()?, r.u8()?);
+                p.out.push(protocol::container_close(window, ty, false));
             }
             (State::Spawned, protocol::INVENTORY_TRANSACTION) => {
                 if let Some(u) = protocol::read_inventory_transaction(&mut r)? {

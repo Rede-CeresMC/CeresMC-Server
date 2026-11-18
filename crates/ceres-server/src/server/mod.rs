@@ -3,6 +3,7 @@
 mod blocks;
 mod chunks;
 mod handler;
+mod inventory;
 mod players;
 mod skin;
 
@@ -39,6 +40,7 @@ pub(crate) struct Player {
     rot: [f32; 3],
     /// set at login; what other clients need to draw this player
     info: Option<PlayerInfo>,
+    inventory: inventory::Inventory,
     radius: i32,
     center: Option<(i32, i32)>,
     sent: HashSet<(i32, i32)>,
@@ -125,6 +127,7 @@ impl Server {
                             pos: [0.0; 3],
                             rot: [0.0; 3],
                             info: None,
+                            inventory: Default::default(),
                             radius: 0,
                             center: None,
                             sent: HashSet::new(),
