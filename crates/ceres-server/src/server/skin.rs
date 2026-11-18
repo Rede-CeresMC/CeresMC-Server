@@ -59,6 +59,15 @@ fn color(v: &Value) -> i32 {
     v.as_str().and_then(|s| u32::from_str_radix(s.trim_start_matches('#'), 16).ok()).unwrap_or(0) as i32
 }
 
+/// Tint colours carry the piece type as a string, and newer clients only accept the bare enum
+/// name ("eyes"), not the client data spelling ("persona_eyes").
+fn tint_piece_type(s: &str) -> String {
+    match s.strip_prefix("persona_").unwrap_or(s) {
+        "hand" => "hands".to_string(),
+        other => other.to_string(),
+    }
+}
+
 /// UUID string -> wire form (two little-endian halves, as CommonTypes::putUUID writes it).
 pub fn uuid_wire(s: &str) -> [u8; 16] {
     let hex: String = s.chars().filter(|c| c.is_ascii_hexdigit()).collect();
@@ -127,7 +136,7 @@ pub fn encode(cd: &Value) -> Vec<u8> {
     let tints = cd["PieceTintColors"].as_array().cloned().unwrap_or_default();
     w.uvarint(tints.len() as u32);
     for t in &tints {
-        w.string(t["PieceType"].as_str().unwrap_or(""));
+        w.string(&tint_piece_type(t["PieceType"].as_str().unwrap_or("")));
         let colors = t["Colors"].as_array().cloned().unwrap_or_default();
         for i in 0..4 {
             w.i32_le(colors.get(i).map(color).unwrap_or(0));

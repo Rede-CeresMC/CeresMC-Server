@@ -101,6 +101,9 @@ impl PeerConnectionEventHandler for H {
                         }
                     }
                     DataChannelEvent::OnClose => {
+                        if crate::debug_enabled() {
+                            println!("[NetherNet] session {}: channel {label} closed by peer", h.sid);
+                        }
                         if reliable {
                             h.close("data channel closed");
                         }

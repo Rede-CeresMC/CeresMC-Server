@@ -92,6 +92,15 @@ impl Server {
             (State::PreSpawn | State::Spawned, id::PLAYER_AUTH_INPUT) => self.on_input(sid, &mut r)?,
             (State::Spawned, protocol::mp::TEXT) => self.on_text(sid, &mut r)?,
             (_, id::CLIENT_CACHE_STATUS) => {}
+            (_, 0x9c) => {
+                // PacketViolationWarning: the client rejected something we sent
+                let (ty, severity, packet) = (r.varint()?, r.varint()?, r.varint()?);
+                let msg = r.string()?;
+                eprintln!(
+                    "[Game] {} reports a bad packet 0x{packet:02x} (type {ty}, severity {severity}): {msg}",
+                    p.name
+                );
+            }
             _ => {}
         }
         Ok(())

@@ -155,6 +155,12 @@ async fn command_loop(mut rx: mpsc::UnboundedReceiver<Cmd>, sessions: Sessions) 
                     continue;
                 };
                 let segments = payload.len().div_ceil(max).max(1);
+                if crate::debug_enabled() && payload.len() > 16 * 1024 {
+                    println!(
+                        "[NetherNet] session {id}: sending {} bytes in {segments} message(s) of <= {max}",
+                        payload.len()
+                    );
+                }
                 if segments > 256 {
                     eprintln!("[NetherNet] session {id}: packet of {} bytes is too large", payload.len());
                     continue;
