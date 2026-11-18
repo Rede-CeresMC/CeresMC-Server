@@ -334,6 +334,7 @@ impl Server {
     /// Moves a player to `feet` in their current world.
     pub(crate) fn teleport(&mut self, sid: SessionId, feet: [f32; 3]) {
         self.close_container(sid, true);
+        self.stop_sleeping(sid);
         let Some(p) = self.players.get_mut(&sid) else { return };
         p.pos = [feet[0], feet[1] + EYE_HEIGHT, feet[2]];
         p.teleport_to = Some(p.pos);
@@ -347,6 +348,7 @@ impl Server {
 
     /// Moves a player to another loaded world, at its safe spawn.
     pub(crate) fn switch_world(&mut self, sid: SessionId, world: usize) {
+        self.stop_sleeping(sid);
         let Some(p) = self.players.get(&sid) else { return };
         let (old, eid) = (p.world, p.entity_id);
         if old == world {

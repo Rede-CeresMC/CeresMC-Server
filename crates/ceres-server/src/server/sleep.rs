@@ -58,7 +58,12 @@ impl Server {
             }
             return true;
         }
-        if occupied {
+        // a bed can stay marked occupied if its sleeper vanished; only a real sleeper blocks it
+        let really_occupied = occupied
+            && self.players.values().any(|q| q.sleep_world == world && q.actor_state.sleeping.is_some_and(|b| {
+                b == pos || twopart::partner(&self.gd, pos, id) == Some(b)
+            }));
+        if really_occupied {
             if let Some(p) = self.players.get_mut(&sid) {
                 p.out.push(protocol::system_message("§cEsta cama está ocupada."));
             }
@@ -68,6 +73,7 @@ impl Server {
         if let Some(p) = self.players.get_mut(&sid) {
             p.actor_state.sleeping = Some(pos);
             p.sleep_since = ticks;
+            p.sleep_world = world;
         }
         self.set_bed_occupied(world, pos, true);
         self.sync_actor_state(sid);
@@ -77,7 +83,7 @@ impl Server {
     pub(crate) fn stop_sleeping(&mut self, sid: SessionId) {
         let Some(p) = self.players.get_mut(&sid) else { return };
         let Some(bed) = p.actor_state.sleeping.take() else { return };
-        let (world, eid) = (p.world, p.entity_id);
+        let (world, eid) = (p.sleep_world, p.entity_id);
         p.out.push(protocol::animate(eid, ANIMATE_STOP_SLEEP));
         self.set_bed_occupied(world, bed, false);
         self.sync_actor_state(sid);

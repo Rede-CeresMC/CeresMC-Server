@@ -15,6 +15,7 @@ mod food;
 mod furnace;
 mod twopart;
 mod handler;
+mod hopper;
 mod inventory;
 mod items;
 mod liquids;
@@ -82,8 +83,9 @@ pub(crate) struct Player {
     fire_ticks: u32,
     /// tick the player started drawing a bow
     bow_since: Option<u64>,
-    /// tick the player lay down in a bed
+    /// tick the player lay down in a bed, and the world of that bed
     sleep_since: u64,
+    sleep_world: usize,
     /// tick of the last projectile thrown or shot
     last_throw: u64,
     xp_level: u32,
@@ -257,6 +259,7 @@ impl Server {
                             fire_ticks: 0,
                             bow_since: None,
                             sleep_since: 0,
+                            sleep_world: 0,
                             last_throw: 0,
                             xp_level: 0,
                             xp_points: 0,
@@ -297,6 +300,7 @@ impl Server {
                 }
                 NetEvent::Disconnected(sid, reason) => {
                     self.close_container(sid, false);
+                    self.stop_sleeping(sid);
                     if let Some(p) = self.players.remove(&sid) {
                         if !p.name.is_empty() {
                             crate::logfile::log(&format!("[Game] {} left ({reason})", p.name));

@@ -202,6 +202,16 @@ impl World {
         [sx, sy, sz]
     }
 
+    /// Positions of the block entities with this id in the loaded chunks.
+    pub fn block_entities_with_id(&self, id: &str) -> Vec<[i32; 3]> {
+        self.columns
+            .values()
+            .flat_map(|c| c.block_entities.iter())
+            .filter(|(_, t)| t.get("id").and_then(|v| v.as_str()) == Some(id))
+            .map(|(p, _)| *p)
+            .collect()
+    }
+
     /// True if the column holding `pos` is in memory (it will not be loaded from disk).
     pub fn is_loaded(&self, pos: [i32; 3]) -> bool {
         self.columns.contains_key(&(pos[0] >> 4, pos[2] >> 4))

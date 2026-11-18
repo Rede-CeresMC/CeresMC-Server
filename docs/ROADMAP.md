@@ -147,7 +147,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [~] Fornalha, alto-forno, defumador ✔ (receitas vanilla, combustível, progresso, bloco aceso, formato vanilla) · XP, retomar fornalhas acesas depois de reiniciar
 - [ ] Bigorna, mesa de encantamento, rebolo, tear, cortador de pedra
 - [ ] Mesa de cartografia, mesa de ferraria (smithing, trims)
-- [ ] Funil (hopper), dispensador, ejetor
+- [~] Funil ✔ (puxa de cima e de itens no chão, empurra para onde aponta, fornalhas: entrada/combustível/resultado) · redstone no funil, dispensador, ejetor
 - [ ] Baú do fim, beacon, suporte de poções
 
 ### Física de blocos

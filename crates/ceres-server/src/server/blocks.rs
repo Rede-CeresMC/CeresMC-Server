@@ -423,6 +423,17 @@ impl Server {
             self.broadcast_equipment(sid);
         }
 
+        // containers get their (empty) block entity right away, so hoppers work before anyone opens them
+        if let Some((_, tile_id, _)) = containers::container_kind(self.gd.block_name(placed_id)) {
+            if !tile_id.is_empty() && self.worlds.worlds[world].get_block_entity(pos, &self.gd).is_none() {
+                let tile = ceres_codec::nbt::Tag::Compound(vec![
+                    ("id".into(), ceres_codec::nbt::Tag::String(tile_id.into())),
+                    ("isMovable".into(), ceres_codec::nbt::Tag::Byte(1)),
+                    ("Items".into(), ceres_codec::nbt::Tag::List(10, Vec::new())),
+                ]);
+                self.worlds.worlds[world].set_block_entity(pos, tile, &self.gd);
+            }
+        }
         self.pair_new_chest(world, pos);
         // If a sign was placed, create its BlockEntity NBT and open the sign editor on the placer!
         if self.gd.is_sign(placed_id) {

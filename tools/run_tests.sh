@@ -75,6 +75,7 @@ python -I tools/environment_test.py || status=1
 python -I tools/farming_test.py || status=1
 python -I tools/projectiles_test.py || status=1
 python -I tools/sleep_test.py || status=1
+python -I tools/hopper_test.py || status=1
 python -I tools/gameplay_test.py || status=1
 
 stop_server

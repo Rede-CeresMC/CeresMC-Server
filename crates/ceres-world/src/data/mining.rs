@@ -24,6 +24,8 @@ pub struct BreakInfo {
     pub tool: Tool,
     /// tier the tool needs for the block to drop anything (0 = no requirement)
     pub min_tier: u8,
+    /// 1.0 for blocks light cannot pass (full opaque blocks and some others)
+    pub opacity: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -60,7 +62,8 @@ pub(crate) fn load_break_info(dir: &Path) -> Res<HashMap<String, BreakInfo>> {
     let mut out: HashMap<String, BreakInfo> = HashMap::new();
     for (name, p) in props.as_object().ok_or("block_properties_table.json: not an object")? {
         let Some(hardness) = p["hardness"].as_f64() else { continue };
-        out.insert(name.clone(), BreakInfo { hardness: hardness as f32, tool: Tool::None, min_tier: 0 });
+        let opacity = p["opacity"].as_f64().unwrap_or(0.0) as f32;
+        out.insert(name.clone(), BreakInfo { hardness: hardness as f32, tool: Tool::None, min_tier: 0, opacity });
     }
     for (tag, tool) in TOOL_TAGS {
         for name in members(&format!("minecraft:is_{tag}_item_destructible")) {
@@ -116,6 +119,12 @@ impl GameData {
     /// Break info of a block state (None when unknown).
     pub fn break_info(&self, block: i32) -> Option<BreakInfo> {
         self.break_info.get(self.block_name(block)).copied()
+    }
+
+    /// A full opaque block (stone, dirt, planks...): it keeps a chest lid shut.
+    pub fn is_opaque_cube(&self, block: i32) -> bool {
+        let name = self.block_name(block);
+        self.break_info(block).is_some_and(|b| b.opacity >= 1.0) && !name.ends_with("_slab")
     }
 
     /// Whether the held item lets the block drop anything.

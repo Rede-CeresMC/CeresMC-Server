@@ -84,6 +84,7 @@ impl Server {
         self.random_ticks();
         self.tick_projectiles();
         self.check_sleep();
+        self.tick_hoppers();
 
         let sids: Vec<SessionId> = self.players.keys().copied().collect();
         for sid in sids {
@@ -161,6 +162,7 @@ impl Server {
                 t.close(sid);
             }
             self.close_container(sid, false);
+            self.stop_sleeping(sid);
             if let Some(p) = self.players.remove(&sid) {
                 println!("[Game] closed {} ({})", p.addr, p.close.clone().unwrap_or_default());
                 self.on_left(&p);

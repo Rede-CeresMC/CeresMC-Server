@@ -25,6 +25,7 @@ pub(crate) fn container_kind(name: &str) -> Option<(u8, &'static str, bool)> {
         "minecraft:chest" | "minecraft:trapped_chest" => Some((block_container::CHEST, "Chest", true)),
         "minecraft:barrel" => Some((block_container::BARREL, "Barrel", false)),
         n if n.ends_with("shulker_box") => Some((block_container::SHULKER_BOX, "ShulkerBox", true)),
+        "minecraft:hopper" => Some((block_container::CHEST, "Hopper", false)),
         _ => None,
     }
 }
@@ -78,9 +79,23 @@ pub(crate) fn item_from_vanilla(t: &Tag, gd: &GameData) -> Option<ItemDesc> {
     Some(ItemDesc { id: info.id, count, meta, stack_id: 0, block_runtime_id, extra })
 }
 
-/// Slots of a container kind.
-fn slot_count(ui: u8) -> usize {
-    if furnace::is_furnace_ui(ui) { 3 } else { CONTAINER_SLOTS }
+/// Slots of a container, by its block entity id (chest and hopper share a UI id).
+pub(crate) fn slots_of(tile_id: &str) -> usize {
+    match tile_id {
+        "Hopper" => hopper::HOPPER_SLOTS,
+        "Furnace" | "BlastFurnace" | "Smoker" => 3,
+        _ => CONTAINER_SLOTS,
+    }
+}
+
+fn window_type_of(ui: u8, tile_id: &str) -> u8 {
+    if furnace::is_furnace_ui(ui) {
+        furnace::furnace_window_type(ui)
+    } else if tile_id == "Hopper" {
+        protocol::WINDOW_TYPE_HOPPER
+    } else {
+        protocol::WINDOW_TYPE_CONTAINER
+    }
 }
 
 pub(crate) fn items_from_tile(tile: Option<&Tag>, gd: &GameData, slots: usize) -> Vec<ItemDesc> {
@@ -120,7 +135,7 @@ impl Server {
         // a container above the chest lid blocks opening, like vanilla
         if lid && tile_id == "Chest" {
             let above = self.worlds.worlds[world].get_block([pos[0], pos[1] + 1, pos[2]], &self.gd);
-            if self.gd.is_solid(above) {
+            if self.gd.is_opaque_cube(above) {
                 return true;
             }
         }
@@ -143,7 +158,7 @@ impl Server {
             let tile = self.worlds.worlds[world].get_block_entity(pos, &self.gd);
             match self.furnaces.get(&(world, pos)) {
                 Some(f) if furnace::is_furnace_ui(ui) => f.items(),
-                _ => items_from_tile(tile.as_ref(), &self.gd, slot_count(ui)),
+                _ => items_from_tile(tile.as_ref(), &self.gd, slots_of(tile_id)),
             }
         };
         let Some(p) = self.players.get_mut(&sid) else { return false };
@@ -155,8 +170,7 @@ impl Server {
         if workbench {
             p.out.push(protocol::open_block_container(window, protocol::WINDOW_TYPE_WORKBENCH, pos));
         } else {
-            let ty = if furnace::is_furnace_ui(ui) { furnace::furnace_window_type(ui) } else { protocol::WINDOW_TYPE_CONTAINER };
-            p.out.push(protocol::open_block_container(window, ty, pos));
+            p.out.push(protocol::open_block_container(window, window_type_of(ui, tile_id), pos));
             p.out.push(protocol::inventory_content(window as u32, &items));
         }
         p.inventory.container = Some(OpenContainer { ui, window, world, pos, pair, items, changed: false });
@@ -199,9 +213,9 @@ impl Server {
         c.changed = false;
         let (world, pos, pair, items) = (c.world, c.pos, c.pair, c.items.clone());
         let block = self.worlds.worlds[world].get_block(pos, &self.gd);
-        let Some((ui, tile_id, _)) = container_kind(self.gd.block_name(block)) else { return };
+        let Some((_, tile_id, _)) = container_kind(self.gd.block_name(block)) else { return };
         // the view must still match what is stored (27 per chest half), or nothing is written
-        let expected = if pair.is_some() { 2 * CONTAINER_SLOTS } else { slot_count(ui) };
+        let expected = if pair.is_some() { 2 * CONTAINER_SLOTS } else { slots_of(tile_id) };
         if items.len() != expected {
             return;
         }
@@ -274,13 +288,9 @@ impl Server {
         let Some(p) = self.players.get_mut(&sid) else { return };
         let Some(c) = p.inventory.container.take() else { return };
         if by_server {
-            let ty = if c.ui == WORKBENCH_UI {
-                protocol::WINDOW_TYPE_WORKBENCH
-            } else if furnace::is_furnace_ui(c.ui) {
-                furnace::furnace_window_type(c.ui)
-            } else {
-                protocol::WINDOW_TYPE_CONTAINER
-            };
+            let block = self.worlds.worlds[c.world].get_block(c.pos, &self.gd);
+            let tile_id = container_kind(self.gd.block_name(block)).map_or("", |(_, t, _)| t);
+            let ty = if c.ui == WORKBENCH_UI { protocol::WINDOW_TYPE_WORKBENCH } else { window_type_of(c.ui, tile_id) };
             p.out.push(protocol::container_close(c.window, ty, true));
         }
         let block = self.worlds.worlds[c.world].get_block(c.pos, &self.gd);
@@ -297,7 +307,7 @@ impl Server {
         self.unpair_chest(world, pos);
         let tile = self.worlds.worlds[world].get_block_entity(pos, &self.gd);
         let block = self.worlds.worlds[world].get_block(pos, &self.gd);
-        let slots = container_kind(self.gd.block_name(block)).map_or(CONTAINER_SLOTS, |(ui, _, _)| slot_count(ui));
+        let slots = container_kind(self.gd.block_name(block)).map_or(CONTAINER_SLOTS, |(_, t, _)| slots_of(t));
         let items: Vec<ItemDesc> = match self.furnaces.remove(&(world, pos)) {
             Some(f) => f.items(),
             None => items_from_tile(tile.as_ref(), &self.gd, slots),

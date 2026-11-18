@@ -59,6 +59,7 @@ class Client:
         # the join burst (chunks, CraftingData) is larger than the default receive buffer
         self.s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 8 << 20)
         self.seq = self.msg = self.order = 0
+        self.unacked = {}  # datagram seq -> (time sent, frame) until the server ACKs it
         self.splits = {}
         self.compression = False
         self.received = []  # (packet id, payload)
@@ -78,8 +79,35 @@ class Client:
         fr = bytes([3 << 5]) + struct.pack(">H", len(body) << 3) + struct.pack("<I", self.msg)[:3] \
             + struct.pack("<I", self.order)[:3] + b"\x00" + body
         self.msg += 1; self.order += 1
+        self._datagram(fr)
+
+    def _datagram(self, fr):
+        self.unacked[self.seq] = (time.time(), fr)
         self.s.sendto(b"\x84" + struct.pack("<I", self.seq)[:3] + fr, self.addr)
         self.seq += 1
+
+    def _acked_seqs(self, d):
+        """Sequence numbers listed in an ACK/NACK datagram."""
+        out, p = [], 3
+        for _ in range(struct.unpack(">H", d[1:3])[0]):
+            single = d[p]; p += 1
+            a = d[p] | d[p + 1] << 8 | d[p + 2] << 16; p += 3
+            if single:
+                out.append(a)
+            else:
+                b = d[p] | d[p + 1] << 8 | d[p + 2] << 16; p += 3
+                out.extend(range(a, min(b, a + 4096) + 1))
+        return out
+
+    def _resend(self, seqs):
+        for sq in seqs:
+            entry = self.unacked.pop(sq, None)
+            if entry:
+                self._datagram(entry[1])
+
+    def _resend_stale(self):
+        now = time.time()
+        self._resend([sq for sq, (t, _) in list(self.unacked.items()) if now - t > 0.5])
 
     def _recv(self, timeout):
         out = []
@@ -87,6 +115,13 @@ class Client:
         try:
             d, _ = self.s.recvfrom(4096)
         except socket.timeout:
+            return out
+        if d[0] == 0xc0:  # ACK
+            for sq in self._acked_seqs(d):
+                self.unacked.pop(sq, None)
+            return out
+        if d[0] == 0xa0:  # NACK: the server missed these
+            self._resend(self._acked_seqs(d))
             return out
         if not d[0] & 0x80 or d[0] & 0x60:
             return out
@@ -151,6 +186,7 @@ class Client:
     def pump(self, seconds, until=None):
         end = time.time() + seconds
         while time.time() < end:
+            self._resend_stale()
             for body in self._recv(0.2):
                 if body[0] != 0xfe:
                     continue
@@ -259,6 +295,18 @@ def _auth_input(c, block_actions=()):
     return uvarint(0x90) + body
 
 
+def sneak(c, on=True):
+    """Starts (or stops) sneaking: an auth input carrying only that flag."""
+    x, y, z = c.pos
+    flag = 27 if on else 28
+    body = struct.pack("<ff", 0, 0) + struct.pack("<fff", x, y, z) + struct.pack("<fff", 0, 0, 0)
+    body += uvarint(1) + svarint(flag) + uvarint(1) + uvarint(0) + svarint(0) + struct.pack("<ff", 0, 0)
+    body += uvarint(1) + struct.pack("<fff", 0, 0, 0)
+    body += bytes(3)
+    body += bytes(2) + struct.pack("<ff", 0, 0) + struct.pack("<fff", 0, 0, 0) + struct.pack("<ff", 0, 0)
+    c.send(uvarint(0x90) + body)
+
+
 def break_block(c, pos):
     c.send(_auth_input(c, [(13, pos, 1)]))  # CREATIVE_PLAYER_DESTROY_BLOCK
 
@@ -272,6 +320,7 @@ def place_block(c, clicked, face, block):
 
 
 Client.break_block = break_block
+Client.sneak = sneak
 Client.place_block = place_block
 
 

@@ -215,6 +215,14 @@ impl GameData {
             }
         }
 
+        // Hoppers point into the block they were placed against (down when placed on top)
+        if short == "hopper" {
+            let dir = if face <= 1 { 0 } else { (face ^ 1) as i32 };
+            if let Some(id) = self.with_states(base_id, &[("facing_direction", Tag::Int(dir))]) {
+                return id;
+            }
+        }
+
         // Logs, pillars, basalt, quartz pillars, hay, bone block
         if st.get("pillar_axis").is_some() {
             let axis = match face {
