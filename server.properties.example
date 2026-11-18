@@ -9,3 +9,7 @@ white-list=off
 pvp=on
 keep-inventory=off
 xbox-auth=on
+# NetherNet: UDP ports for players' connections (forward them on the router for players from outside)
+nethernet-udp-ports=19300-19399
+# NetherNet: public IP to offer (empty = the address the player typed)
+nethernet-public-ip=

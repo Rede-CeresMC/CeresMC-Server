@@ -37,6 +37,10 @@ pub struct Config {
     pub xbox_auth: bool,
     /// NetherNet: refuse offers without a signed client identity (`auto` = when xbox-auth is on)
     pub nethernet_require_identity: bool,
+    /// NetherNet: UDP ports for the players' WebRTC media (forward them for players from outside)
+    pub nethernet_udp_ports: (u16, u16),
+    /// NetherNet: public IP to offer (empty: the address the player typed, when public)
+    pub nethernet_public_ip: String,
 }
 
 fn flag(s: &str) -> bool {
@@ -85,6 +89,12 @@ impl Config {
             max_batch_bytes: get("max-batch-bytes", "2097152").parse().unwrap_or(2 * 1024 * 1024).max(65536),
             allow_unverified_ops: flag(&get("allow-unverified-ops", "off")),
             xbox_auth: flag(&get("xbox-auth", "on")),
+            nethernet_udp_ports: {
+                let v = get("nethernet-udp-ports", "19300-19399");
+                let parsed = v.split_once('-').and_then(|(a, b)| Some((a.trim().parse().ok()?, b.trim().parse().ok()?)));
+                parsed.filter(|(a, b): &(u16, u16)| *a > 0 && *b >= *a).unwrap_or((19300, 19399))
+            },
+            nethernet_public_ip: get("nethernet-public-ip", ""),
             nethernet_require_identity: match get("nethernet-require-identity", "auto").to_ascii_lowercase().as_str() {
                 "auto" => flag(&get("xbox-auth", "on")),
                 v => flag(v),

@@ -46,6 +46,21 @@ static IDENTITY: std::sync::LazyLock<identity::ServerIdentity> = std::sync::Lazy
 /// Refuse offers that carry no client identity (see identity.rs). Set from the server's config.
 static REQUIRE_IDENTITY: AtomicBool = AtomicBool::new(false);
 
+/// UDP ports the WebRTC media of each player may use (one per player). Fixed, so they can be
+/// forwarded on a router for players joining from outside the local network.
+static UDP_PORTS: Mutex<(u16, u16)> = Mutex::new((19300, 19399));
+static NEXT_PORT: AtomicU64 = AtomicU64::new(0);
+/// Public address to offer besides the local ones (empty: the address the player typed, when public).
+static PUBLIC_IP: Mutex<String> = Mutex::new(String::new());
+
+pub fn set_udp_ports(first: u16, last: u16) {
+    *UDP_PORTS.lock().unwrap() = (first.min(last), first.max(last));
+}
+
+pub fn set_public_ip(ip: &str) {
+    *PUBLIC_IP.lock().unwrap() = ip.trim().to_string();
+}
+
 pub fn set_require_identity(on: bool) {
     REQUIRE_IDENTITY.store(on, Ordering::Relaxed);
 }

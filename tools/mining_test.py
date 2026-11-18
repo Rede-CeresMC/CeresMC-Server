@@ -58,6 +58,19 @@ check(state_after(c, ROW[0], lambda: action(c, CREATIVE_DESTROY, ROW[0])) == STO
 check(state_after(c, ROW[1], lambda: mine(c, ROW[1], 0.2)) == DIRT, "dirt broken in 0.2 s is refused")
 n = len(c.received)
 check(state_after(c, ROW[1], lambda: mine(c, ROW[1], 0.8)) not in (DIRT, None), "dirt broken by hand after 0.8 s works")
+events = []
+for pid, d in c.received[n:]:
+    if pid == 0x19:
+        v, p = 0, 0
+        shift = 0
+        while True:
+            byte = d[p]; p += 1
+            v |= (byte & 0x7f) << shift; shift += 7
+            if not byte & 0x80:
+                break
+        events.append((v >> 1) ^ -(v & 1))
+check(any(3603 <= e <= 3608 for e in events), "the miner sees hit particles while mining")
+check(2001 in events, "the miner sees the break particles")
 check(any(p == 0x0f for p, _ in c.received[n:]), "the dirt dropped as an item")
 
 command(c, "/give @s wooden_pickaxe 1")

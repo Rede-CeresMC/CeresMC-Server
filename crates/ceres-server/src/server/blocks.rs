@@ -140,8 +140,9 @@ impl Server {
             let rz = (rand::random::<f32>() - 0.5) * 0.2;
             self.spawn_item(world, center, [rx, 0.2, rz], item, 10);
         }
+        // break particles and sound, for everyone (the breaker too, like vanilla servers do)
         let destroy_fx = protocol::level_event(level_event::PARTICLE_DESTROY, center, old);
-        self.broadcast(&destroy_fx, |o, q| o != sid && q.world == world);
+        self.broadcast(&destroy_fx, |_, q| q.world == world);
 
         // Survival block drops (nothing when the tool is not good enough, like stone by hand); the
         // tool is checked before it wears, so a tool breaking on its last block still drops it
@@ -507,6 +508,35 @@ impl Server {
         ok
     }
 
+    /// Every 5 ticks while someone mines: hit particles on the face being mined, the hit sound and
+    /// the arm swing (vanilla's punch effects).
+    pub(crate) fn tick_punch_effects(&mut self) {
+        if self.ticks % 5 != 0 {
+            return;
+        }
+        let miners: Vec<(SessionId, usize, [i32; 3], u8)> = self
+            .players
+            .iter()
+            .filter_map(|(s, p)| p.punching.map(|(pos, face)| (*s, p.world, pos, face)))
+            .collect();
+        for (sid, world, pos, face) in miners {
+            let block = self.worlds.worlds[world].get_block(pos, &self.gd);
+            if block == self.gd.air_id {
+                if let Some(p) = self.players.get_mut(&sid) {
+                    p.punching = None;
+                }
+                continue;
+            }
+            let at = [pos[0] as f32, pos[1] as f32, pos[2] as f32];
+            let center = [at[0] + 0.5, at[1] + 0.5, at[2] + 0.5];
+            let particles = protocol::level_event(level_event::PARTICLE_PUNCH_BLOCK_DOWN + face as i32, at, block);
+            self.broadcast(&particles, |_, q| q.world == world);
+            let sound = protocol::level_sound_event("hit", center, block);
+            self.broadcast(&sound, |_, q| q.world == world);
+            self.swing_arm(sid);
+        }
+    }
+
     /// Ticks a survival player needs for the block, for the crack animation others see.
     fn break_ticks(&mut self, sid: SessionId, pos: [i32; 3]) -> u32 {
         let Some(p) = self.players.get(&sid) else { return 20 };
@@ -532,7 +562,7 @@ impl Server {
         }
     }
 
-    pub(crate) fn on_block_action(&mut self, sid: SessionId, action: i32, pos: [i32; 3]) {
+    pub(crate) fn on_block_action(&mut self, sid: SessionId, action: i32, pos: [i32; 3], face: i32) {
         let Some(world) = self.players.get(&sid).map(|p| p.world) else { return };
         let fpos = [pos[0] as f32, pos[1] as f32, pos[2] as f32];
         match action {
@@ -542,6 +572,8 @@ impl Server {
                     if p.breaking.is_none_or(|(at, _)| at != pos) {
                         p.breaking = Some((pos, Instant::now()));
                     }
+                    // hit particles while mining (survival: creative breaks instantly)
+                    p.punching = (p.gamemode != 1).then_some((pos, face.clamp(0, 5) as u8));
                 }
                 self.swing_arm(sid);
                 let ticks = self.break_ticks(sid, pos);
@@ -549,6 +581,9 @@ impl Server {
                 self.broadcast(&pk, |o, q| o != sid && q.world == world);
             }
             block_action::ABORT_BREAK | block_action::STOP_BREAK => {
+                if let Some(p) = self.players.get_mut(&sid) {
+                    p.punching = None;
+                }
                 if action == block_action::ABORT_BREAK {
                     if let Some(p) = self.players.get_mut(&sid) {
                         p.breaking = None;
@@ -568,6 +603,7 @@ impl Server {
                 }
                 if let Some(p) = self.players.get_mut(&sid) {
                     p.breaking = None;
+                    p.punching = None;
                 }
                 self.break_block(sid, pos);
             }

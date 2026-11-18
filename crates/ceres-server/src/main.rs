@@ -51,9 +51,12 @@ fn main() {
     let mut transports: Vec<Box<dyn Transport>> = vec![Box::new(rak)];
     // NetherNet session ids start high so they never collide with RakNet ones
     ceres_net::nethernet::set_require_identity(cfg.nethernet_require_identity);
+    ceres_net::nethernet::set_udp_ports(cfg.nethernet_udp_ports.0, cfg.nethernet_udp_ports.1);
+    ceres_net::nethernet::set_public_ip(&cfg.nethernet_public_ip);
+    ceres_net::set_log_sink(logfile::log);
     match NetherNetServer::start(addr, 1 << 40, &worlds.worlds[worlds.default].display_name, cfg.gamemode) {
         Ok(n) => {
-            println!("[Net] NetherNet signalling on {addr} (TCP/HTTP)");
+            println!("[Net] NetherNet signalling on {addr} (TCP/HTTP), media on UDP {}-{}", cfg.nethernet_udp_ports.0, cfg.nethernet_udp_ports.1);
             transports.push(Box::new(n));
         }
         Err(e) => eprintln!("[Net] NetherNet disabled: failed to bind {addr}/tcp: {e}"),

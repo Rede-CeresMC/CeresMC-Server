@@ -25,6 +25,8 @@ pub mod level_event {
     pub const STOP_THUNDER: i32 = 3004;
     pub const BLOCK_START_BREAK: i32 = 3600;
     pub const BLOCK_STOP_BREAK: i32 = 3601;
+    /// hit particles on one face of a block (+ face 0..5: down, up, north, south, west, east)
+    pub const PARTICLE_PUNCH_BLOCK_DOWN: i32 = 3603;
 }
 
 pub fn chunk_radius_updated(radius: i32) -> Vec<u8> {

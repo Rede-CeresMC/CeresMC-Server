@@ -57,7 +57,13 @@ impl PeerConnectionEventHandler for H {
             println!("[NetherNet] session {} connection: {state}", self.0.sid);
         }
         match state {
-            RTCPeerConnectionState::Failed => self.0.close("connection failed"),
+            RTCPeerConnectionState::Failed => {
+                crate::log(&format!(
+                    "[NetherNet] session {} from {}: connection failed (no network path: for players outside the local network, forward the nethernet-udp-ports range on the router)",
+                    self.0.sid, self.0.peer
+                ));
+                self.0.close("connection failed")
+            }
             RTCPeerConnectionState::Closed => self.0.close("connection closed"),
             // "disconnected" is temporary (ICE checks missed for a few seconds) and usually comes
             // back to "connected"; only "failed" is final, like altay's transport
@@ -82,7 +88,7 @@ impl PeerConnectionEventHandler for H {
                     s.reliable = Some(dc.clone());
                 }
                 if !h.opened.swap(true, Ordering::SeqCst) {
-                    println!("[NetherNet] {} opened a session ({})", h.peer, h.sid);
+                    crate::log(&format!("[NetherNet] {} opened a session ({})", h.peer, h.sid));
                     h.emit(NetEvent::Connected(h.sid, h.peer, h.identity.clone()));
                 }
             };
@@ -131,10 +137,42 @@ pub(crate) fn peer_max_message_size(sdp: &str) -> usize {
         .unwrap_or(MAX_MESSAGE_SIZE - 1)
 }
 
+/// The public IP to offer: the configured one, or the address the player typed to join (the
+/// Host header) when it is a public one. Players outside the local network can only reach that.
+async fn public_ip(host_header: &str) -> Option<std::net::IpAddr> {
+    let configured = PUBLIC_IP.lock().unwrap().clone();
+    let wanted = if configured.is_empty() { host_header.to_string() } else { configured };
+    let host = match wanted.rsplit_once(':') {
+        Some((h, port)) if port.chars().all(|c| c.is_ascii_digit()) && !h.contains(':') => h.to_string(),
+        _ => wanted.trim_matches(['[', ']']).to_string(),
+    };
+    if host.is_empty() {
+        return None;
+    }
+    let ip = match host.parse::<std::net::IpAddr>() {
+        Ok(ip) => ip,
+        Err(_) => tokio::net::lookup_host((host.as_str(), 0)).await.ok()?.map(|a| a.ip()).find(|ip| ip.is_ipv4())?,
+    };
+    let public = match ip {
+        std::net::IpAddr::V4(v4) => !(v4.is_private() || v4.is_loopback() || v4.is_link_local() || v4.is_unspecified()),
+        std::net::IpAddr::V6(_) => false,
+    };
+    public.then_some(ip)
+}
+
+/// Next port of the configured range to try.
+fn next_udp_port() -> (u16, usize) {
+    let (first, last) = *UDP_PORTS.lock().unwrap();
+    let span = (last - first) as u64 + 1;
+    let n = NEXT_PORT.fetch_add(1, Ordering::Relaxed);
+    (first + (n % span) as u16, span as usize)
+}
+
 pub(crate) async fn negotiate(
     sid: SessionId,
     offer: String,
     peer: SocketAddr,
+    host_header: &str,
     sessions: Sessions,
     ev_tx: std_mpsc::Sender<NetEvent>,
 ) -> Result<String, String> {
@@ -154,19 +192,42 @@ pub(crate) async fn negotiate(
         closed: AtomicBool::new(false),
         identity,
     });
-    let engine = SettingEngineBuilder::new()
-        .with_sctp_max_message_size(rtc::peer_connection::configuration::setting_engine::SctpMaxMessageSize::Bounded(
-            MAX_MESSAGE_SIZE as u32,
-        ))
-        .build();
-    let pc = PeerConnectionBuilder::new()
-        .with_configuration(RTCConfigurationBuilder::new().build())
-        .with_setting_engine(engine)
-        .with_handler(Arc::new(H(handler.clone())))
-        .with_udp_addrs(vec!["0.0.0.0:0".to_string(), "127.0.0.1:0".to_string()])
-        .build()
-        .await
-        .map_err(|e| format!("peer connection: {e}"))?;
+    let public = public_ip(host_header).await;
+    // one port of the range per player; a port still held by someone else is skipped
+    let (mut port, span) = next_udp_port();
+    let mut attempts = 0;
+    let pc = loop {
+        let mut engine = SettingEngineBuilder::new().with_sctp_max_message_size(
+            rtc::peer_connection::configuration::setting_engine::SctpMaxMessageSize::Bounded(MAX_MESSAGE_SIZE as u32),
+        );
+        if let Some(ip) = public {
+            // offered next to the local addresses, on the same port (forwarded on the router)
+            engine = engine.with_nat_1to1_ips(
+                vec![ip.to_string()],
+                rtc::peer_connection::transport::RTCIceCandidateType::Srflx,
+            );
+        }
+        let built = PeerConnectionBuilder::new()
+            .with_configuration(RTCConfigurationBuilder::new().build())
+            .with_setting_engine(engine.build())
+            .with_handler(Arc::new(H(handler.clone())))
+            .with_udp_addrs(vec![format!("0.0.0.0:{port}"), format!("127.0.0.1:{port}")])
+            .build()
+            .await;
+        match built {
+            Ok(pc) => break pc,
+            Err(e) => {
+                attempts += 1;
+                if attempts >= span.min(200) {
+                    return Err(format!("peer connection: no free UDP port in the NetherNet range ({e})"));
+                }
+                port = next_udp_port().0;
+            }
+        }
+    };
+    if crate::debug_enabled() {
+        println!("[NetherNet] session {sid}: media on UDP port {port}, public address {public:?}");
+    }
     let pc: Arc<dyn PeerConnection> = Arc::new(pc);
     sessions
         .lock()

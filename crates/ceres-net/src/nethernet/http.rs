@@ -103,12 +103,11 @@ pub(crate) async fn handle_http(
     if offer.is_empty() {
         return respond(&mut stream, 400, "text/plain; charset=utf-8", b"Missing SDP offer in request body").await;
     }
-    let _ = host;
     let sid = next_id.fetch_add(1, Ordering::Relaxed);
-    match negotiate(sid, offer, peer, sessions, ev_tx).await {
+    match negotiate(sid, offer, peer, &host, sessions, ev_tx).await {
         Ok(answer) => respond(&mut stream, 200, "application/sdp", answer.as_bytes()).await,
         Err(e) => {
-            eprintln!("[NetherNet] negotiation with {peer} failed: {e}");
+            crate::log(&format!("[NetherNet] negotiation with {peer} failed: {e}"));
             respond(&mut stream, 503, "text/plain; charset=utf-8", b"Service unavailable").await
         }
     }

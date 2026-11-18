@@ -52,7 +52,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] 🟠 Blocos de duas partes: portas (abrem inteiras; de ferro não abrem com a mão), camas (cor no block entity), plantas altas
 - [~] 🟠 Lajes duplas ✔, encaixe de cercas, muros e painéis de vidro (estados de conexão)
 - [x] 🟠 Tempo de quebra no survival: dureza, ferramenta certa, tier, Eficiência (quebrar rápido demais é recusado; sem drop sem a ferramenta certa) · efeitos (pressa, cansaço) depois
-- [x] 🟠 Rachaduras ao quebrar (LevelEvent) e partículas/sons de quebrar e colocar
+- [x] 🟠 Rachaduras ao quebrar (LevelEvent) e partículas/sons de quebrar e colocar; partículas de batida enquanto minera; partículas de quebra também para quem quebrou
 - [x] 🟢 Pegar bloco com o botão do meio (BlockPickRequest)
 
 ### Inventário
@@ -87,6 +87,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] 🔴 NetherNet: identidade assinada na oferta (`a=identity`) ligada ao login (mesma `cpk`), impede reusar token de outro (`nethernet-require-identity`)
 - [ ] 🟢 Criptografia no RakNet (ECDH P-384 + AES-256-CTR). O Altay já não usa; só vale se o cliente ainda aceitar
 - [x] 🟠 Identidade do NetherNet persistente (chave salva em disco)
+- [x] 🔴 NetherNet pela internet: IP público anunciado (o endereço digitado ou `nethernet-public-ip`), mídia numa faixa UDP fixa (`nethernet-udp-ports`) para encaminhar no roteador
 - [ ] 🟠 TLS na sinalização do NetherNet (o cliente tenta TLS primeiro)
 - [x] 🟠 Proteção contra flood: limite de pacotes por segundo, tamanho máximo de batch
 - [x] 🟠 Desconectar com motivo traduzido (kick, ban, whitelist, servidor cheio, versão errada)

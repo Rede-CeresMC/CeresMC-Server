@@ -236,8 +236,8 @@ impl Server {
                 if let Some(req) = tail.stack_request {
                     self.handle_single_stack_request(sid, req);
                 }
-                for (action, bpos, _face) in tail.block_actions {
-                    self.on_block_action(sid, action, bpos);
+                for (action, bpos, face) in tail.block_actions {
+                    self.on_block_action(sid, action, bpos, face);
                 }
             }
             Err(e) => {

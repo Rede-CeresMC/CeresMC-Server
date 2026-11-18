@@ -105,6 +105,8 @@ pub(crate) struct Player {
     last_skin_change: Option<Instant>,
     /// survival: block being mined and when it started
     breaking: Option<([i32; 3], Instant)>,
+    /// block and face being hit (for the hit particles)
+    punching: Option<([i32; 3], u8)>,
     /// last window id handed out (1..=99) for block containers
     window_counter: u8,
     radius: i32,
@@ -273,6 +275,7 @@ impl Server {
                             editing_sign: None,
                             last_skin_change: None,
                             breaking: None,
+                            punching: None,
                             window_counter: 0,
                             radius: 0,
                             center: None,
