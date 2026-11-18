@@ -118,6 +118,15 @@ for pid, d in guard.received[n:]:
 check(worn is not None and worn[1] == 1, f"using an iron helmet puts it on ({worn})")
 check(any(pid == 0x7b and b"armor.equip_iron" in d for pid, d in guard.received[n:]), "the iron equip sound plays")
 
+# firework rocket used on a block: takes off and bursts
+command(guard, "/clear")
+give(guard, "firework_rocket 1")
+n = len(guard.received)
+guard.place_block((int(X), 69, int(Z) + 2), 1, 0)
+guard.pump(3.5, lambda: 25 in actor_events(guard, n))
+check(any(p == 0x0d and b"fireworks_rocket" in d for p, d in guard.received[n:]), "a rocket used on a block takes off")
+check(25 in actor_events(guard, n), "the rocket bursts (firework particles)")
+
 guard.close(); foe.close()
 print("PASS" if ok else "FAILED")
 sys.exit(0 if ok else 1)

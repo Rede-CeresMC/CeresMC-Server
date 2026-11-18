@@ -139,7 +139,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [~] Baldes de água e lava ✔ (encher, esvaziar, pilha de baldes) · leite (vaca), peixes
 - [x] Isqueiro ✔, enxada ✔ (terra arada), pá ✔ (caminho), machado ✔ (descascar), tesoura ✔ (folhas, teia, grama, cipó)
 - [ ] Livros, mapas, bússola, relógio
-- [ ] Fogos de artifício, elytra
+- [~] Fogos de artifício ✔ (lançar de um bloco, explodir com as cores do item, dano perto), élitro ✔ (planar não conta como queda, gasta 1 por segundo, para com 1 de durabilidade), impulso do foguete planando (enviado pelo servidor; testar no cliente real)
 
 - [x] Totem da imortalidade (1 de vida, regeneração II, absorção II, resistência ao fogo, animação; não salva do vazio)
 - [x] Escudo: agachado e de frente bloqueia golpes e flechas, gasta durabilidade, machado derruba o escudo por 5 s

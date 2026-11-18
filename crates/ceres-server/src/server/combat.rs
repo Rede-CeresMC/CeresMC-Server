@@ -330,7 +330,8 @@ impl Server {
             let name = p.name.clone();
             let gm = p.gamemode;
             let world = p.world;
-            let flying = p.flying;
+            // gliding with an elytra is not a fall either
+            let flying = p.flying || p.actor_state.gliding;
             let feet_block = [p.pos[0].floor() as i32, (feet_y - 0.05).floor() as i32, p.pos[2].floor() as i32];
 
             // Void damage (< MIN_Y - 16)

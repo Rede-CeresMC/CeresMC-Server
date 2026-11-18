@@ -13,6 +13,7 @@ mod effects;
 mod environment;
 mod falling;
 mod farming;
+mod fireworks;
 mod food;
 mod furnace;
 mod twopart;
@@ -146,6 +147,7 @@ pub struct Server {
     falling: Vec<falling::FallingBlock>,
     xp_orbs: Vec<xp::XpOrb>,
     projectiles: Vec<projectiles::Projectile>,
+    fireworks: Vec<fireworks::Firework>,
     /// positions whose block may have lost its support
     gravity_queue: Vec<(usize, [i32; 3])>,
     /// liquid blocks due to flow, with the tick they are due
@@ -186,6 +188,7 @@ impl Server {
             falling: Vec::new(),
             xp_orbs: Vec::new(),
             projectiles: Vec::new(),
+            fireworks: Vec::new(),
             gravity_queue: Vec::new(),
             liquid_queue: HashMap::new(),
             moderation: moderation::Moderation::load(),

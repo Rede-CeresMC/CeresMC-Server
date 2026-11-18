@@ -364,6 +364,31 @@ pub fn add_projectile(entity_id: i64, kind: &str, pos: [f32; 3], motion: [f32; 3
     })
 }
 
+/// AddActor for a firework rocket; `item_nbt` is the network NBT of {Fireworks: {...}}.
+pub fn add_firework(entity_id: i64, pos: [f32; 3], motion: [f32; 3], item_nbt: &[u8]) -> Vec<u8> {
+    packet(ADD_ACTOR, |w| {
+        w.varlong(entity_id);
+        w.uvarlong(entity_id as u64);
+        w.string("minecraft:fireworks_rocket");
+        for v in pos.into_iter().chain(motion) {
+            w.f32_le(v);
+        }
+        for _ in 0..4 {
+            w.f32_le(0.0);
+        }
+        w.uvarint(0); // attributes
+        w.uvarint(1); // metadata
+        w.uvarint(16); // FIREWORK_ITEM (compound tag)
+        w.uvarint(5);
+        w.u8(5);
+        w.bytes(item_nbt);
+        w.uvarint(0);
+        w.uvarint(0);
+        w.uvarint(0);
+        w.bool(false);
+    })
+}
+
 /// AddActor for an experience orb worth `value` points.
 pub fn add_xp_orb(entity_id: i64, pos: [f32; 3], motion: [f32; 3], value: i32) -> Vec<u8> {
     packet(ADD_ACTOR, |w| {

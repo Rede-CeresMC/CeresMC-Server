@@ -286,6 +286,14 @@ impl Server {
         if self.use_bucket(sid, clicked, side(clicked, face)) {
             return;
         }
+        // a rocket used on a block takes off from the clicked face
+        if let Some(t) = side(clicked, face) {
+            let from = [t[0] as f32 + 0.5, t[1] as f32 + 0.1, t[2] as f32 + 0.5];
+            if self.launch_firework_at(sid, from) {
+                self.resync(sid, t);
+                return;
+            }
+        }
         // armor used on a block is put on, like in the air
         if self.equip_held_armor(sid) {
             if let Some(t) = side(clicked, face) {

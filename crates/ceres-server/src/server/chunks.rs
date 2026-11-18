@@ -83,6 +83,7 @@ impl Server {
         self.tick_liquids();
         self.random_ticks();
         self.tick_projectiles();
+        self.tick_fireworks();
         self.check_sleep();
         self.tick_hoppers();
         self.tick_punch_effects();
