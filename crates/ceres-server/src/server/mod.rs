@@ -15,6 +15,7 @@ mod twopart;
 mod handler;
 mod inventory;
 mod items;
+mod liquids;
 mod moderation;
 mod players;
 mod skin;
@@ -115,6 +116,8 @@ pub struct Server {
     falling: Vec<falling::FallingBlock>,
     /// positions whose block may have lost its support
     gravity_queue: Vec<(usize, [i32; 3])>,
+    /// liquid blocks due to flow, with the tick they are due
+    liquid_queue: HashMap<(usize, [i32; 3]), u64>,
     moderation: moderation::Moderation,
     next_entity_id: i64,
     ticks: u64,
@@ -150,6 +153,7 @@ impl Server {
             items: Vec::new(),
             falling: Vec::new(),
             gravity_queue: Vec::new(),
+            liquid_queue: HashMap::new(),
             moderation: moderation::Moderation::load(),
             next_entity_id: 1,
             ticks: 0,

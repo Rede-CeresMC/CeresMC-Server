@@ -123,11 +123,13 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 - [x] Blocos com gravidade: areia, cascalho, pó de concreto, bigorna (entidade caindo, vira bloco ao pousar ou item se o lugar estiver ocupado)
 
+- [x] Água e lava escorrendo: cai primeiro, espalha (água 7, lava 3), seca sem fonte, fonte infinita, obsidiana/pedregulho/pedra quando se encontram
+
 ### Itens
 
 - [x] Durabilidade de ferramentas e armas (NBT `Damage`, Inquebrável, quebra com som)
 - [ ] Arco, besta, tridente, bola de neve, ovo, pérola do fim (projéteis)
-- [ ] Baldes (água, lava, leite, peixes)
+- [~] Baldes de água e lava ✔ (encher, esvaziar, pilha de baldes) · leite (vaca), peixes
 - [ ] Isqueiro, tesoura, enxada, pá (caminhos), machado (descascar)
 - [ ] Livros, mapas, bússola, relógio
 - [ ] Fogos de artifício, elytra

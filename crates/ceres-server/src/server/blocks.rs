@@ -93,6 +93,7 @@ impl Server {
         let pk = protocol::update_block(pos, id);
         self.broadcast(&pk, |_, p| p.world == world);
         self.queue_gravity(world, pos);
+        self.queue_liquid(world, pos);
         true
     }
 
@@ -223,6 +224,11 @@ impl Server {
                 }
                 return;
             }
+        }
+
+        // buckets fill from or empty into the world instead of placing a block
+        if self.use_bucket(sid, clicked, side(clicked, face)) {
+            return;
         }
 
         // 2. Determine which block the player is placing
