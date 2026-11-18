@@ -22,7 +22,7 @@ fn timestamp() -> String {
 /// message with line breaks) are escaped so nobody can forge log lines.
 pub fn log(line: &str) {
     let line: String = line.chars().flat_map(|c| if c.is_control() { c.escape_default().collect::<Vec<_>>() } else { vec![c] }).collect();
-    eprintln!("{line}");
+    crate::colors::print(&line, true);
     if let Some(f) = FILE.lock().unwrap().as_mut() {
         let _ = writeln!(f, "[{}] {line}", timestamp());
         let _ = f.flush();

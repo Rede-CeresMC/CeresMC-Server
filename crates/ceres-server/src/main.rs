@@ -1,6 +1,19 @@
 //! CeresMC Server: entry point.
 
+// println!/eprintln! of this crate go through the shared console (colours, log file)
+#[allow(unused_macros)]
+macro_rules! println {
+    () => { ceres_codec::console::line("", false) };
+    ($($t:tt)*) => { ceres_codec::console::line(&format!($($t)*), false) };
+}
+#[allow(unused_macros)]
+macro_rules! eprintln {
+    () => { ceres_codec::console::line("", true) };
+    ($($t:tt)*) => { ceres_codec::console::line(&format!($($t)*), true) };
+}
+
 mod auth;
+mod colors;
 mod config;
 mod logfile;
 mod server;
@@ -15,6 +28,8 @@ fn fail(what: &str, e: impl std::fmt::Display) -> ! {
 }
 
 fn main() {
+    colors::init();
+    ceres_codec::console::set_sink(colors::print);
     logfile::init();
     let started = std::time::Instant::now();
     let root = std::env::current_dir().expect("cwd");

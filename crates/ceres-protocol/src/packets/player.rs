@@ -205,7 +205,7 @@ pub fn update_abilities(a: &Abilities) -> Vec<u8> {
 
 fn player_metadata(w: &mut W, name: &str, state: &ActorState) {
     let (flags, flags2) = state.flags();
-    w.uvarint(if state.sleeping.is_some() { 10 } else { 9 });
+    w.uvarint(if state.sleeping.is_some() { 11 } else { 10 });
     // key, type, type again (that's how putEntityMetadata writes it)
     w.uvarint(0);
     w.uvarint(7);
@@ -239,6 +239,10 @@ fn player_metadata(w: &mut W, name: &str, state: &ActorState) {
     w.uvarint(1);
     w.u8(1);
     w.i16_le(MAX_AIR_SUPPLY);
+    w.uvarint(81); // ALWAYS_SHOW_NAMETAG (byte): 1 = the name shows whenever the player is drawn
+    w.uvarint(0);
+    w.u8(0);
+    w.u8(1);
     w.uvarint(26); // PLAYER_FLAGS (byte): bit 1 = sleeping
     w.uvarint(0);
     w.u8(0);

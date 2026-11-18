@@ -101,7 +101,8 @@ impl Server {
         if p.state != State::Spawned || p.dead || p.hurt_cooldown > 0 {
             return false;
         }
-        if !bypass_armor && (p.gamemode == 1 || p.gamemode == 6 || self.cfg.difficulty == 0 && raw_damage < 100.0) {
+        // peaceful only removes monsters and hunger: players still hurt each other (vanilla)
+        if !bypass_armor && (p.gamemode == 1 || p.gamemode == 6) {
             return false;
         }
         let reduction = if bypass_armor { 0.0 } else { self.armor_reduction(p) };

@@ -454,6 +454,8 @@ pub enum StackAction {
     },
     /// grindstone: the result is decided by the server
     Grindstone,
+    /// anvil: the result is decided by the server; `filter` indexes the request's texts (the new name)
+    Anvil { filter: i32 },
     /// informational actions the server does not need to act on (crafting results, mining...)
     Ignored(u32),
     /// any action this server does not understand yet (crafting...)
@@ -464,6 +466,8 @@ pub enum StackAction {
 pub struct StackRequest {
     pub id: i32,
     pub actions: Vec<StackAction>,
+    /// texts sent with the request (anvil rename, book pages)
+    pub filters: Vec<String>,
 }
 
 /// RecipeIngredient (descriptor + count), skipped.
@@ -532,6 +536,10 @@ fn read_single_stack_request(r: &mut R) -> Res<StackRequest> {
                 StackAction::Ignored(9)
             }
             12 => StackAction::CreativeCreate { item: r.uvarint()?, repetitions: r.u8()? },
+            13 => {
+                r.varint()?; // recipe id
+                StackAction::Anvil { filter: r.i32_le()? }
+            }
             14 => {
                 r.varint()?; // recipe id
                 r.varint()?; // repair cost
@@ -551,15 +559,16 @@ fn read_single_stack_request(r: &mut R) -> Res<StackRequest> {
             }
             other => {
                 actions.push(StackAction::Unsupported(other));
-                return Ok(StackRequest { id, actions });
+                return Ok(StackRequest { id, actions, filters: Vec::new() });
             }
         });
     }
+    let mut filters = Vec::new();
     for _ in 0..r.uvarint()?.min(64) {
-        r.string()?; // filter strings
+        filters.push(r.string()?);
     }
     r.i32_le()?; // filter string cause
-    Ok(StackRequest { id, actions })
+    Ok(StackRequest { id, actions, filters })
 }
 
 /// ItemStackRequestPacket. Stops at the first action type it cannot decode.
@@ -686,6 +695,7 @@ pub const WINDOW_TYPE_WORKBENCH: u8 = 1;
 pub const WINDOW_TYPE_FURNACE: u8 = 2;
 pub const WINDOW_TYPE_ENCHANTMENT: u8 = 3;
 pub const WINDOW_TYPE_BREWING_STAND: u8 = 4;
+pub const WINDOW_TYPE_ANVIL: u8 = 5;
 pub const WINDOW_TYPE_HOPPER: u8 = 8;
 pub const WINDOW_TYPE_STONECUTTER: u8 = 29;
 pub const WINDOW_TYPE_GRINDSTONE: u8 = 26;

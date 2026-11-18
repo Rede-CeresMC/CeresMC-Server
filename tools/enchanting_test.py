@@ -150,6 +150,40 @@ check(request(c, [(14, svarint(0) + svarint(0) + bytes([1])), (5, bytes([1]) + s
 c.pump(1.0)
 check(any(p == 0x0d and b"xp_orb" in d for p, d in c.received[n:]), "grinding gives experience back")
 
+# anvil: renaming costs a level
+ANVIL = block_id("minecraft:anvil")
+APOS = (POS[0], POS[1], POS[2] + 4)   # clear of the other tests
+command(c, "/gamemode creative")
+c.break_block(APOS)
+c.place_block((APOS[0], 69, APOS[2]), 1, STONE)
+c.pump(0.3)
+c.place_block((APOS[0], 69, APOS[2]), 1, ANVIL)
+c.pump(0.6)
+command(c, "/gamemode survival")
+command(c, "/clear")
+command(c, "/xp 5L")
+give(c, "iron_sword 1")
+n = len(c.received)
+c.place_block(APOS, 1, 0)
+c.pump(3.0, lambda: any(p == 0x2e for p, _ in c.received[n:]))
+opens = [d for p, d in c.received[n:] if p == 0x2e]
+check(opens and opens[-1][1] == 5, "clicking an anvil opens it")
+check(request(c, [take(1, slot(HOTBAR, 0), slot(0, 1))]), "the sword goes into the anvil")
+n = len(c.received)
+counter[0] -= 2
+body = svarint(counter[0]) + uvarint(3)
+body += uvarint(13) + bytes(1) + svarint(0) + struct.pack("<i", 0)
+body += uvarint(5) + bytes(1) + bytes([1]) + slot(0, 1)
+body += uvarint(0) + bytes(1) + bytes([1]) + slot(60, 50) + slot(HOTBAR, 6)
+body += uvarint(1) + string("Excalibur") + struct.pack("<i", 0)
+c.send(uvarint(0x93) + uvarint(1) + body)
+c.pump(3.0, lambda: any(p == 0x94 for p, _ in c.received[n:]))
+resp = [d for p, d in c.received[n:] if p == 0x94]
+check(resp and resp[-1][1] == 0, "renaming at the anvil is accepted")
+c.pump(1.0)
+lv = level(c, n)
+check(lv is not None and lv < level(c, 0) + 0.5 and lv >= 0, f"renaming costs a level (now {lv})")
+
 c.close()
 print("PASS" if ok else "FAILED")
 sys.exit(0 if ok else 1)

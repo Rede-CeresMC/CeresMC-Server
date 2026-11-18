@@ -461,8 +461,9 @@ impl Server {
     ) {
         self.swing_arm(sid);
         let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
+        // the placer hears it too: the client does not play it by itself
         let snd = protocol::level_sound_event("place", center, placed_id);
-        self.broadcast(&snd, |o, q| o != sid && q.world == world);
+        self.broadcast(&snd, |_, q| q.world == world);
 
         if let Some(slot) = survival_slot {
             if let Some(p) = self.players.get_mut(&sid) {
@@ -629,8 +630,9 @@ impl Server {
                 }
                 self.swing_arm(sid);
                 let ticks = self.break_ticks(sid, pos);
+                // the cracks: everyone, the miner too (server-authoritative breaking)
                 let pk = protocol::level_event(level_event::BLOCK_START_BREAK, fpos, (65535 / ticks) as i32);
-                self.broadcast(&pk, |o, q| o != sid && q.world == world);
+                self.broadcast(&pk, |_, q| q.world == world);
             }
             block_action::ABORT_BREAK | block_action::STOP_BREAK => {
                 if let Some(p) = self.players.get_mut(&sid) {
@@ -642,11 +644,11 @@ impl Server {
                     }
                 }
                 let pk = protocol::level_event(level_event::BLOCK_STOP_BREAK, fpos, 0);
-                self.broadcast(&pk, |o, q| o != sid && q.world == world);
+                self.broadcast(&pk, |_, q| q.world == world);
             }
             block_action::CREATIVE_PLAYER_DESTROY_BLOCK | block_action::PREDICT_DESTROY_BLOCK => {
                 let stop = protocol::level_event(level_event::BLOCK_STOP_BREAK, fpos, 0);
-                self.broadcast(&stop, |o, q| o != sid && q.world == world);
+                self.broadcast(&stop, |_, q| q.world == world);
                 let creative_only = action == block_action::CREATIVE_PLAYER_DESTROY_BLOCK
                     && self.players.get(&sid).is_some_and(|p| p.gamemode != 1);
                 if creative_only || !self.mining_done(sid, pos) {

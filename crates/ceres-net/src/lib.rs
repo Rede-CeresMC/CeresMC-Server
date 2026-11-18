@@ -1,6 +1,18 @@
 //! Network transports. Every transport implements [`transport::Transport`] so the game layer
 //! never knows whether a player came in over RakNet or NetherNet.
 
+// println!/eprintln! of this crate go through the shared console (colours, log file)
+#[allow(unused_macros)]
+macro_rules! println {
+    () => { ceres_codec::console::line("", false) };
+    ($($t:tt)*) => { ceres_codec::console::line(&format!($($t)*), false) };
+}
+#[allow(unused_macros)]
+macro_rules! eprintln {
+    () => { ceres_codec::console::line("", true) };
+    ($($t:tt)*) => { ceres_codec::console::line(&format!($($t)*), true) };
+}
+
 pub mod nethernet;
 pub mod raknet;
 pub mod transport;

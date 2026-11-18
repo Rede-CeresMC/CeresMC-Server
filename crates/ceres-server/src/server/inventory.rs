@@ -35,6 +35,10 @@ pub(crate) struct Inventory {
     pub(crate) grind_input: ItemDesc,
     pub(crate) grind_additional: ItemDesc,
     pub(crate) grind_xp: Option<u32>,
+    /// anvil slots, and the levels its last use costs
+    pub(crate) anvil_input: ItemDesc,
+    pub(crate) anvil_material: ItemDesc,
+    pub(crate) anvil_paid: Option<u32>,
 }
 
 /// UI id given to an open crafting table: it has no slots of its own (the grid is `craft_grid`).
@@ -83,6 +87,9 @@ impl Default for Inventory {
             grind_input: ItemDesc::default(),
             grind_additional: ItemDesc::default(),
             grind_xp: None,
+            anvil_input: ItemDesc::default(),
+            anvil_material: ItemDesc::default(),
+            anvil_paid: None,
         }
     }
 }
@@ -100,6 +107,17 @@ enum Loc {
     EnchantLapis,
     GrindInput,
     GrindAdditional,
+    AnvilInput,
+    AnvilMaterial,
+}
+
+/// Slots of the enchanting table, grindstone and anvil: once one of them was used in a request,
+/// nothing may be moved in or out of them any more in that request.
+fn is_station(loc: Loc) -> bool {
+    matches!(
+        loc,
+        Loc::EnchantInput | Loc::EnchantLapis | Loc::GrindInput | Loc::GrindAdditional | Loc::AnvilInput | Loc::AnvilMaterial
+    )
 }
 
 fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
@@ -128,6 +146,15 @@ fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
             match (s.container, s.slot) {
                 (super::enchanting::UI_ENCHANT_INPUT, super::enchanting::SLOT_ENCHANT_INPUT) => Some(Loc::EnchantInput),
                 (super::enchanting::UI_ENCHANT_LAPIS, super::enchanting::SLOT_ENCHANT_LAPIS) => Some(Loc::EnchantLapis),
+                _ => None,
+            }
+        }
+        super::anvil::UI_ANVIL_INPUT | super::anvil::UI_ANVIL_MATERIAL
+            if open.is_some_and(|c| c.ui == super::anvil::ANVIL_UI) =>
+        {
+            match (s.container, s.slot) {
+                (super::anvil::UI_ANVIL_INPUT, super::anvil::SLOT_ANVIL_INPUT) => Some(Loc::AnvilInput),
+                (super::anvil::UI_ANVIL_MATERIAL, super::anvil::SLOT_ANVIL_MATERIAL) => Some(Loc::AnvilMaterial),
                 _ => None,
             }
         }
@@ -208,6 +235,8 @@ impl Inventory {
             Loc::EnchantLapis => &self.enchant_lapis,
             Loc::GrindInput => &self.grind_input,
             Loc::GrindAdditional => &self.grind_additional,
+            Loc::AnvilInput => &self.anvil_input,
+            Loc::AnvilMaterial => &self.anvil_material,
         }
     }
 
@@ -228,6 +257,8 @@ impl Inventory {
             Loc::EnchantLapis => self.enchant_lapis = item,
             Loc::GrindInput => self.grind_input = item,
             Loc::GrindAdditional => self.grind_additional = item,
+            Loc::AnvilInput => self.anvil_input = item,
+            Loc::AnvilMaterial => self.anvil_material = item,
             Loc::Container(i) => {
                 if let Some(c) = self.container.as_mut() {
                     c.items[i] = item;
@@ -365,7 +396,10 @@ impl Inventory {
             self.enchant_lapis.clone(),
             self.grind_input.clone(),
             self.grind_additional.clone(),
+            self.anvil_input.clone(),
+            self.anvil_material.clone(),
         );
+        self.anvil_paid = None;
         self.enchant_paid = None;
         self.grind_xp = None;
         let res = self.apply_inner(req, creative, gd);
@@ -384,6 +418,9 @@ impl Inventory {
             self.enchant_lapis = backup.10;
             self.grind_input = backup.11;
             self.grind_additional = backup.12;
+            self.anvil_input = backup.13;
+            self.anvil_material = backup.14;
+            self.anvil_paid = None;
             self.enchant_paid = None;
             self.grind_xp = None;
         }
@@ -407,6 +444,8 @@ impl Inventory {
         let mut enchant_choice: Option<usize> = None;
         // grindstone: (expected input, expected additional) and the experience
         let mut grinding: Option<(ItemDesc, ItemDesc, u32)> = None;
+        // anvil: (input, material, material used, cost)
+        let mut anvil_use: Option<(ItemDesc, ItemDesc, u16, u32)> = None;
 
         for action in &req.actions {
             match *action {
@@ -451,6 +490,24 @@ impl Inventory {
                     self.crafted = Some(super::enchanting::enchanted(&self.enchant_input, &offer, gd));
                     enchant_choice = Some(i);
                 }
+                StackAction::Anvil { filter } => {
+                    let open_ui = self.container.as_ref().map(|c| c.ui);
+                    if open_ui != Some(super::anvil::ANVIL_UI)
+                        || recipe.is_some()
+                        || enchant_choice.is_some()
+                        || grinding.is_some()
+                        || anvil_use.is_some()
+                    {
+                        return None;
+                    }
+                    let rename = usize::try_from(filter).ok().and_then(|i| req.filters.get(i)).map(String::as_str);
+                    let res = super::anvil::combine(&self.anvil_input, &self.anvil_material, rename, gd)?;
+                    if !creative && (super::anvil::too_expensive(res.cost) || self.player_level < res.cost) {
+                        return None;
+                    }
+                    self.crafted = Some(res.item);
+                    anvil_use = Some((self.anvil_input.clone(), self.anvil_material.clone(), res.material_used, res.cost));
+                }
                 StackAction::Grindstone => {
                     let open_ui = self.container.as_ref().map(|c| c.ui);
                     if open_ui != Some(super::grindstone::GRINDSTONE_UI) || recipe.is_some() || enchant_choice.is_some() || grinding.is_some() {
@@ -481,7 +538,7 @@ impl Inventory {
                     recipe = Some((r, reps as u16));
                 }
                 StackAction::Consume { count, src } => {
-                    if (recipe.is_none() && enchant_choice.is_none() && grinding.is_none()) || count == 0 {
+                    if (recipe.is_none() && enchant_choice.is_none() && grinding.is_none() && anvil_use.is_none()) || count == 0 {
                         return None;
                     }
                     let loc = locate(&src, self.container.as_ref())?;
@@ -501,6 +558,15 @@ impl Inventory {
                     touched.push(src);
                 }
                 StackAction::Move { count, src, dst } => {
+                    let station_used = enchant_choice.is_some() || grinding.is_some() || anvil_use.is_some();
+                    if station_used
+                        && [locate(&src, self.container.as_ref()), locate(&dst, self.container.as_ref())]
+                            .into_iter()
+                            .flatten()
+                            .any(is_station)
+                    {
+                        return None;
+                    }
                     if count == 0 {
                         return None;
                     }
@@ -562,6 +628,15 @@ impl Inventory {
                     touched.push(dst);
                 }
                 StackAction::Swap { a, b } => {
+                    let station_used = enchant_choice.is_some() || grinding.is_some() || anvil_use.is_some();
+                    if station_used
+                        && [locate(&a, self.container.as_ref()), locate(&b, self.container.as_ref())]
+                            .into_iter()
+                            .flatten()
+                            .any(is_station)
+                    {
+                        return None;
+                    }
                     if a.container == super::furnace::UI_RESULT || b.container == super::furnace::UI_RESULT {
                         return None;
                     }
@@ -585,6 +660,10 @@ impl Inventory {
                     touched.push(b);
                 }
                 StackAction::Drop { count, src } => {
+                    let station_used = enchant_choice.is_some() || grinding.is_some() || anvil_use.is_some();
+                    if station_used && locate(&src, self.container.as_ref()).is_some_and(is_station) {
+                        return None;
+                    }
                     if count == 0 {
                         return None;
                     }
@@ -627,6 +706,10 @@ impl Inventory {
                     touched.push(src);
                 }
                 StackAction::Remove { count, src } => {
+                    let station_used = enchant_choice.is_some() || grinding.is_some() || anvil_use.is_some();
+                    if station_used && locate(&src, self.container.as_ref()).is_some_and(is_station) {
+                        return None;
+                    }
                     if src.container == container::CREATED_OUTPUT {
                         continue;
                     }
@@ -644,6 +727,23 @@ impl Inventory {
             }
         }
 
+        // anvil: the whole input and exactly the material it needed, nothing else
+        if let Some((input, material, material_used, cost)) = anvil_use {
+            let mut from_input = 0;
+            let mut from_material = 0;
+            for (loc, c) in consumed_from.iter().zip(&consumed) {
+                match loc {
+                    Loc::AnvilInput if c.same_type(&input) => from_input += c.count,
+                    Loc::AnvilMaterial if c.same_type(&material) => from_material += c.count,
+                    _ => return None,
+                }
+            }
+            if from_input != input.count || from_material != material_used {
+                return None;
+            }
+            self.anvil_paid = Some(cost);
+            consumed.clear();
+        }
         // grindstone: both slots used up exactly (one each), nothing else
         if let Some((input, additional, xp)) = grinding {
             if recipe.is_some() || enchant_choice.is_some() {
@@ -653,8 +753,8 @@ impl Inventory {
             let mut from_additional = 0;
             for (loc, c) in consumed_from.iter().zip(&consumed) {
                 match loc {
-                    Loc::GrindInput => from_input += c.count,
-                    Loc::GrindAdditional => from_additional += c.count,
+                    Loc::GrindInput if c.same_type(&input) => from_input += c.count,
+                    Loc::GrindAdditional if c.same_type(&additional) => from_additional += c.count,
                     _ => return None,
                 }
             }
@@ -712,7 +812,14 @@ impl Inventory {
         if !self.cutter.is_empty() {
             out.push(std::mem::take(&mut self.cutter));
         }
-        for slot in [&mut self.enchant_input, &mut self.enchant_lapis, &mut self.grind_input, &mut self.grind_additional] {
+        for slot in [
+            &mut self.enchant_input,
+            &mut self.enchant_lapis,
+            &mut self.grind_input,
+            &mut self.grind_additional,
+            &mut self.anvil_input,
+            &mut self.anvil_material,
+        ] {
             if !slot.is_empty() {
                 out.push(std::mem::take(slot));
             }
@@ -952,6 +1059,10 @@ impl Server {
         p.out.push(protocol::item_stack_response(req.id, ok, &slots));
         let paid = p.inventory.enchant_paid.is_some();
         let input_changed = p.inventory.enchant_input != enchant_before;
+        let anvil_used = self.players.get(&sid).is_some_and(|p| p.inventory.anvil_paid.is_some());
+        if ok && anvil_used {
+            self.finish_anvil(sid);
+        }
         let ground = self.players.get(&sid).is_some_and(|p| p.inventory.grind_xp.is_some());
         if ok && ground {
             self.finish_grinding(sid);

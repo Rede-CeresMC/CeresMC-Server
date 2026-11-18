@@ -100,7 +100,7 @@ impl Server {
                 fields.retain(|(k, _)| k != "RecordItem");
             }
             self.worlds.worlds[world].set_block_entity(pos, tile, &self.gd);
-            self.broadcast(&protocol::level_sound_event("record.null", center, -1), |_, q| q.world == world);
+            self.stop_record(world, pos);
             self.spawn_item(world, [center[0], center[1] + 0.6, center[2]], [0.0, 0.1, 0.0], disc, 10);
             self.swing_arm(sid);
             return true;
@@ -116,7 +116,13 @@ impl Server {
         self.worlds.worlds[world].set_block_entity(pos, tile, &self.gd);
         let gm = self.players[&sid].gamemode;
         self.consume_held(sid, gm);
-        self.broadcast(&protocol::level_sound_event(&sound, center, -1), |_, q| q.world == world);
+        // records play with a sound handle (protocol 2225) so they can be stopped
+        self.stop_record(world, pos);
+        let handle = self.next_sound_handle;
+        self.next_sound_handle += 1;
+        self.jukebox_sounds.insert((world, pos), handle);
+        self.broadcast(&protocol::play_sound_with_handle(&sound, center, handle), |_, q| q.world == world);
+        self.broadcast(&protocol::record_started(pos, handle), |_, q| q.world == world);
         self.swing_arm(sid);
         true
     }
@@ -124,9 +130,17 @@ impl Server {
     /// A jukebox being broken drops its disc and stops the music.
     pub(crate) fn eject_jukebox(&mut self, world: usize, pos: [i32; 3]) -> Option<ItemDesc> {
         let tile = self.worlds.worlds[world].get_block_entity(pos, &self.gd)?;
-        let disc = tile.get("RecordItem").and_then(|t| containers::item_from_vanilla(t, &self.gd))?;
+        self.stop_record(world, pos);
+        tile.get("RecordItem").and_then(|t| containers::item_from_vanilla(t, &self.gd))
+    }
+
+    /// Stops the record a jukebox is playing, if any.
+    pub(crate) fn stop_record(&mut self, world: usize, pos: [i32; 3]) {
+        if let Some(handle) = self.jukebox_sounds.remove(&(world, pos)) {
+            self.broadcast(&protocol::stop_sound_handle(handle), |_, q| q.world == world);
+        }
+        // older clients still listen to the stop-record sound
         let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
         self.broadcast(&protocol::level_sound_event("record.null", center, -1), |_, q| q.world == world);
-        Some(disc)
     }
 }

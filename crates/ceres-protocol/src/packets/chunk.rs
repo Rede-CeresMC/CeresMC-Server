@@ -80,6 +80,42 @@ pub fn level_event(event_id: i32, pos: [f32; 3], data: i32) -> Vec<u8> {
     })
 }
 
+/// PlaySound (0x56) with a server sound handle, so the sound can be stopped later (records).
+pub fn play_sound_with_handle(name: &str, pos: [f32; 3], handle: u64) -> Vec<u8> {
+    packet(0x56, |w| {
+        w.string(name);
+        for v in pos {
+            w.varint((v * 8.0) as i32);
+        }
+        w.f32_le(1.0); // volume
+        w.f32_le(1.0); // pitch
+        w.varint(0); // loop count
+        w.bool(true); // heard from any distance the sound itself allows
+        w.bool(true);
+        w.u64_le(handle);
+        w.bool(false); // no playback position
+    })
+}
+
+/// RecordStarted (0x160): a jukebox at `pos` plays the sound with this handle.
+pub fn record_started(pos: [i32; 3], handle: u64) -> Vec<u8> {
+    packet(0x160, |w| {
+        w.varint(pos[0]);
+        w.varint(pos[1]);
+        w.varint(pos[2]);
+        w.u64_le(handle);
+    })
+}
+
+/// ClientboundUpdateSoundData (0x15c) with the STOP event: stops the sound with this handle.
+pub fn stop_sound_handle(handle: u64) -> Vec<u8> {
+    packet(0x15c, |w| {
+        w.u64_le(handle);
+        w.uvarint(0); // STOP
+        w.u8(0);
+    })
+}
+
 /// LevelSoundEventPacket (0x7b, protocol 2225).
 pub fn level_sound_event(sound: &str, pos: [f32; 3], extra_data: i32) -> Vec<u8> {
     packet(LEVEL_SOUND_EVENT, |w| {

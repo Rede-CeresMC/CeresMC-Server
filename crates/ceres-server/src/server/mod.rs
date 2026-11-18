@@ -1,5 +1,6 @@
 //! Game layer: player sessions, login flow, entities, combat, moderation and chunk streaming.
 
+mod anvil;
 mod armor;
 mod brewing;
 mod blocks;
@@ -153,6 +154,9 @@ pub struct Server {
     xp_orbs: Vec<xp::XpOrb>,
     projectiles: Vec<projectiles::Projectile>,
     fireworks: Vec<fireworks::Firework>,
+    /// sound handle of the record each jukebox plays, to stop it
+    jukebox_sounds: HashMap<(usize, [i32; 3]), u64>,
+    next_sound_handle: u64,
     /// positions whose block may have lost its support
     gravity_queue: Vec<(usize, [i32; 3])>,
     /// liquid blocks due to flow, with the tick they are due
@@ -196,6 +200,8 @@ impl Server {
             xp_orbs: Vec::new(),
             projectiles: Vec::new(),
             fireworks: Vec::new(),
+            jukebox_sounds: HashMap::new(),
+            next_sound_handle: 1,
             gravity_queue: Vec::new(),
             liquid_queue: HashMap::new(),
             moderation: moderation::Moderation::load(),

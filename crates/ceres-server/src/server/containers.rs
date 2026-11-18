@@ -20,6 +20,7 @@ pub(crate) fn container_kind(name: &str) -> Option<(u8, &'static str, bool)> {
         "minecraft:stonecutter_block" => Some((STONECUTTER_UI, "", false)),
         "minecraft:enchanting_table" => Some((enchanting::ENCHANT_UI, "", false)),
         "minecraft:grindstone" => Some((grindstone::GRINDSTONE_UI, "", false)),
+        "minecraft:anvil" | "minecraft:chipped_anvil" | "minecraft:damaged_anvil" => Some((anvil::ANVIL_UI, "", false)),
         "minecraft:furnace" | "minecraft:lit_furnace" => Some((furnace::UI_FURNACE, "Furnace", false)),
         "minecraft:blast_furnace" | "minecraft:lit_blast_furnace" => {
             Some((furnace::UI_BLAST_FURNACE, "BlastFurnace", false))
@@ -205,6 +206,7 @@ impl Server {
                 STONECUTTER_UI => protocol::WINDOW_TYPE_STONECUTTER,
                 enchanting::ENCHANT_UI => protocol::WINDOW_TYPE_ENCHANTMENT,
                 grindstone::GRINDSTONE_UI => protocol::WINDOW_TYPE_GRINDSTONE,
+                anvil::ANVIL_UI => protocol::WINDOW_TYPE_ANVIL,
                 _ => protocol::WINDOW_TYPE_WORKBENCH,
             };
             p.out.push(protocol::open_block_container(window, ty, pos));
@@ -254,6 +256,7 @@ impl Server {
             || c.ui == STONECUTTER_UI
             || c.ui == enchanting::ENCHANT_UI
             || c.ui == grindstone::GRINDSTONE_UI
+            || c.ui == anvil::ANVIL_UI
         {
             return;
         }
@@ -349,6 +352,7 @@ impl Server {
                 STONECUTTER_UI => protocol::WINDOW_TYPE_STONECUTTER,
                 enchanting::ENCHANT_UI => protocol::WINDOW_TYPE_ENCHANTMENT,
                 grindstone::GRINDSTONE_UI => protocol::WINDOW_TYPE_GRINDSTONE,
+                anvil::ANVIL_UI => protocol::WINDOW_TYPE_ANVIL,
                 _ => window_type_of(c.ui, tile_id),
             };
             p.out.push(protocol::container_close(c.window, ty, true));
