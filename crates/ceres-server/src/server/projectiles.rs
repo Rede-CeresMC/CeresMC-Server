@@ -77,7 +77,7 @@ fn look_vector(pitch: f32, yaw: f32) -> [f32; 3] {
 
 impl Server {
     /// Whether `sid` may launch a projectile now (cooldown and limits). Records the launch.
-    fn may_launch(&mut self, sid: SessionId) -> bool {
+    pub(crate) fn may_launch(&mut self, sid: SessionId) -> bool {
         let ticks = self.ticks;
         let mine = self.projectiles.iter().filter(|p| p.owner == sid).count();
         if mine >= MAX_PER_PLAYER || self.projectiles.len() >= MAX_TOTAL {

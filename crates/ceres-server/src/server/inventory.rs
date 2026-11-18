@@ -83,7 +83,10 @@ fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
         // furnaces split their three slots over three UI ids (input, fuel, result)
         let furnace_slot = super::furnace::is_furnace_ui(c.ui)
             && matches!(s.container, super::furnace::UI_FUEL | super::furnace::UI_RESULT);
-        if s.container == c.ui || furnace_slot {
+        // brewing stands: reagent (9), bottles (10) and fuel (11) are slots 0, 1-3 and 4 of one inventory
+        let brewing_slot = c.ui == super::brewing::UI_BREWING_INPUT
+            && matches!(s.container, super::brewing::UI_BREWING_RESULT | super::brewing::UI_BREWING_FUEL);
+        if s.container == c.ui || furnace_slot || brewing_slot {
             return ((s.slot as usize) < c.items.len()).then_some(Loc::Container(s.slot as usize));
         }
     }

@@ -19,6 +19,8 @@ pub(crate) struct Firework {
     data: Tag,
     /// player boosted by this rocket (elytra), who it follows
     rider: Option<SessionId>,
+    /// who launched it
+    owner: SessionId,
 }
 
 /// The "Fireworks" compound of a rocket item (empty when the item has none).
@@ -38,7 +40,7 @@ fn explosion_count(data: &Tag) -> usize {
 }
 
 impl Server {
-    fn spawn_firework(&mut self, world: usize, pos: [f32; 3], motion: [f32; 3], data: Tag, rider: Option<SessionId>) {
+    fn spawn_firework(&mut self, owner: SessionId, world: usize, pos: [f32; 3], motion: [f32; 3], data: Tag, rider: Option<SessionId>) {
         let flight = data.get("Flight").and_then(|v| v.as_i64()).unwrap_or(1).clamp(0, 3) as u32;
         let life = 10 * (flight + 1) + rand::random::<u32>() % 6 + rand::random::<u32>() % 7;
         let eid = self.next_entity_id;
@@ -48,7 +50,7 @@ impl Server {
         self.broadcast(&pk, |_, q| q.world == world);
         let center = pos;
         self.broadcast(&protocol::level_sound_event("launch", center, -1), |_, q| q.world == world);
-        self.fireworks.push(Firework { entity_id: eid, world, pos, motion, life, age: 0, data, rider });
+        self.fireworks.push(Firework { entity_id: eid, world, pos, motion, life, age: 0, data, rider, owner });
     }
 
     /// A rocket used on a block: it takes off from the clicked face.
@@ -59,8 +61,11 @@ impl Server {
             return false;
         }
         let (world, gm) = (p.world, p.gamemode);
+        if !self.may_launch(sid) {
+            return true; // cooldown and limits shared with projectiles
+        }
         let jitter = || (rand::random::<f32>() - 0.5) * 0.004;
-        self.spawn_firework(world, pos, [jitter(), 0.05, jitter()], fireworks_tag(&held), None);
+        self.spawn_firework(sid, world, pos, [jitter(), 0.05, jitter()], fireworks_tag(&held), None);
         self.consume_held(sid, gm);
         true
     }
@@ -76,6 +81,10 @@ impl Server {
             return true; // vanilla: a rocket in the air only does something while gliding
         }
         let (world, gm, pos, rot) = (p.world, p.gamemode, p.pos, p.rot);
+        if !self.may_launch(sid) {
+            return true;
+        }
+        let Some(p) = self.players.get(&sid) else { return true };
         let (pitch, yaw) = (rot[0].to_radians(), rot[1].to_radians());
         let look = [-yaw.sin() * pitch.cos(), -pitch.sin(), yaw.cos() * pitch.cos()];
         let boost = [look[0] * 1.5, look[1] * 1.5, look[2] * 1.5];
@@ -85,7 +94,7 @@ impl Server {
             p.out.push(mot.clone());
         }
         self.broadcast(&mot, |o, q| o != sid && q.world == world);
-        self.spawn_firework(world, pos, boost, fireworks_tag(&held), Some(sid));
+        self.spawn_firework(sid, world, pos, boost, fireworks_tag(&held), Some(sid));
         self.consume_held(sid, gm);
         true
     }
@@ -110,7 +119,8 @@ impl Server {
         let near: Vec<(SessionId, f32)> = self
             .players
             .iter()
-            .filter(|(_, q)| q.world == world && q.state == State::Spawned && !q.dead)
+            // with PvP off a rocket only hurts the player who launched it
+            .filter(|(s, q)| q.world == world && q.state == State::Spawned && !q.dead && (self.cfg.pvp || **s == f.owner))
             .map(|(s, q)| (*s, ((q.pos[0] - f.pos[0]).powi(2) + (q.pos[1] - 0.8 - f.pos[1]).powi(2) + (q.pos[2] - f.pos[2]).powi(2)).sqrt()))
             .filter(|(_, d)| *d <= 5.0)
             .collect();

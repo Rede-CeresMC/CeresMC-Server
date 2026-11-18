@@ -1,6 +1,7 @@
 //! Game layer: player sessions, login flow, entities, combat, moderation and chunk streaming.
 
 mod armor;
+mod brewing;
 mod blocks;
 mod chunks;
 mod combat;
@@ -157,6 +158,8 @@ pub struct Server {
     ticks: u64,
     /// furnaces with something to do, by (world, position)
     furnaces: HashMap<(usize, [i32; 3]), furnace::FurnaceState>,
+    /// brewing stands with something to do
+    brewers: HashMap<(usize, [i32; 3]), brewing::BrewingState>,
     tick_ms: VecDeque<f32>,
     started_at: Instant,
     /// lowercase names from ops.txt
@@ -195,6 +198,7 @@ impl Server {
             next_entity_id: 1,
             ticks: 0,
             furnaces: HashMap::new(),
+            brewers: HashMap::new(),
             tick_ms: VecDeque::with_capacity(100),
             started_at: Instant::now(),
             ops: load_ops(),

@@ -25,8 +25,8 @@ impl Server {
     fn stored_items(&mut self, world: usize, pos: [i32; 3]) -> Option<(u8, &'static str, Vec<ItemDesc>)> {
         let block = self.worlds.worlds[world].get_block(pos, &self.gd);
         let (ui, tile_id, _) = containers::container_kind(self.gd.block_name(block))?;
-        if tile_id.is_empty() {
-            return None; // crafting table, stonecutter
+        if tile_id.is_empty() || tile_id == "BrewingStand" {
+            return None; // crafting table, stonecutter; brewing stands are not fed by hoppers yet
         }
         if furnace::is_furnace_ui(ui) {
             if !self.furnaces.contains_key(&(world, pos)) {

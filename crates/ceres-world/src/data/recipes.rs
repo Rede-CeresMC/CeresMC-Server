@@ -103,6 +103,30 @@ pub(crate) struct CraftingTables {
     pub(crate) recipes: HashMap<i32, Recipe>,
     pub(crate) item_tags: HashMap<String, HashSet<String>>,
     pub(crate) smelting: Smelting,
+    pub(crate) brewing: Brewing,
+}
+
+/// Brewing stand recipes.
+#[derive(Default)]
+pub struct Brewing {
+    /// (potion item, potion meta, reagent) -> (output item, output meta)
+    pub potion_mixes: HashMap<(String, i32, String), (String, i32)>,
+    /// (potion item, reagent) -> output item, keeping the potion type (gunpowder, dragon's breath)
+    pub container_mixes: HashMap<(String, String), String>,
+}
+
+impl Brewing {
+    /// What brewing `potion` (item name, meta) with `reagent` makes.
+    pub fn result(&self, potion: &str, meta: i32, reagent: &str) -> Option<(String, i32)> {
+        if let Some(out) = self.potion_mixes.get(&(potion.to_string(), meta, reagent.to_string())) {
+            return Some(out.clone());
+        }
+        self.container_mixes.get(&(potion.to_string(), reagent.to_string())).map(|o| (o.clone(), meta))
+    }
+
+    pub fn is_reagent(&self, reagent: &str) -> bool {
+        self.potion_mixes.keys().any(|(_, _, r)| r == reagent) || self.container_mixes.keys().any(|(_, r)| r == reagent)
+    }
 }
 
 /// (furnace kind, input item) -> [(input aux or any, output)]
@@ -289,7 +313,25 @@ pub(crate) fn load_recipes(dir: &Path, items: &HashMap<String, ItemInfo>) -> Res
         w.uvarint(0); // material reducer recipes
         w.bool(true); // clean recipes
     });
-    Ok(CraftingTables { packet, recipes, item_tags, smelting })
+    let mut brewing = Brewing::default();
+    for m in data["potionMixes"].as_array().into_iter().flatten() {
+        let (Some(i), Some(im), Some(r), Some(o), Some(om)) = (
+            m["inputId"].as_str(),
+            m["inputMeta"].as_i64(),
+            m["reagentId"].as_str(),
+            m["outputId"].as_str(),
+            m["outputMeta"].as_i64(),
+        ) else {
+            continue;
+        };
+        brewing.potion_mixes.insert((i.into(), im as i32, r.into()), (o.into(), om as i32));
+    }
+    for m in data["containerMixes"].as_array().into_iter().flatten() {
+        if let (Some(i), Some(r), Some(o)) = (m["inputId"].as_str(), m["reagentId"].as_str(), m["outputId"].as_str()) {
+            brewing.container_mixes.insert((i.into(), r.into()), o.into());
+        }
+    }
+    Ok(CraftingTables { packet, recipes, item_tags, smelting, brewing })
 }
 
 impl GameData {

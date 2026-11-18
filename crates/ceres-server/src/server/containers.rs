@@ -27,6 +27,7 @@ pub(crate) fn container_kind(name: &str) -> Option<(u8, &'static str, bool)> {
         "minecraft:barrel" => Some((block_container::BARREL, "Barrel", false)),
         n if n.ends_with("shulker_box") => Some((block_container::SHULKER_BOX, "ShulkerBox", true)),
         "minecraft:hopper" => Some((block_container::CHEST, "Hopper", false)),
+        "minecraft:brewing_stand" => Some((brewing::UI_BREWING_INPUT, "BrewingStand", false)),
         _ => None,
     }
 }
@@ -84,6 +85,7 @@ pub(crate) fn item_from_vanilla(t: &Tag, gd: &GameData) -> Option<ItemDesc> {
 pub(crate) fn slots_of(tile_id: &str) -> usize {
     match tile_id {
         "Hopper" => hopper::HOPPER_SLOTS,
+        "BrewingStand" => brewing::BREWING_SLOTS,
         "Furnace" | "BlastFurnace" | "Smoker" => 3,
         _ => CONTAINER_SLOTS,
     }
@@ -94,6 +96,8 @@ fn window_type_of(ui: u8, tile_id: &str) -> u8 {
         furnace::furnace_window_type(ui)
     } else if tile_id == "Hopper" {
         protocol::WINDOW_TYPE_HOPPER
+    } else if tile_id == "BrewingStand" {
+        protocol::WINDOW_TYPE_BREWING_STAND
     } else {
         protocol::WINDOW_TYPE_CONTAINER
     }
@@ -179,8 +183,12 @@ impl Server {
                 self.wake_furnace(world, pos, ui);
             }
             let tile = self.worlds.worlds[world].get_block_entity(pos, &self.gd);
-            match self.furnaces.get(&(world, pos)) {
-                Some(f) if furnace::is_furnace_ui(ui) => f.items(),
+            if tile_id == "BrewingStand" && !self.brewers.contains_key(&(world, pos)) {
+                self.wake_brewing(world, pos);
+            }
+            match (self.furnaces.get(&(world, pos)), self.brewers.get(&(world, pos))) {
+                (Some(f), _) if furnace::is_furnace_ui(ui) => f.items(),
+                (_, Some(b)) if tile_id == "BrewingStand" => b.items(),
                 _ => items_from_tile(tile.as_ref(), &self.gd, slots_of(tile_id)),
             }
         };
@@ -257,6 +265,13 @@ impl Server {
             });
             tile.set("Items", items_to_list(half_items, &self.gd));
             self.worlds.worlds[world].set_block_entity(half, tile, &self.gd);
+        }
+        // a brewing stand starts working on what the player put in
+        if tile_id == "BrewingStand" {
+            match self.brewers.get_mut(&(world, pos)) {
+                Some(b) => b.set_items(items.clone()),
+                None => self.wake_brewing(world, pos),
+            }
         }
         // a furnace starts working on what the player put in
         if let Some((ui, _, _)) = container_kind(self.gd.block_name(block)).filter(|(u, _, _)| furnace::is_furnace_ui(*u)) {
@@ -342,9 +357,10 @@ impl Server {
         let tile = self.worlds.worlds[world].get_block_entity(pos, &self.gd);
         let block = self.worlds.worlds[world].get_block(pos, &self.gd);
         let slots = container_kind(self.gd.block_name(block)).map_or(CONTAINER_SLOTS, |(_, t, _)| slots_of(t));
-        let items: Vec<ItemDesc> = match self.furnaces.remove(&(world, pos)) {
-            Some(f) => f.items(),
-            None => items_from_tile(tile.as_ref(), &self.gd, slots),
+        let items: Vec<ItemDesc> = match (self.furnaces.remove(&(world, pos)), self.brewers.remove(&(world, pos))) {
+            (Some(f), _) => f.items(),
+            (_, Some(b)) => b.items(),
+            _ => items_from_tile(tile.as_ref(), &self.gd, slots),
         }
         .into_iter()
         .filter(|i| !i.is_empty())

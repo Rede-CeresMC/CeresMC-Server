@@ -65,6 +65,8 @@ pub struct GameData {
     pub item_tags: HashMap<String, std::collections::HashSet<String>>,
     /// smelting recipes: (furnace kind, input) -> outputs
     pub smelting: recipes::Smelting,
+    /// brewing stand recipes
+    pub brewing: recipes::Brewing,
     /// block name -> hardness, right tool and needed tier
     pub break_info: HashMap<String, BreakInfo>,
     pub creative_item_count: usize,
@@ -333,6 +335,7 @@ impl GameData {
             recipes: crafting.recipes,
             item_tags: crafting.item_tags,
             smelting: crafting.smelting,
+            brewing: crafting.brewing,
             break_info: mining::load_break_info(dir)?,
             block_ids,
             block_states,
