@@ -47,9 +47,10 @@ c.place_block(POS, 1, 0)
 c.pump(1.0)
 check(any(p == 0x27 for p, _ in c.received[n:]), "at night the player lies down (SetActorData)")
 c.pump(6.0, lambda: any(p == 0x0a for p, _ in c.received[n:]))
+c.pump(1.0)  # the wake-up comes right after the new time
 times = [struct.unpack("<i", bytes(4))[0] for p, d in c.received[n:] if p == 0x0a]
 check(bool(times), "after 5 s asleep the night is skipped (SetTime)")
-check(any(p == 0x2c and d[-1] == 3 for p, d in c.received[n:]) or any(p == 0x2c for p, _ in c.received[n:]), "the player wakes up (Animate)")
+check(any(p == 0x2c for p, _ in c.received[n:]), "the player wakes up (Animate)")
 
 c.close()
 print("PASS" if ok else "FAILED")

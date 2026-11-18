@@ -145,7 +145,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] Baú ✔, barril ✔, shulker box ✔ (abrir, mover itens, vários jogadores no mesmo baú, salvar no formato vanilla, derrubar ao quebrar), baú duplo ✔ (pairx/pairz vanilla, 54 slots, cada metade guarda os seus itens)
 - [x] Bancada de trabalho e receitas (CraftingData a partir de recipes.json, receita conferida no servidor)
 - [~] Fornalha, alto-forno, defumador ✔ (receitas vanilla, combustível, progresso, bloco aceso, formato vanilla) · retomar fornalhas acesas ✔ · XP da fornalha
-- [ ] Bigorna, mesa de encantamento, rebolo, tear, cortador de pedra
+- [~] Cortador de pedra ✔ (receitas vanilla conferidas no servidor) · bigorna, mesa de encantamento, rebolo, tear
 - [ ] Mesa de cartografia, mesa de ferraria (smithing, trims)
 - [~] Funil ✔ (puxa de cima e de itens no chão, empurra para onde aponta, fornalhas: entrada/combustível/resultado) · redstone no funil, dispensador, ejetor
 - [ ] Baú do fim, beacon, suporte de poções

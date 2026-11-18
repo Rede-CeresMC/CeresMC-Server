@@ -228,6 +228,28 @@ give(c, "oak_planks 8")
 check(request(c, [craft(chest), consume(8, HOTBAR, 0), take(1, slot(CREATED, 50), slot(HOTBAR, 1))]),
       "a chest (3x3) can be crafted at the crafting table")
 
+# 6. stonecutter: stone into 2 slabs, only while a stonecutter is open
+CUTTER = block_id("minecraft:stonecutter_block")
+CUT_POS = (TABLE_POS[0] + 2, TABLE_POS[1], TABLE_POS[2])
+slabs = ids.get("minecraft:stonecutter_double_stone_slab")
+c.break_block(CUT_POS)
+c.place_block((CUT_POS[0], CUT_POS[1] - 1, CUT_POS[2]), 1, STONE)
+c.pump(0.4)
+c.place_block((CUT_POS[0], CUT_POS[1] - 1, CUT_POS[2]), 1, CUTTER)
+c.pump(0.8)
+command(c, "/clear")
+give(c, "stone 2")
+check(not request(c, [craft(slabs), consume(1, HOTBAR, 0), take(2, slot(CREATED, 50), slot(HOTBAR, 1))]),
+      "a stonecutter recipe is refused without a stonecutter")
+n = len(c.received)
+c.place_block(CUT_POS, 1, 0)
+c.pump(3.0, lambda: any(p == 0x2e for p, _ in c.received[n:]))
+opens = [d for p, d in c.received[n:] if p == 0x2e]
+check(opens and opens[-1][1] == 29, "clicking a stonecutter opens its window")
+check(request(c, [take(1, slot(HOTBAR, 0), slot(53, 3))]), "stone goes into the stonecutter input")
+check(request(c, [craft(slabs), consume(1, 53, 3), take(2, slot(CREATED, 50), slot(HOTBAR, 1))]),
+      "the stonecutter cuts stone into two slabs")
+
 c.close()
 print("PASS" if ok else "FAILED")
 sys.exit(0 if ok else 1)

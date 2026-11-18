@@ -21,10 +21,16 @@ pub(crate) struct Inventory {
     pub(crate) craft_grid: [ItemDesc; 13],
     /// output of the recipe crafted in the current request that has not been taken yet
     crafted: Option<ItemDesc>,
+    /// input slot of an open stonecutter
+    pub(crate) cutter: ItemDesc,
 }
 
 /// UI id given to an open crafting table: it has no slots of its own (the grid is `craft_grid`).
 pub(crate) const WORKBENCH_UI: u8 = 0xff;
+/// UI id given to an open stonecutter (its input slot is `cutter`).
+pub(crate) const STONECUTTER_UI: u8 = 0xfe;
+const STONECUTTER_INPUT: u8 = 53;
+const STONECUTTER_INPUT_SLOT: u8 = 3;
 const CRAFT_GRID_FIRST: u8 = 28;
 
 #[derive(Clone)]
@@ -56,6 +62,7 @@ impl Default for Inventory {
             container: None,
             craft_grid: std::array::from_fn(|_| ItemDesc::default()),
             crafted: None,
+            cutter: ItemDesc::default(),
         }
     }
 }
@@ -68,6 +75,7 @@ enum Loc {
     Cursor,
     Container(usize),
     Craft(usize),
+    Cutter,
 }
 
 fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
@@ -86,6 +94,9 @@ fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
         container::ARMOR => (s.slot < 4).then_some(Loc::Armor(s.slot as usize)),
         container::OFFHAND => (s.slot == 0).then_some(Loc::Offhand),
         container::CURSOR => (s.slot == 0).then_some(Loc::Cursor),
+        STONECUTTER_INPUT => {
+            (open.is_some_and(|c| c.ui == STONECUTTER_UI) && s.slot == STONECUTTER_INPUT_SLOT).then_some(Loc::Cutter)
+        }
         container::CRAFTING_INPUT => {
             // the 3x3 grid only exists while a crafting table is open
             let last = if open.is_some_and(|c| c.ui == WORKBENCH_UI) { 40 } else { 31 };
@@ -145,6 +156,7 @@ impl Inventory {
             Loc::Cursor => &self.cursor,
             Loc::Container(i) => &self.container.as_ref().expect("open container").items[i],
             Loc::Craft(i) => &self.craft_grid[i],
+            Loc::Cutter => &self.cutter,
         }
     }
 
@@ -160,6 +172,7 @@ impl Inventory {
             Loc::Offhand => self.offhand = item,
             Loc::Cursor => self.cursor = item,
             Loc::Craft(i) => self.craft_grid[i] = item,
+            Loc::Cutter => self.cutter = item,
             Loc::Container(i) => {
                 if let Some(c) = self.container.as_mut() {
                     c.items[i] = item;
@@ -292,6 +305,7 @@ impl Inventory {
             self.next_stack_id,
             self.container.clone(),
             self.craft_grid.clone(),
+            self.cutter.clone(),
         );
         let res = self.apply_inner(req, creative, gd);
         self.crafted = None;
@@ -304,6 +318,7 @@ impl Inventory {
             self.next_stack_id = backup.5;
             self.container = backup.6;
             self.craft_grid = backup.7;
+            self.cutter = backup.8;
         }
         res
     }
@@ -338,8 +353,13 @@ impl Inventory {
                 }
                 StackAction::CraftRecipe { net_id, reps, .. } => {
                     let r = gd.recipes.get(&net_id)?;
-                    let workbench = self.container.as_ref().is_some_and(|c| c.ui == WORKBENCH_UI);
-                    if recipe.is_some() || reps == 0 || r.block != "crafting_table" || (r.big && !workbench) {
+                    let open_ui = self.container.as_ref().map(|c| c.ui);
+                    let allowed = match r.block.as_str() {
+                        "crafting_table" => !r.big || open_ui == Some(WORKBENCH_UI),
+                        "stonecutter" => open_ui == Some(STONECUTTER_UI),
+                        _ => false,
+                    };
+                    if recipe.is_some() || reps == 0 || !allowed {
                         return None;
                     }
                     let mut out = r.output.clone();
@@ -531,9 +551,13 @@ impl Inventory {
         Some((out, dropped))
     }
 
-    /// Empties the crafting grid; returns its items.
+    /// Empties the crafting grid and the stonecutter slot; returns their items.
     pub(crate) fn take_craft_grid(&mut self) -> Vec<ItemDesc> {
-        self.craft_grid.iter_mut().filter(|i| !i.is_empty()).map(std::mem::take).collect()
+        let mut out: Vec<ItemDesc> = self.craft_grid.iter_mut().filter(|i| !i.is_empty()).map(std::mem::take).collect();
+        if !self.cutter.is_empty() {
+            out.push(std::mem::take(&mut self.cutter));
+        }
+        out
     }
 
     pub(crate) fn to_nbt(&self) -> Tag {

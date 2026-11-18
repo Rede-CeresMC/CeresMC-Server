@@ -677,6 +677,7 @@ pub const WINDOW_TYPE_CONTAINER: u8 = 0;
 pub const WINDOW_TYPE_WORKBENCH: u8 = 1;
 pub const WINDOW_TYPE_FURNACE: u8 = 2;
 pub const WINDOW_TYPE_HOPPER: u8 = 8;
+pub const WINDOW_TYPE_STONECUTTER: u8 = 29;
 pub const WINDOW_TYPE_BLAST_FURNACE: u8 = 27;
 pub const WINDOW_TYPE_SMOKER: u8 = 28;
 pub const CONTAINER_SET_DATA: u32 = 0x33;
