@@ -140,6 +140,7 @@ impl Server {
         me.out.extend(others);
 
         self.send_world_items(sid);
+        self.send_world_orbs(sid);
         self.send_weather_to(sid);
 
         let msg = protocol::system_message(&format!("§e{} entrou no jogo", info.name));
@@ -165,6 +166,7 @@ impl Server {
         }
         self.players.get_mut(&sid).unwrap().out.extend(others);
         self.send_world_items(sid);
+        self.send_world_orbs(sid);
         self.send_weather_to(sid);
     }
 

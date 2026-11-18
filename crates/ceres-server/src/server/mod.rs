@@ -19,6 +19,7 @@ mod liquids;
 mod moderation;
 mod players;
 mod skin;
+mod xp;
 
 use crate::config::Config;
 
@@ -72,6 +73,9 @@ pub(crate) struct Player {
     effects: HashMap<u8, effects::Effect>,
     /// extra hearts from Absorption, used up before health
     absorption: f32,
+    xp_level: u32,
+    /// points inside the current level
+    xp_points: u32,
     dead: bool,
     hurt_cooldown: u8,
     fall_start_y: Option<f32>,
@@ -114,6 +118,7 @@ pub struct Server {
     items: Vec<items::ItemEntity>,
     /// falling sand, gravel...
     falling: Vec<falling::FallingBlock>,
+    xp_orbs: Vec<xp::XpOrb>,
     /// positions whose block may have lost its support
     gravity_queue: Vec<(usize, [i32; 3])>,
     /// liquid blocks due to flow, with the tick they are due
@@ -152,6 +157,7 @@ impl Server {
             players: HashMap::new(),
             items: Vec::new(),
             falling: Vec::new(),
+            xp_orbs: Vec::new(),
             gravity_queue: Vec::new(),
             liquid_queue: HashMap::new(),
             moderation: moderation::Moderation::load(),
@@ -233,6 +239,8 @@ impl Server {
                             awaiting_release: false,
                             effects: HashMap::new(),
                             absorption: 0.0,
+                            xp_level: 0,
+                            xp_points: 0,
                             dead: false,
                             hurt_cooldown: 0,
                             fall_start_y: None,

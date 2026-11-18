@@ -247,9 +247,13 @@ impl Server {
         };
         let new_item_name = if fill {
             // pick up a source: the clicked block itself or the one in front of the clicked face
-            let source = [Some(clicked), target]
+            let reachable: Vec<[i32; 3]> = [Some(clicked), target]
                 .into_iter()
                 .flatten()
+                .filter(|pos| self.players.get(&sid).is_some_and(|p| Self::in_reach(p, *pos)))
+                .collect();
+            let source = reachable
+                .into_iter()
                 .find_map(|p| self.liquid_at(world, p).filter(|(_, d)| *d == 0).map(|(k, _)| (p, k)));
             let Some((pos, kind)) = source else {
                 self.resync_held(sid);
@@ -262,6 +266,8 @@ impl Server {
             let kind = empty_into.unwrap();
             let clicked_id = self.worlds.worlds[world].get_block(clicked, &self.gd);
             let pos = if self.gd.is_replaceable(clicked_id) { Some(clicked) } else { target };
+            let in_reach = |pos: &[i32; 3]| self.players.get(&sid).is_some_and(|p| Self::in_reach(p, *pos));
+            let pos = pos.filter(in_reach);
             let Some(pos) = pos.filter(|p| {
                 let id = self.worlds.worlds[world].get_block(*p, &self.gd);
                 self.gd.is_replaceable(id)

@@ -79,6 +79,7 @@ impl Server {
         self.tick_furnaces();
         self.tick_items();
         self.tick_falling();
+        self.tick_xp_orbs();
         self.tick_liquids();
 
         let sids: Vec<SessionId> = self.players.keys().copied().collect();

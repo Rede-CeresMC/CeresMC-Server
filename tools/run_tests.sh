@@ -32,6 +32,7 @@ BotFood
 BotEffect
 BotFurnace
 BotWater
+BotXp
 " > "$RUN/ops.txt"
 cat > "$RUN/server.properties" <<EOF
 motd=CeresMC Test
@@ -64,6 +65,7 @@ python -I tools/twopart_test.py || status=1
 python -I tools/doublechest_test.py || status=1
 python -I tools/falling_test.py || status=1
 python -I tools/liquids_test.py || status=1
+python -I tools/xp_test.py || status=1
 python -I tools/gameplay_test.py || status=1
 
 stop_server

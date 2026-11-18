@@ -142,10 +142,22 @@ impl Server {
         self.clear_effects(sid);
         let Some(p) = self.players.get_mut(&sid) else { return };
 
+        // dying costs the experience; up to 7 points per level (max 100) drop as orbs
+        let xp_drop = if self.cfg.keep_inventory || p.gamemode == 1 || p.gamemode == 6 {
+            0
+        } else {
+            let drop = (p.xp_level * 7).min(100);
+            p.xp_level = 0;
+            p.xp_points = 0;
+            drop
+        };
         let dropped = if self.cfg.keep_inventory { Vec::new() } else { p.inventory.drain_all() };
         if !self.cfg.keep_inventory {
             self.sync_full_inventory(sid);
             self.broadcast_equipment(sid);
+        }
+        if xp_drop > 0 {
+            self.spawn_xp(world, [pos[0], pos[1] - 1.0, pos[2]], xp_drop);
         }
         for item in dropped {
             let rx = (rand::random::<f32>() - 0.5) * 0.25;

@@ -151,6 +151,10 @@ impl Server {
         }
         self.exhaust(sid, food::exhaustion::MINE);
         if gm == 0 && self.gd.can_harvest(old, held) {
+            let xp = xp::block_xp(self.gd.block_name(old));
+            if xp > 0 {
+                self.spawn_xp(world, center, xp);
+            }
             if let Some(ce) = self.gd.block_to_item.get(&old).cloned() {
                 let count = if self.gd.block_name(old).contains("_double_slab") { 2 } else { 1 };
                 let drop = ItemDesc {

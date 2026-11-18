@@ -289,6 +289,31 @@ pub fn add_falling_block(entity_id: i64, pos: [f32; 3], block: i32) -> Vec<u8> {
     })
 }
 
+/// AddActor for an experience orb worth `value` points.
+pub fn add_xp_orb(entity_id: i64, pos: [f32; 3], motion: [f32; 3], value: i32) -> Vec<u8> {
+    packet(ADD_ACTOR, |w| {
+        w.varlong(entity_id);
+        w.uvarlong(entity_id as u64);
+        w.string("minecraft:xp_orb");
+        for v in pos.into_iter().chain(motion) {
+            w.f32_le(v);
+        }
+        for _ in 0..4 {
+            w.f32_le(0.0);
+        }
+        w.uvarint(0); // attributes
+        w.uvarint(1); // metadata
+        w.uvarint(15); // EXPERIENCE_VALUE
+        w.uvarint(2);
+        w.u8(2);
+        w.varint(value);
+        w.uvarint(0);
+        w.uvarint(0);
+        w.uvarint(0);
+        w.bool(false);
+    })
+}
+
 pub fn remove_actor(entity_id: i64) -> Vec<u8> {
     packet(mp::REMOVE_ACTOR, |w| w.varlong(entity_id))
 }
@@ -332,7 +357,36 @@ const F32_MAX: f32 = f32::MAX;
 /// Default player attributes (values from PocketMine's AttributeFactory). Without
 /// minecraft:movement the client walks at speed 0 and can only fly.
 pub fn update_attributes_health(entity_id: i64, health: f32) -> Vec<u8> {
-    update_attributes_vitals(entity_id, health, 20.0, 5.0, 0.0, 0.0, 0.1)
+    update_attributes_vitals(entity_id, &Vitals { health, ..Vitals::default() })
+}
+
+/// Everything the player attributes show.
+#[derive(Clone, Copy, Debug)]
+pub struct Vitals {
+    pub health: f32,
+    pub hunger: f32,
+    pub saturation: f32,
+    pub exhaustion: f32,
+    pub absorption: f32,
+    pub movement: f32,
+    pub xp_level: u32,
+    /// 0..1 towards the next level
+    pub xp_progress: f32,
+}
+
+impl Default for Vitals {
+    fn default() -> Self {
+        Vitals {
+            health: 20.0,
+            hunger: 20.0,
+            saturation: 5.0,
+            exhaustion: 0.0,
+            absorption: 0.0,
+            movement: 0.1,
+            xp_level: 0,
+            xp_progress: 0.0,
+        }
+    }
 }
 
 pub const MOB_EFFECT: u32 = 0x1c;
@@ -352,15 +406,8 @@ pub fn mob_effect(entity_id: i64, event: u8, effect: i32, amplifier: i32, partic
 }
 
 /// Every player attribute, with the real health, hunger, saturation and exhaustion.
-pub fn update_attributes_vitals(
-    entity_id: i64,
-    health: f32,
-    hunger: f32,
-    saturation: f32,
-    exhaustion: f32,
-    absorption: f32,
-    movement: f32,
-) -> Vec<u8> {
+pub fn update_attributes_vitals(entity_id: i64, v: &Vitals) -> Vec<u8> {
+    let Vitals { health, hunger, saturation, exhaustion, absorption, movement, xp_level, xp_progress } = *v;
     let attrs: [(&str, f32, f32, f32, f32); 12] = [
         ("minecraft:absorption", 0.0, F32_MAX, absorption.max(0.0), 0.0),
         ("minecraft:player.saturation", 0.0, 20.0, saturation.clamp(0.0, 20.0), 5.0),
@@ -369,8 +416,8 @@ pub fn update_attributes_vitals(
         ("minecraft:health", 0.0, 20.0, health.clamp(0.0, 20.0), 20.0),
         ("minecraft:movement", 0.0, F32_MAX, movement.max(0.0), 0.1),
         ("minecraft:player.hunger", 0.0, 20.0, hunger.clamp(0.0, 20.0), 20.0),
-        ("minecraft:player.level", 0.0, 24791.0, 0.0, 0.0),
-        ("minecraft:player.experience", 0.0, 1.0, 0.0, 0.0),
+        ("minecraft:player.level", 0.0, 24791.0, (xp_level as f32).min(24791.0), 0.0),
+        ("minecraft:player.experience", 0.0, 1.0, xp_progress.clamp(0.0, 1.0), 0.0),
         ("minecraft:underwater_movement", 0.0, F32_MAX, 0.02, 0.02),
         ("minecraft:luck", -1024.0, 1024.0, 0.0, 0.0),
         ("minecraft:lava_movement", 0.0, F32_MAX, 0.02, 0.02),

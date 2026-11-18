@@ -651,6 +651,12 @@ impl Server {
             if let Some(v) = tag.get("Exhaustion").and_then(|t| t.as_f32()) {
                 p.exhaustion = v.clamp(0.0, 40.0);
             }
+            if let Some(v) = tag.get("XpLevel").and_then(|t| t.as_i64()) {
+                p.xp_level = v.clamp(0, 24791) as u32;
+            }
+            if let Some(v) = tag.get("XpP").and_then(|t| t.as_i64()) {
+                p.xp_points = (v.max(0) as u32).min(xp::points_for_level(p.xp_level).saturating_sub(1));
+            }
             p.spawn_point = spawn_point;
         }
     }
@@ -666,6 +672,8 @@ impl Server {
         tag.set("Hunger", Tag::Float(p.hunger));
         tag.set("Saturation", Tag::Float(p.saturation));
         tag.set("Exhaustion", Tag::Float(p.exhaustion));
+        tag.set("XpLevel", Tag::Int(p.xp_level as i32));
+        tag.set("XpP", Tag::Int(p.xp_points as i32));
         if let Some((wi, sp)) = p.spawn_point {
             if let Some(w) = self.worlds.worlds.get(wi) {
                 tag.set("SpawnWorld", Tag::String(w.folder.clone()));

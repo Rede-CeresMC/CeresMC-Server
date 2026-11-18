@@ -86,12 +86,16 @@ impl Player {
     pub(crate) fn vitals_packet(&self) -> Vec<u8> {
         protocol::update_attributes_vitals(
             self.entity_id,
-            self.health,
-            self.hunger,
-            self.saturation,
-            self.exhaustion,
-            self.absorption,
-            self.movement_speed(),
+            &protocol::Vitals {
+                health: self.health,
+                hunger: self.hunger,
+                saturation: self.saturation,
+                exhaustion: self.exhaustion,
+                absorption: self.absorption,
+                movement: self.movement_speed(),
+                xp_level: self.xp_level,
+                xp_progress: xp::progress(self.xp_level, self.xp_points),
+            },
         )
     }
 

@@ -99,6 +99,11 @@ impl Server {
             cmd("clear", "Limpa o inventário", vec![vec![Param::opt("jogador", T::Target)]]),
             cmd("kill", "Mata um jogador", vec![vec![Param::opt("jogador", T::Target)]]),
             cmd(
+                "xp",
+                "Dá experiência (pontos, ou níveis com L no fim: 5L)",
+                vec![vec![Param::new("quantidade", T::String), Param::opt("jogador", T::Target)]],
+            ),
+            cmd(
                 "effect",
                 "Dá ou remove efeitos",
                 vec![
@@ -483,6 +488,29 @@ impl Server {
                         self.reply(sender, &format!("§aInventário de {tname} limpo."));
                     }
                 }
+            }
+            "xp" => {
+                let usage = "§cUso: /xp <quantidade>[L] [jogador]";
+                let Some(amount) = args.first() else { return self.reply(sender, usage) };
+                let (levels, number) = match amount.strip_suffix(['L', 'l']) {
+                    Some(n) => (true, n),
+                    None => (false, *amount),
+                };
+                let Ok(value) = number.parse::<i64>() else { return self.reply(sender, usage) };
+                let value = value.clamp(-1_000_000, 1_000_000);
+                let targets = self.resolve_targets(sender, args.get(1).copied());
+                if targets.is_empty() {
+                    return self.reply(sender, "§cNenhum jogador encontrado.");
+                }
+                for t in targets {
+                    if levels {
+                        self.add_xp_levels(t, value);
+                    } else {
+                        self.add_xp(t, value);
+                    }
+                }
+                let what = if levels { "níveis" } else { "pontos de experiência" };
+                self.reply(sender, &format!("§a{value} {what} dados."));
             }
             "effect" => {
                 let usage = "§cUso: /effect <jogador> <efeito|clear> [segundos] [nível 0-255] [true]";

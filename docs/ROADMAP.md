@@ -119,7 +119,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] Efeitos (MobEffect): duração, nível, velocidade/lentidão, pressa/cansaço na mineração, força/fraqueza, resistência, absorção, regeneração, veneno, wither, fome, instantâneos; maçã dourada, baiacu, leite
 - [ ] Encantamentos: efeitos em dano, quebra, proteção, durabilidade
 - [~] Comida ✔ (tabela vanilla, tempo de comer conferido no servidor, tigela/garrafa de volta) · poções e leite
-- [ ] Experiência: orbes, níveis, gasto em encantar/bigorna
+- [~] Experiência ✔ (níveis vanilla, orbes que voam até o jogador, XP de minérios, perde e solta ao morrer, `/xp`, salvo no jogador) · gasto em encantar/bigorna, XP da fornalha
 
 - [x] Blocos com gravidade: areia, cascalho, pó de concreto, bigorna (entidade caindo, vira bloco ao pousar ou item se o lugar estiver ocupado)
 
