@@ -115,11 +115,14 @@ impl Server {
             self.resync(sid, pos);
             return;
         }
-        let contents = if containers::container_kind(self.gd.block_name(old)).is_some() {
+        let mut contents = if containers::container_kind(self.gd.block_name(old)).is_some() {
             self.take_container_items(world, pos)
         } else {
             Vec::new()
         };
+        if self.gd.block_name(old) == "minecraft:jukebox" {
+            contents.extend(self.eject_jukebox(world, pos));
+        }
         let bed_color = if self.gd.block_name(old) == "minecraft:bed" {
             self.worlds.worlds[world]
                 .get_block_entity(pos, &self.gd)
@@ -231,6 +234,12 @@ impl Server {
 
         // 1. Containers (chest, barrel, shulker box) and interactive blocks (doors, trapdoors,
         //    fence gates, levers) when not sneaking
+        if !sneaking && self.use_music_block(sid, clicked) {
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
         if !sneaking && self.use_bed(sid, clicked) {
             self.swing_arm(sid);
             if let Some(t) = side(clicked, face) {
@@ -599,6 +608,10 @@ impl Server {
         let fpos = [pos[0] as f32, pos[1] as f32, pos[2] as f32];
         match action {
             block_action::START_BREAK | block_action::CONTINUE_DESTROY_BLOCK => {
+                // hitting a note block plays it
+                if action == block_action::START_BREAK {
+                    self.punch_note_block(world, pos);
+                }
                 // continuing onto a new block starts its timer
                 if let Some(p) = self.players.get_mut(&sid) {
                     if p.breaking.is_none_or(|(at, _)| at != pos) {

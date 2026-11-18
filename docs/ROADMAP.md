@@ -148,6 +148,8 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 - [x] Vestir armadura pela mão (clique no ar ou em bloco; troca com a peça vestida; élitro, casco de tartaruga, abóbora e cabeças), com o som de equipar do material
 
+- [x] Bloco de notas (25 tons, 16 instrumentos pelo bloco de baixo, toca ao usar e ao bater) e jukebox (todos os discos, solta o disco ao usar de novo ou quebrar)
+
 ### Blocos com interface
 
 - [x] Baú ✔, barril ✔, shulker box ✔ (abrir, mover itens, vários jogadores no mesmo baú, salvar no formato vanilla, derrubar ao quebrar), baú duplo ✔ (pairx/pairz vanilla, 54 slots, cada metade guarda os seus itens)

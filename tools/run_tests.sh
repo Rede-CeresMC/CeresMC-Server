@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs the bot tests against a separate server instance (port 19140, copy of the worlds in
+# Runs the bot tests against a separate server instance (port 19140, its own fresh flat world in
 # target/test-run) so a server people are playing on is never touched.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -43,6 +43,7 @@ BotNoclip
 BotGuard
 BotFoe
 BotBrew
+BotMusic
 " > "$RUN/ops.txt"
 cat > "$RUN/server.properties" <<EOF
 motd=CeresMC Test
@@ -85,6 +86,7 @@ python -I tools/potions_test.py || status=1
 python -I tools/noclip_test.py || status=1
 python -I tools/defense_test.py || status=1
 python -I tools/brewing_test.py || status=1
+python -I tools/music_test.py || status=1
 python -I tools/gameplay_test.py || status=1
 
 stop_server

@@ -25,6 +25,7 @@ mod items;
 mod liquids;
 mod loot;
 mod moderation;
+mod music;
 mod players;
 mod potions;
 mod projectiles;
