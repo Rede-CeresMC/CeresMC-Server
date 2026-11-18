@@ -240,6 +240,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] API: jogadores, mundos, blocos, itens, entidades, comandos, eventos, mensagens
 - [ ] Formulários (ModalForm, CustomForm, SimpleForm) e DDUI
 - [ ] 🔴 Menus de baú sem baú visível: inventário de uma entidade invisível só para o jogador (27 slots) ou baú duplo enterrado só para ele (54 slots); nada aparece em terceira pessoa; cliques viram ações e ninguém tira os itens
+- [ ] 🔴 Menu continua aberto ao teleportar ou andar: a entidade invisível acompanha o jogador (no teleporte, junto com ele); no baú enterrado, reabre no destino com o mesmo conteúdo; menus falsos ficam fora da regra de alcance do servidor (testar no cliente real)
 - [ ] Scoreboards, bossbar, títulos, actionbar, toasts
 - [ ] Armazenamento por plugin (arquivo e banco de dados)
 - [ ] Permissões por plugin e por jogador
