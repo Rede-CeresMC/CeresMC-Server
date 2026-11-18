@@ -192,6 +192,9 @@ impl Server {
                 p.out.push(pk);
             }
             effect::INSTANT_DAMAGE => {
+                if self.players.get(&sid).is_some_and(|p| p.gamemode == 1 || p.gamemode == 6) {
+                    return; // creative and spectator players cannot be hurt
+                }
                 let name = self.players.get(&sid).map(|p| p.name.clone()).unwrap_or_default();
                 self.damage_player(sid, amount * 1.5, &format!("§c{name} foi morto por magia"), true, None);
             }

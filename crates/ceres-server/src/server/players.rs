@@ -27,7 +27,9 @@ impl Server {
             operator: p.op,
             creative: p.gamemode == 1,
             spectator: p.gamemode == 6,
-            flying: p.flying && (p.gamemode == 1 || p.gamemode == 6),
+            flying: p.flying && (p.gamemode == 1 || p.gamemode == 6 || p.noclip),
+            no_clip: p.noclip,
+            may_fly: p.noclip,
         }
     }
 
@@ -64,6 +66,8 @@ impl Server {
             creative: false,
             spectator: p.gamemode == 6,
             flying: false,
+            no_clip: false,
+            may_fly: false,
         };
         let mut out = vec![protocol::add_player(
             info,
@@ -287,7 +291,7 @@ impl Server {
         } else if tail.has_flag(input_flag::STOP_CRAWLING) {
             p.actor_state.crawling = false;
         }
-        if tail.has_flag(input_flag::START_FLYING) && (p.gamemode == 1 || p.gamemode == 6) {
+        if tail.has_flag(input_flag::START_FLYING) && (p.gamemode == 1 || p.gamemode == 6 || p.noclip) {
             p.flying = true;
             p.fall_start_y = None;
         } else if tail.has_flag(input_flag::STOP_FLYING) {

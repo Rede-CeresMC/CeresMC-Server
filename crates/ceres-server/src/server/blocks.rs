@@ -58,7 +58,8 @@ impl Server {
         let (by0, by1) = (pos[1] as f32, pos[1] as f32 + 1.0);
         let (bz0, bz1) = (pos[2] as f32, pos[2] as f32 + 1.0);
         for p in self.players.values() {
-            if p.state != State::Spawned || p.world != world || p.dead || p.gamemode == 6 {
+            // spectators and players with no-clip do not block placement: blocks go right where they stand
+            if p.state != State::Spawned || p.world != world || p.dead || p.gamemode == 6 || p.noclip {
                 continue;
             }
             let feet_y = p.pos[1] - EYE_HEIGHT;

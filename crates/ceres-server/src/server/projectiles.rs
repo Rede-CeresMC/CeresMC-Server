@@ -302,7 +302,7 @@ impl Server {
                 }
             }
             Kind::SplashPotion | Kind::LingeringPotion => {
-                self.burst_potion(pr.world, at, pr.potion, pr.kind == Kind::LingeringPotion, target);
+                self.burst_potion(pr.world, at, pr.potion, pr.kind == Kind::LingeringPotion, target, pr.owner);
             }
             Kind::Snowball | Kind::Egg => {
                 if let Some(victim) = target {

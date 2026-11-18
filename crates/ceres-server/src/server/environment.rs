@@ -32,7 +32,8 @@ impl Server {
         let in_water = is(&head_name, "water") || is(&feet_name, "water");
         let head_in_water = is(&head_name, "water");
         let in_fire = matches!(feet_name.as_str(), "minecraft:fire" | "minecraft:soul_fire");
-        let suffocating = self.gd.is_solid(head_block) && !in_lava;
+        let noclip = self.players.get(&sid).is_some_and(|p| p.noclip);
+        let suffocating = self.gd.is_solid(head_block) && !in_lava && !noclip;
 
         let mut hurts: Vec<(f32, String, bool)> = Vec::new(); // damage, message, bypasses armor
         let Some(p) = self.players.get_mut(&sid) else { return };

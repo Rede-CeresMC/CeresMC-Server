@@ -94,10 +94,43 @@ fn potion_color(id: u32) -> i32 {
     rgb | (0xFF << 24)
 }
 
+/// Effects that hurt or hinder: kept away from creative players, and from other players when
+/// PvP is off.
+pub(crate) fn is_harmful(id: u8) -> bool {
+    matches!(
+        id,
+        effect::SLOWNESS
+            | effect::MINING_FATIGUE
+            | effect::INSTANT_DAMAGE
+            | effect::NAUSEA
+            | effect::HUNGER
+            | effect::WEAKNESS
+            | effect::POISON
+            | effect::WITHER
+            | effect::FATAL_POISON
+            | 15 // blindness
+            | 24 // levitation
+            | 28 // bad omen
+            | 30 // darkness
+            | WIND_CHARGED
+            | WEAVING
+            | OOZING
+            | INFESTED
+    )
+}
+
 impl Server {
     /// Gives a potion's effects; `strength` (0..1) shortens them and weakens instant ones.
     pub(crate) fn apply_potion(&mut self, sid: SessionId, potion: u32, strength: f32) {
+        self.apply_potion_filtered(sid, potion, strength, true);
+    }
+
+    fn apply_potion_filtered(&mut self, sid: SessionId, potion: u32, strength: f32, allow_harmful: bool) {
+        let creative = self.players.get(&sid).is_some_and(|p| p.gamemode == 1 || p.gamemode == 6);
         for (id, amp, ticks) in potion_effects(potion) {
+            if is_harmful(id) && (!allow_harmful || creative) {
+                continue;
+            }
             match ticks {
                 Some(t) => {
                     let secs = ((t as f32 * strength) / 20.0).round() as u32;
@@ -112,7 +145,15 @@ impl Server {
 
     /// A splash (or lingering) potion bursts at `at`: everyone within 4 blocks gets the effects,
     /// stronger the closer they are (the player hit directly gets them in full).
-    pub(crate) fn burst_potion(&mut self, world: usize, at: [f32; 3], potion: u32, lingering: bool, hit: Option<SessionId>) {
+    pub(crate) fn burst_potion(
+        &mut self,
+        world: usize,
+        at: [f32; 3],
+        potion: u32,
+        lingering: bool,
+        hit: Option<SessionId>,
+        thrower: SessionId,
+    ) {
         self.broadcast(&protocol::level_event(PARTICLE_SPLASH, at, potion_color(potion)), |_, q| q.world == world);
         self.broadcast(&protocol::level_sound_event("glass", at, -1), |_, q| q.world == world);
         let near: Vec<(SessionId, f32)> = self
@@ -130,7 +171,9 @@ impl Server {
             if lingering {
                 strength *= 0.25;
             }
-            self.apply_potion(sid, potion, strength);
+            // with PvP off, a potion thrown by someone else only helps
+            let allow_harmful = self.cfg.pvp || sid == thrower;
+            self.apply_potion_filtered(sid, potion, strength, allow_harmful);
         }
     }
 }

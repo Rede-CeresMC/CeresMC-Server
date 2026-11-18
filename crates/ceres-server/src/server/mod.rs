@@ -108,6 +108,8 @@ pub(crate) struct Player {
     breaking: Option<([i32; 3], Instant)>,
     /// block and face being hit (for the hit particles)
     punching: Option<([i32; 3], u8)>,
+    /// walks through blocks and may fly, in any game mode (/noclip, plugins)
+    noclip: bool,
     /// last window id handed out (1..=99) for block containers
     window_counter: u8,
     radius: i32,
@@ -277,6 +279,7 @@ impl Server {
                             last_skin_change: None,
                             breaking: None,
                             punching: None,
+                            noclip: false,
                             window_counter: 0,
                             radius: 0,
                             center: None,

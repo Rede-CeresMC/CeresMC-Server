@@ -100,6 +100,11 @@ impl Server {
             cmd("clear", "Limpa o inventário", vec![vec![Param::opt("jogador", T::Target)]]),
             cmd("kill", "Mata um jogador", vec![vec![Param::opt("jogador", T::Target)]]),
             cmd(
+                "noclip",
+                "Atravessar blocos e voar sem sair do modo de jogo",
+                vec![vec![Param::opt("estado", T::String), Param::opt("jogador", T::Target)]],
+            ),
+            cmd(
                 "enchant",
                 "Encanta o item na mão",
                 vec![vec![
@@ -500,6 +505,31 @@ impl Server {
                         self.reply(sender, &format!("§aInventário de {tname} limpo."));
                     }
                 }
+            }
+            "noclip" => {
+                let state = args.first().map(|s| s.to_ascii_lowercase());
+                let targets = self.resolve_targets(sender, args.get(1).copied());
+                if targets.is_empty() {
+                    return self.reply(sender, "§cNenhum jogador encontrado.");
+                }
+                for t in targets {
+                    let Some(p) = self.players.get_mut(&t) else { continue };
+                    let on = match state.as_deref() {
+                        Some("on") | Some("true") | Some("ligar") => true,
+                        Some("off") | Some("false") | Some("desligar") => false,
+                        _ => !p.noclip,
+                    };
+                    p.noclip = on;
+                    // flying keeps a no-clip player from falling through the ground
+                    p.flying = on || (p.flying && (p.gamemode == 1 || p.gamemode == 6));
+                    p.fall_start_y = None;
+                    let abilities = self.abilities_of(&self.players[&t]);
+                    let p = self.players.get_mut(&t).unwrap();
+                    p.out.push(protocol::update_abilities(&abilities));
+                    let msg = if on { "§aNoClip ligado: você atravessa blocos e pode voar." } else { "§eNoClip desligado." };
+                    p.out.push(protocol::system_message(msg));
+                }
+                self.reply(sender, "§aNoClip atualizado.");
             }
             "enchant" => {
                 let usage = "§cUso: /enchant <jogador> <encantamento> [nível 1-32767]";

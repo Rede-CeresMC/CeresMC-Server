@@ -147,6 +147,10 @@ pub struct Abilities {
     pub creative: bool,
     pub spectator: bool,
     pub flying: bool,
+    /// walks through blocks like a spectator, in any game mode
+    pub no_clip: bool,
+    /// may fly outside creative/spectator
+    pub may_fly: bool,
 }
 
 pub fn write_abilities(w: &mut W, a: &Abilities) {
@@ -157,9 +161,9 @@ pub fn write_abilities(w: &mut W, a: &Abilities) {
     w.u16_le(1); // base layer
     let act = !a.spectator;
     let bools: [(u32, bool); 17] = [
-        (10, a.creative || a.spectator), // allow flight
-        (9, a.flying || a.spectator),    // flying
-        (17, a.spectator),               // no clip
+        (10, a.creative || a.spectator || a.may_fly), // allow flight
+        (9, a.flying || a.spectator),                 // flying
+        (17, a.spectator || a.no_clip),               // no clip
         (6, a.operator),                 // operator
         (7, a.operator),                 // teleport
         (8, a.creative),                 // invulnerable
