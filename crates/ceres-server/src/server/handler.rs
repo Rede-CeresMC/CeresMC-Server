@@ -10,6 +10,22 @@ impl Server {
         let mut r = R::new(buf);
         let pid = r.uvarint()? & 0x3ff;
         let Some(p) = self.players.get_mut(&sid) else { return Ok(()) };
+        if p.state == State::Spawned && pid != id::PLAYER_AUTH_INPUT {
+            // first packet of each kind (inventory transactions and sounds by subtype) -> server.log
+            let mut sub = R::new(&buf[buf.len() - r.remaining()..]);
+            let kind = match pid {
+                0x1e => sub.varint().ok().and_then(|req| {
+                    if req != 0 { return None; }
+                    if sub.bool().ok()? { return None; }
+                    sub.uvarint().ok()
+                }).unwrap_or(999),
+                0x7b => sub.uvarint().unwrap_or(999),
+                _ => 0,
+            };
+            if p.seen_packets.len() < 300 && p.seen_packets.insert((pid, kind)) {
+                crate::logfile::log(&format!("[Packets] {} sent 0x{pid:02x} (kind {kind}) for the first time", p.name));
+            }
+        }
         if ceres_net::debug_enabled() && pid != id::PLAYER_AUTH_INPUT {
             println!("[Debug] {sid} <- 0x{pid:02x} ({} bytes) in {:?}", buf.len(), p.state);
         }
@@ -131,17 +147,35 @@ impl Server {
                 });
                 println!("[Game] {} is logging in from {}", p.name, p.addr);
                 p.out.push(protocol::play_status(play_status::LOGIN_SUCCESS));
-                p.out.push(protocol::resource_packs_info());
                 p.state = State::ResourcePacks;
+                let entries = self.pack_entries();
+                let pk = protocol::resource_packs_info(&entries, self.cfg.force_resource_packs && !self.packs.is_empty());
+                self.players.get_mut(&sid).unwrap().out.push(pk);
             }
             (State::ResourcePacks, id::RESOURCE_PACK_CLIENT_RESPONSE) => {
-                let status = r.uvarint()?;
+                let (status, ids) = protocol::read_resource_pack_response(&mut r)?;
                 match status {
-                    2 => p.out.push(protocol::resource_pack_stack()), // have all packs
-                    3 => self.start_game(sid),                        // completed
-                    0 => self.kick(sid, "§cVocê precisa aceitar os pacotes de recursos."),
+                    1 => self.send_pack_infos(sid, &ids)?, // download these
+                    2 => {
+                        // have all packs: the stack to apply
+                        let entries = self.pack_entries();
+                        let pk = protocol::resource_pack_stack(&entries, self.cfg.force_resource_packs && !self.packs.is_empty());
+                        self.players.get_mut(&sid).unwrap().out.push(pk);
+                    }
+                    3 => self.start_game(sid), // completed
+                    0 if self.cfg.force_resource_packs && !self.packs.is_empty() => {
+                        self.kick(sid, "§cVocê precisa aceitar os pacotes de recursos para entrar.")
+                    }
+                    0 => {
+                        let pk = protocol::resource_pack_stack(&[], false);
+                        self.players.get_mut(&sid).unwrap().out.push(pk);
+                    }
                     _ => {}
                 }
+            }
+            (State::ResourcePacks, 0x54) => {
+                let (id, index) = protocol::read_resource_pack_chunk_request(&mut r)?;
+                self.send_pack_chunk(sid, &id, index)?;
             }
             (State::PreSpawn | State::Spawned, id::REQUEST_CHUNK_RADIUS) => {
                 let requested = r.varint()?;
@@ -183,6 +217,13 @@ impl Server {
             (State::Spawned, sleep::PLAYER_ACTION) => self.on_player_action(sid, &mut r)?,
             (State::Spawned, protocol::CONTAINER_CLOSE) => {
                 let (win, ty) = (r.u8()?, r.u8()?);
+                if self.on_menu_window_closed(sid, win) {
+                    if let Some(p) = self.players.get_mut(&sid) {
+                        p.out.push(protocol::container_close(win, ty, false));
+                    }
+                    return Ok(());
+                }
+                let Some(p) = self.players.get_mut(&sid) else { return Ok(()) };
                 let block_window = p.inventory.container.as_ref().is_some_and(|c| c.window == win);
                 p.out.push(protocol::container_close(win, ty, false));
                 if block_window {
@@ -223,7 +264,12 @@ impl Server {
                                     p.inventory.held_slot = hotbar_slot as u8;
                                 }
                             }
-                            if action == entity_use_action::ATTACK {
+                            // the 2225 client sends hits on a player as ITEM_INTERACT (ATTACK is kept for
+                            // other clients); on itself ITEM_INTERACT is just using the held item
+                            let me = self.players.get(&sid).map(|p| p.entity_id);
+                            if action == entity_use_action::ATTACK
+                                || (action == entity_use_action::ITEM_INTERACT && Some(target_eid) != me)
+                            {
                                 self.on_attack_entity(sid, target_eid);
                             }
                         }
@@ -270,6 +316,7 @@ impl Server {
             software: &self.software,
             block_definitions: &self.gd.block_definitions,
             block_definition_count: self.gd.block_definition_count,
+            pvp: self.cfg.pvp,
         }));
         p.out.push(self.gd.item_registry.clone());
         p.out.push(self.gd.actor_identifiers.clone());

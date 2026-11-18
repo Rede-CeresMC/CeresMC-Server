@@ -143,6 +143,10 @@ pub(crate) fn combine(left: &ItemDesc, right: &ItemDesc, rename: Option<&str>, g
     let max = durability::max_durability(&left_name);
 
     if !right.is_empty() {
+        // repairing and combining work on a single item (a stack can only be renamed)
+        if left.count != 1 {
+            return None;
+        }
         let right_name = gd.items_by_id.get(&right.id)?.name.clone();
         let from_book = right_name == "minecraft:enchanted_book";
         if let (Some(max), true) = (max, repair_material(&left_name, &right_name, gd)) {

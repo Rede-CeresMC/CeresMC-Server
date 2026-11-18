@@ -1,6 +1,9 @@
 //! Game layer: player sessions, login flow, entities, combat, moderation and chunk streaming.
 
 mod anvil;
+mod menus;
+mod plugins;
+mod resource_packs;
 mod armor;
 mod brewing;
 mod blocks;
@@ -132,6 +135,12 @@ pub(crate) struct Player {
     spawn_sent: bool,
     pkt_sec: u64,
     pkt_count: u32,
+    /// packet kinds this player already sent (the first of each goes to server.log, to debug)
+    seen_packets: std::collections::HashSet<(u32, u32)>,
+    /// resource pack chunks already sent to this player (pack index, chunk): each is sent once
+    pack_chunks_sent: HashSet<(usize, u32)>,
+    /// chest menu of a plugin open on this player's screen
+    menu: Option<menus::FakeMenu>,
     out: Vec<Vec<u8>>,
     close: Option<String>,
 }
@@ -174,6 +183,9 @@ pub struct Server {
     ops: HashSet<String>,
     console: std::sync::mpsc::Receiver<String>,
     software: String,
+    /// resource packs sent to the players (resource_packs/)
+    packs: Vec<crate::packs::Pack>,
+    plugins: plugins::Plugins,
 }
 
 const TICK: Duration = Duration::from_millis(50);
@@ -214,11 +226,15 @@ impl Server {
             ops: load_ops(),
             console: spawn_console(),
             software: format!("Ceres-RS {}", env!("CARGO_PKG_VERSION")),
+            packs: crate::packs::load_all(),
+            plugins: plugins::Plugins::default(),
         }
     }
 
     pub fn run(&mut self) -> ! {
         let mut events = Vec::new();
+        let (sources, errors) = plugins::build_all();
+        self.load_plugins(sources, errors);
         let mut next_tick = Instant::now();
         self.update_status();
         loop {
@@ -313,6 +329,9 @@ impl Server {
                             spawn_sent: false,
                             pkt_sec: 0,
                             pkt_count: 0,
+                            seen_packets: Default::default(),
+                            pack_chunks_sent: HashSet::new(),
+                            menu: None,
                             out: Vec::new(),
                             close: None,
                         },
@@ -441,6 +460,7 @@ impl Server {
 
     /// Saves every world and player, disconnects everyone and exits.
     pub(crate) fn shutdown(&mut self, reason: &str) -> ! {
+        self.disable_all_plugins();
         println!("[Server] stopping: saving worlds and players...");
         self.save_worlds();
         for w in self.worlds.worlds.iter_mut() {

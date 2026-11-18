@@ -9,6 +9,7 @@ pub const SET_TIME: u32 = 0x0a;
 pub const SET_SPAWN_POSITION: u32 = 0x2b;
 pub const SET_DIFFICULTY: u32 = 0x3c;
 pub const SET_PLAYER_GAME_TYPE: u32 = 0x3e;
+pub const UPDATE_PLAYER_GAME_TYPE: u32 = 0x97;
 pub const AVAILABLE_COMMANDS: u32 = 0x4c;
 pub const COMMAND_REQUEST: u32 = 0x4d;
 pub const TRANSFER: u32 = 0x55;
@@ -150,6 +151,16 @@ pub fn read_command_request(r: &mut R) -> Res<String> {
 
 pub fn set_player_game_type(mode: i32) -> Vec<u8> {
     packet(SET_PLAYER_GAME_TYPE, |w| w.varint(mode))
+}
+
+/// Tells the other players someone's game mode (their client uses it, e.g. not to attack a
+/// player it believes is in creative).
+pub fn update_player_game_type(mode: i32, entity_id: i64) -> Vec<u8> {
+    packet(UPDATE_PLAYER_GAME_TYPE, |w| {
+        w.varint(mode);
+        w.varlong(entity_id);
+        w.uvarlong(0); // tick
+    })
 }
 
 pub fn set_time(time: i32) -> Vec<u8> {

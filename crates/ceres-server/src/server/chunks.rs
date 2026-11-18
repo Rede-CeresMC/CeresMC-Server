@@ -88,6 +88,8 @@ impl Server {
         self.check_sleep();
         self.tick_hoppers();
         self.tick_punch_effects();
+        self.tick_menus();
+        self.poll_plugin_reload();
 
         let sids: Vec<SessionId> = self.players.keys().copied().collect();
         for sid in sids {

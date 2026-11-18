@@ -20,6 +20,8 @@ pub struct StartGame<'a> {
     /// pre-encoded (name string + network NBT) entries from block_definitions.nbt
     pub block_definitions: &'a [u8],
     pub block_definition_count: u32,
+    /// the "pvp" game rule: the client only sends attacks on players when it is on
+    pub pvp: bool,
 }
 
 pub fn start_game(s: &StartGame) -> Vec<u8> {
@@ -64,12 +66,12 @@ pub fn start_game(s: &StartGame) -> Vec<u8> {
         w.bool(true); // commands enabled
         w.bool(false); // texture packs required
         // game rules
-        w.uvarint(2);
-        for name in ["naturalregeneration", "locatorbar"] {
+        w.uvarint(3);
+        for (name, value) in [("naturalregeneration", false), ("locatorbar", false), ("pvp", s.pvp)] {
             w.string(name);
             w.bool(false); // player modifiable
             w.uvarint(1); // bool type
-            w.bool(false);
+            w.bool(value);
         }
         w.u32_le(0); // experiments
         w.bool(false); // experiments previously used

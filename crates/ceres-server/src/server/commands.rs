@@ -43,7 +43,24 @@ fn coord(s: &str, base: f32) -> Option<f32> {
 }
 
 impl Server {
+    /// Built-in commands plus the ones of enabled plugins.
     fn command_list(&self) -> (Vec<CommandSpec>, Vec<(String, Vec<String>)>) {
+        let (mut commands, enums) = self.builtin_commands();
+        for p in self.plugins.list.iter().filter(|p| p.enabled) {
+            for (name, desc) in &p.commands {
+                if !commands.iter().any(|c| c.name == *name) {
+                    commands.push(CommandSpec {
+                        name: name.clone(),
+                        description: desc.clone(),
+                        overloads: vec![vec![Param::opt("args", ParamType::Message)]],
+                    });
+                }
+            }
+        }
+        (commands, enums)
+    }
+
+    fn builtin_commands(&self) -> (Vec<CommandSpec>, Vec<(String, Vec<String>)>) {
         use ParamType as T;
         let worlds: Vec<String> = self.worlds.worlds.iter().map(|w| w.folder.clone()).collect();
         let enums = vec![
@@ -218,7 +235,16 @@ impl Server {
             cmd("stop", "Salva e desliga o servidor", vec![vec![]]),
             cmd("op", "Dá permissão de operador", vec![vec![Param::new("jogador", T::Target)]]),
             cmd("deop", "Tira a permissão de operador", vec![vec![Param::new("jogador", T::Target)]]),
+            cmd("plugins", "Lista os plugins", vec![vec![]]),
+            cmd("reload", "Recarrega (e recompila) os plugins sem desligar o servidor", vec![vec![]]),
+            cmd(
+                "plugin",
+                "Liga ou desliga um plugin",
+                vec![vec![Param::new("acao", T::Enum("PluginOp".into())), Param::new("nome", T::String)]],
+            ),
         ];
+        let mut enums = enums;
+        enums.push(("PluginOp".to_string(), ["enable", "disable"].map(String::from).to_vec()));
         (commands, enums)
     }
 
@@ -227,7 +253,7 @@ impl Server {
         let op = self.players.get(&sid).is_some_and(|p| p.op);
         let visible: Vec<CommandSpec> = commands
             .into_iter()
-            .filter(|c| op || matches!(c.name.as_str(), "help" | "list" | "worlds" | "tps"))
+            .filter(|c| op || matches!(c.name.as_str(), "help" | "list" | "worlds" | "tps" | "plugins") || self.plugins.command_owner(&c.name).is_some())
             .collect();
         let pk = protocol::available_commands(&visible, &enums);
         if let Some(p) = self.players.get_mut(&sid) {
@@ -332,8 +358,12 @@ impl Server {
             p.flying = false;
         }
         p.out.push(protocol::set_player_game_type(mode));
+        let (eid, world) = (p.entity_id, p.world);
         let abilities = protocol::update_abilities(&self.abilities_of(self.players.get(&sid).unwrap()));
-        self.players.get_mut(&sid).unwrap().out.push(abilities);
+        self.players.get_mut(&sid).unwrap().out.push(abilities.clone());
+        // the others must know too: their client refuses to attack a player it thinks is in creative
+        self.broadcast(&protocol::update_player_game_type(mode, eid), |other, q| other != sid && q.world == world);
+        self.broadcast(&abilities, |other, q| other != sid && q.world == world);
     }
 
     /// Moves a player to `feet` in their current world.
@@ -349,11 +379,13 @@ impl Server {
         p.out.push(pk.clone());
         self.broadcast(&pk, |other, q| other != sid && q.world == world);
         self.update_view(sid);
+        self.follow_menu(sid);
     }
 
     /// Moves a player to another loaded world, at its safe spawn.
     pub(crate) fn switch_world(&mut self, sid: SessionId, world: usize) {
         self.stop_sleeping(sid);
+        self.close_menu(sid, true, true);
         let Some(p) = self.players.get(&sid) else { return };
         let (old, eid) = (p.world, p.entity_id);
         if old == world {
@@ -402,17 +434,32 @@ impl Server {
                 println!("[Command] {}: /{line}", p.name);
             }
         }
-        let public = matches!(name.as_str(), "help" | "?" | "list" | "worlds" | "tps" | "status");
+        // built-in commands win over plugin commands with the same name
+        let plugin_cmd = self.plugins.command_owner(&name).filter(|_| {
+            let (builtin, _) = self.builtin_commands();
+            !builtin.iter().any(|c| c.name == name) && !matches!(name.as_str(), "?" | "status")
+        });
+        let public = matches!(name.as_str(), "help" | "?" | "list" | "worlds" | "tps" | "status" | "plugins") || plugin_cmd.is_some();
         if !public && !is_op {
             self.reply(sender, "§cVocê não tem permissão para usar este comando.");
             return;
         }
+        if let Some(idx) = plugin_cmd {
+            let Sender::Player(sid) = sender else {
+                return self.reply(sender, "§cComandos de plugin só podem ser usados por jogadores.");
+            };
+            let pname = self.players.get(&sid).map(|p| p.name.clone()).unwrap_or_default();
+            let args: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+            self.plugin_event(idx, serde_json::json!({"event": "command", "player": pname, "command": name, "args": args}));
+            return;
+        }
         match name.as_str() {
+            "plugins" | "reload" | "plugin" => self.plugin_admin_command(sender, &name, &args),
             "help" | "?" => {
                 let (commands, _) = self.command_list();
                 let list: Vec<String> = commands
                     .iter()
-                    .filter(|c| is_op || matches!(c.name.as_str(), "help" | "list" | "worlds" | "tps"))
+                    .filter(|c| is_op || matches!(c.name.as_str(), "help" | "list" | "worlds" | "tps" | "plugins") || self.plugins.command_owner(&c.name).is_some())
                     .map(|c| format!("§e/{}§r - {}", c.name, c.description))
                     .collect();
                 self.reply(sender, &format!("§6Comandos:\n{}", list.join("\n")));

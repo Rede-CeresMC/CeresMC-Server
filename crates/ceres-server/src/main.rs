@@ -16,6 +16,7 @@ mod auth;
 mod colors;
 mod config;
 mod logfile;
+mod packs;
 mod server;
 
 use ceres_net::{NetherNetServer, RakNetServer, Transport};

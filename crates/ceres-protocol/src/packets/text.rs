@@ -19,6 +19,14 @@ pub fn chat(source: &str, message: &str) -> Vec<u8> {
     })
 }
 
+/// DeathInfoPacket (0xbd): the cause of death shown on the death screen.
+pub fn death_info(message: &str) -> Vec<u8> {
+    packet(0xbd, |w| {
+        w.string(message);
+        w.uvarint(0); // translation parameters
+    })
+}
+
 pub fn system_message(message: &str) -> Vec<u8> {
     packet(mp::TEXT, |w| {
         w.bool(false);

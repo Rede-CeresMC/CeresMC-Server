@@ -147,6 +147,7 @@ impl Server {
         self.send_world_orbs(sid);
         self.send_weather_to(sid);
 
+        self.plugin_event_all(serde_json::json!({"event": "join", "player": info.name}));
         let msg = protocol::system_message(&format!("§e{} entrou no jogo", info.name));
         self.broadcast(&msg, |_, _| true);
     }
@@ -174,6 +175,17 @@ impl Server {
         self.send_weather_to(sid);
     }
 
+    /// Removes and adds `sid` again for the other players in its world (after respawning).
+    pub(crate) fn respawn_for_others(&mut self, sid: SessionId) {
+        let Some(me) = self.players.get(&sid) else { return };
+        let (world, eid) = (me.world, me.entity_id);
+        let Some(bundle) = self.add_player_bundle(me) else { return };
+        self.broadcast(&protocol::remove_actor(eid), |other, q| other != sid && q.world == world);
+        for pk in bundle {
+            self.broadcast(&pk, |other, q| other != sid && q.world == world);
+        }
+    }
+
     /// The session is gone: save its data and remove it from everyone's list and world.
     pub(crate) fn on_left(&mut self, p: &Player) {
         self.save_player_state_of(p);
@@ -182,6 +194,12 @@ impl Server {
             return;
         }
         let world = p.world;
+        if let Some(m) = &p.menu {
+            if let Some(idx) = self.plugins.index_of(&m.plugin) {
+                self.plugin_event(idx, serde_json::json!({"event": "menu_close", "player": p.name, "menu": m.id}));
+            }
+        }
+        self.plugin_event_all(serde_json::json!({"event": "quit", "player": p.name}));
         self.broadcast(&protocol::player_list_remove(&info.uuid), |_, _| true);
         self.broadcast(&protocol::remove_actor(info.entity_id), |_, q| q.world == world);
         self.broadcast(&protocol::system_message(&format!("§e{} saiu do jogo", info.name)), |_, _| true);

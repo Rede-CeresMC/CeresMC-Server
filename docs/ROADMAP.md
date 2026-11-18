@@ -246,18 +246,18 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 ### API de plugins
 
-- [ ] 🔴 Plugins em **Rust compilado para WASM** (decidido): rápido, isolado (um erro no plugin não derruba o servidor), não quebra quando o servidor atualiza
-- [ ] 🔴 Plugin em pasta (`plugins/Nome/` com `plugin.yml` + código): o servidor compila sozinho com `cargo` ao ligar e no `/reload`; para produção, só o `.wasm`
-- [ ] 🔴 `/reload` sem desligar o servidor, e `/plugin enable|disable <nome>` com o servidor rodando
-- [ ] 🔴 Desligar um plugin limpa tudo o que ele registrou: comandos, eventos, tarefas agendadas, menus e formulários abertos (sem resto e sem crash)
+- [x] 🔴 Plugins em **Rust compilado para WASM** (decidido, base pronta: `crates/ceres-plugin`, wasmi com limite de instruções e memória; ver docs/PLUGINS.md): rápido, isolado (um erro no plugin não derruba o servidor), não quebra quando o servidor atualiza
+- [x] 🔴 Plugin em pasta (`plugins/Nome/` com `plugin.yml` + código): o servidor compila sozinho com `cargo` ao ligar e no `/reload`; para produção, só o `.wasm`
+- [x] 🔴 `/reload` sem desligar o servidor, e `/plugin enable|disable <nome>` com o servidor rodando
+- [ ] 🔴 Desligar um plugin limpa tudo o que ele registrou: comandos, eventos, tarefas agendadas, menus e formulários abertos (sem resto e sem crash). Feito para comandos, eventos e menus; falta para tarefas e formulários (quando existirem)
 - [ ] 🟢 Opcional, depois: scripts em JavaScript (QuickJS) sobre a mesma API, para coisas rápidas sem compilar
 - [ ] API: jogadores, mundos, blocos, itens, entidades, comandos, eventos, mensagens
 - [ ] Formulários (ModalForm, CustomForm, SimpleForm) e DDUI
-- [ ] 🔴 Menus de baú sem baú visível: inventário de uma entidade invisível só para o jogador (27 slots) ou baú duplo enterrado só para ele (54 slots); nada aparece em terceira pessoa; cliques viram ações e ninguém tira os itens
-- [ ] 🔴 Menu continua aberto ao teleportar ou andar: a entidade invisível acompanha o jogador (no teleporte, junto com ele); no baú enterrado, reabre no destino com o mesmo conteúdo; menus falsos ficam fora da regra de alcance do servidor (testar no cliente real)
+- [x] 🔴 Menus de baú sem baú visível (feito com baú enterrado só para o jogador, 27 e 54 slots; a versão com entidade invisível fica para testar depois); nada aparece em terceira pessoa; cliques viram ações e ninguém tira os itens
+- [ ] 🔴 Menu continua aberto ao teleportar ou andar (feito para o teleporte: reabre no destino com o mesmo conteúdo; falta andar/empurrão e testar no cliente real): a entidade invisível acompanha o jogador (no teleporte, junto com ele); no baú enterrado, reabre no destino com o mesmo conteúdo; menus falsos ficam fora da regra de alcance do servidor (testar no cliente real)
 - [ ] Scoreboards, bossbar, títulos, actionbar, toasts
 - [x] 🔴 NoClip sem ser espectador ✔ (`/noclip`): atravessa blocos e voa em qualquer modo de jogo, blocos podem ser colocados onde o jogador está, sem dano de sufocamento; vira `player.set_noclip()` na API de plugins
-- [ ] 🟠 Controle de movimento por jogador para plugins: desligar nado e engatinhar (`set_can_swim`, `set_can_crawl`). Recusar START_SWIMMING/START_CRAWLING e manter o jogador em pé para todos; testar a flag `SWIMMER` (20) para o cliente nem começar o nado; engatinhar em vão de 1 bloco depende da validação de movimento (testar no cliente real). Na câmera do próprio jogador a pose é do cliente: opções a testar com um comando: (1) flag SWIMMER desligada, (2) altura do personagem forçada em 1,8, (3) corrigir a pose a cada vez (dá tranco). Corpo em pé com a cabeça dentro do bloco o cliente atual não permite (a colisão é calculada nele)
+- [ ] ⚪ (deixado de fora a pedido) Controle de nado/engatinhar por jogador. Pesquisado e testado no cliente real: não existe pacote para proibir; a pose e a altura da câmera são do cliente (colisão calculada nele). Recusar a pose só muda o que os outros veem (a câmera do jogador ainda deita). Para engatinhar, o que funciona é devolver o jogador à última posição em pé enquanto o cliente disser que está engatinhando (precisa acompanhar a pose real do cliente separada da do servidor). Pacote de comportamento não chega mais ao cliente (2225: ResourcePacksInfo só lista pacotes de textura); pacote de textura só troca a animação, não a câmera. Nado só começa correndo debaixo d'água: só daria impedindo a corrida (fome baixa/cegueira), visível demais.
 - [ ] Armazenamento por plugin (arquivo e banco de dados)
 - [ ] Permissões por plugin e por jogador
 - [ ] Documentação e plugins de exemplo
@@ -276,7 +276,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 - [ ] Transferir jogador entre servidores (Transfer)
 - [ ] Modo proxy / várias instâncias (lobby, rankup, minigames)
-- [ ] Resource packs e behavior packs do servidor (enviar e forçar)
+- [x] Resource packs do servidor (enviar e forçar, pasta `resource_packs/`, download em pedaços com SHA-256). Behavior packs não vão mais ao cliente no protocolo 2225
 - [ ] Itens e blocos customizados (component-based)
 - [ ] Entidades customizadas
 - [ ] Suporte a várias versões do protocolo ao mesmo tempo (multiversion)

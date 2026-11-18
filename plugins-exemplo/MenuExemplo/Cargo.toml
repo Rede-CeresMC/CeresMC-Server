@@ -1,0 +1,18 @@
+[package]
+name = "menu-exemplo"
+version = "1.0.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# caminho a partir de plugins/MenuExemplo (copie esta pasta para plugins/)
+ceres-plugin = { path = "../../crates/ceres-plugin" }
+
+# plugin fora do workspace do servidor
+[workspace]
+
+[profile.release]
+opt-level = "s"
+lto = true

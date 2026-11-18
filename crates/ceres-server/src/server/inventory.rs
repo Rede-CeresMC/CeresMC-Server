@@ -1041,6 +1041,9 @@ impl Server {
     }
 
     pub(crate) fn handle_single_stack_request(&mut self, sid: SessionId, req: StackRequest) {
+        if self.menu_stack_request(sid, &req) {
+            return;
+        }
         if !self.container_still_valid(sid) {
             self.close_container(sid, true);
         }

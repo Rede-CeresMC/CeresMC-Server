@@ -24,6 +24,22 @@ elif [ -f target/release/ceres.exe ]; then cp target/release/ceres.exe "$RUN/cer
 elif [ -f target/debug/ceres ] && { [ ! -f target/release/ceres ] || [ target/debug/ceres -nt target/release/ceres ]; }; then cp target/debug/ceres "$RUN/ceres-test"; EXE=./ceres-test
 else cp target/release/ceres "$RUN/ceres-test"; EXE=./ceres-test; fi
 cp -r data "$RUN/data"
+# a resource pack (a folder, zipped by the server) big enough to need several chunks
+mkdir -p "$RUN/resource_packs/TestPack/textures"
+cat > "$RUN/resource_packs/TestPack/manifest.json" <<'EOF2'
+{
+  // comments are allowed in manifests
+  "format_version": 2,
+  "header": {"name": "Ceres Test Pack", "uuid": "5d7f8a3c-1b2e-4c6d-9e8f-0a1b2c3d4e5f", "version": [1, 0, 0], "min_engine_version": [1, 21, 0]},
+  "modules": [{"type": "resources", "uuid": "6e8f9b4d-2c3f-4d7e-8f9a-1b2c3d4e5f60", "version": [1, 0, 0]}]
+}
+EOF2
+head -c 600000 /dev/urandom > "$RUN/resource_packs/TestPack/textures/noise.bin"
+# the example plugin, built to WebAssembly (ready-made plugin.wasm, as on a production server)
+CARGO_TARGET_DIR=target/plugin-build cargo build -q --release --target wasm32-unknown-unknown     --manifest-path plugins-exemplo/MenuExemplo/Cargo.toml
+mkdir -p "$RUN/plugins/MenuExemplo"
+cp plugins-exemplo/MenuExemplo/plugin.yml "$RUN/plugins/MenuExemplo/"
+cp target/plugin-build/wasm32-unknown-unknown/release/menu_exemplo.wasm "$RUN/plugins/MenuExemplo/plugin.wasm"
 if [ -d worlds ]; then tar --exclude=LOCK -cf - worlds | tar -C "$RUN" -xf -; fi
 printf "BotOp
 BotCraft
@@ -46,6 +62,7 @@ BotBrew
 BotMusic
 BotEnchant
 BotCauldron
+BotMenu
 " > "$RUN/ops.txt"
 cat > "$RUN/server.properties" <<EOF
 motd=CeresMC Test
@@ -92,6 +109,8 @@ python -I tools/music_test.py || status=1
 python -I tools/enchanting_test.py || status=1
 python -I tools/cauldron_test.py || status=1
 python -I tools/gameplay_test.py || status=1
+python -I tools/packs_test.py || status=1
+python -I tools/plugins_test.py || status=1
 
 stop_server
 (cd "$RUN" && exec "$EXE" > server2.out 2>&1) &

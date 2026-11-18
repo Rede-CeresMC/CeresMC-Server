@@ -9,6 +9,8 @@
 /server.out
 /*.log
 /debug/
+/resource_packs/
+/plugins/
 
 # editors / OS
 .idea/

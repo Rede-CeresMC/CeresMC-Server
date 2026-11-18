@@ -165,6 +165,7 @@ impl Server {
 
     pub(crate) fn kill_player(&mut self, sid: SessionId, death_msg: &str) {
         self.stop_sleeping(sid);
+        self.close_menu(sid, true, true);
         self.close_container(sid, true);
         let Some(p) = self.players.get_mut(&sid) else { return };
         if p.dead {
@@ -210,8 +211,10 @@ impl Server {
         let (_, dest_feet) = self.respawn_destination(sid);
         let dest_eyes = [dest_feet[0], dest_feet[1] + EYE_HEIGHT, dest_feet[2]];
         if let Some(p) = self.players.get_mut(&sid) {
+            // only "searching": the client then shows the death screen, and READY_TO_SPAWN goes
+            // out when it presses respawn (sending it now would skip the screen)
             p.out.push(protocol::respawn(dest_eyes, respawn_state::SEARCHING_FOR_SPAWN, eid));
-            p.out.push(protocol::respawn(dest_eyes, respawn_state::READY_TO_SPAWN, eid));
+            p.out.push(protocol::death_info(death_msg));
         }
     }
 
@@ -248,17 +251,23 @@ impl Server {
         self.broadcast(&protocol::actor_event(eid, actor_event::RESPAWN, 0), |_, q| q.world == world);
         self.teleport(sid, dest_feet);
         self.sync_actor_state(sid);
+        // the others' clients drop the body after the death animation: add the player again
+        self.respawn_for_others(sid);
         Ok(())
     }
 
     pub(crate) fn on_attack_entity(&mut self, attacker_sid: SessionId, target_eid: i64) {
+        // why an attack on a player did not count goes to server.log (to find PvP problems)
+        let attacker_name = self.players.get(&attacker_sid).map(|p| p.name.clone()).unwrap_or_default();
+        let refuse = |why: &str| crate::logfile::log(&format!("[Combat] attack by {attacker_name} on entity {target_eid} ignored: {why}"));
         if !self.cfg.pvp {
-            return;
+            return refuse("pvp is off");
         }
         let Some((&victim_sid, _)) =
             self.players.iter().find(|(_, p)| p.state == State::Spawned && p.entity_id == target_eid)
         else {
-            return;
+            let known: Vec<i64> = self.players.values().map(|p| p.entity_id).collect();
+            return refuse(&format!("no spawned player with that id (players: {known:?})")); // no mobs yet
         };
         if victim_sid == attacker_sid {
             return;
@@ -267,11 +276,15 @@ impl Server {
         let Some(vic) = self.players.get(&victim_sid) else { return };
         if att.dead || vic.dead || att.world != vic.world || att.gamemode == 6 || vic.gamemode == 1 || vic.gamemode == 6
         {
-            return;
+            let why = format!(
+                "attacker dead={} gm={}, victim dead={} gm={}, same world={}",
+                att.dead, att.gamemode, vic.dead, vic.gamemode, att.world == vic.world
+            );
+            return refuse(&why);
         }
         let d2: f32 = (0..3).map(|i| (att.pos[i] - vic.pos[i]).powi(2)).sum();
         if d2 > 36.0 {
-            return; // out of melee reach (6 blocks)
+            return refuse(&format!("out of reach ({:.1} blocks)", d2.sqrt())); // melee reach: 6 blocks
         }
         let held = att.inventory.held_item();
         let mut dmg = if held.is_empty() {
