@@ -1,7 +1,8 @@
-//! A chunk column held in memory: 24 subchunks (y -4..19) of editable block layers, plus the raw
-//! 3D biome data. Loaded from LevelDB, encoded for the network, written back when changed.
+//! A chunk column held in memory: 24 subchunks (y -4..19) of editable block layers, raw 3D biome
+//! data, block entities (0x31: signs, chests, banners...) and preserved chunk entities (0x32).
 
 use super::*;
+use ceres_codec::nbt::Tag;
 
 #[derive(Clone)]
 pub(crate) struct SubChunk {
@@ -38,6 +39,11 @@ pub(crate) struct Column {
     pub(crate) subs: Vec<Option<SubChunk>>,
     /// raw Data3D value (512 bytes heightmap + biome palettes)
     pub(crate) biomes: Option<Vec<u8>>,
+    /// block entities (0x31) indexed by world block position [x, y, z]
+    pub(crate) block_entities: HashMap<[i32; 3], Tag>,
+    pub(crate) block_entities_dirty: bool,
+    /// raw entities blob (0x32), preserved when saving
+    pub(crate) entities_raw: Option<Vec<u8>>,
     /// bit n = subchunk n changed since the last save
     pub(crate) dirty: u32,
     /// false for chunks that only exist in memory (flat template copies, empty chunks)
@@ -48,9 +54,37 @@ pub(crate) fn block_index(x: i32, y: i32, z: i32) -> usize {
     (((x & 15) << 8) | ((z & 15) << 4) | (y & 15)) as usize
 }
 
+fn decode_block_entities(raw: &[u8]) -> HashMap<[i32; 3], Tag> {
+    let mut out = HashMap::new();
+    let mut r = R::new(raw);
+    while !r.eof() {
+        let Ok((_, tag)) = nbt::read_root(&mut r, Flavor::LittleEndian) else { break };
+        if let (Some(x), Some(y), Some(z)) = (
+            tag.get("x").and_then(|t| t.as_i64()),
+            tag.get("y").and_then(|t| t.as_i64()),
+            tag.get("z").and_then(|t| t.as_i64()),
+        ) {
+            out.insert([x as i32, y as i32, z as i32], tag);
+        }
+    }
+    out
+}
+
 impl Column {
     pub(crate) fn empty() -> Column {
-        Column { subs: vec![None; SUBCHUNK_COUNT], biomes: None, dirty: 0, on_disk: false }
+        Column {
+            subs: vec![None; SUBCHUNK_COUNT],
+            biomes: None,
+            block_entities: HashMap::new(),
+            block_entities_dirty: false,
+            entities_raw: None,
+            dirty: 0,
+            on_disk: false,
+        }
+    }
+
+    pub(crate) fn is_dirty(&self) -> bool {
+        self.dirty != 0 || self.block_entities_dirty
     }
 
     pub(crate) fn load(db: &mut DB, x: i32, z: i32, gd: &GameData) -> Res<Option<Column>> {
@@ -67,6 +101,10 @@ impl Column {
             }
         }
         c.biomes = db.get(&chunk_key(x, z, TAG_DATA_3D, None)).map(|b| b.to_vec());
+        if let Some(be) = db.get(&chunk_key(x, z, TAG_BLOCK_ENTITIES, None)) {
+            c.block_entities = decode_block_entities(&be);
+        }
+        c.entities_raw = db.get(&chunk_key(x, z, TAG_ENTITIES, None)).map(|b| b.to_vec());
         Ok(Some(c))
     }
 
@@ -90,6 +128,9 @@ impl Column {
             sub.layers.push(Storage::filled(gd.entry(gd.air_id)));
         }
         sub.layers[0].set(block_index(x, y, z), gd.entry(id));
+        if self.block_entities.remove(&[x, y, z]).is_some() {
+            self.block_entities_dirty = true;
+        }
         self.dirty |= 1 << s;
         true
     }
@@ -117,11 +158,13 @@ impl Column {
         }
         encode_biomes(self.biomes.as_deref(), &mut w);
         w.u8(0); // border blocks
-        // TODO: block entities (signs, chests...) from tag 0x31
+        for tag in self.block_entities.values() {
+            nbt::write_root(&mut w, "", tag, Flavor::Network);
+        }
         (count as u32, w.0)
     }
 
-    /// Writes the changed subchunks (and, for chunks new on disk, the chunk header keys).
+    /// Writes the changed subchunks, block entities, and preserved chunk data.
     pub(crate) fn save(&mut self, batch: &mut rusty_leveldb::WriteBatch, x: i32, z: i32, gd: &GameData) {
         let new = !self.on_disk;
         if new {
@@ -129,6 +172,9 @@ impl Column {
             batch.put(&chunk_key(x, z, TAG_FINALIZATION, None), &2i32.to_le_bytes());
             if let Some(b) = &self.biomes {
                 batch.put(&chunk_key(x, z, TAG_DATA_3D, None), b);
+            }
+            if let Some(ent) = &self.entities_raw {
+                batch.put(&chunk_key(x, z, TAG_ENTITIES, None), ent);
             }
         }
         for (i, y) in (MIN_SUBCHUNK..=MAX_SUBCHUNK).enumerate() {
@@ -153,7 +199,22 @@ impl Column {
                 }
             }
         }
+        if new || self.block_entities_dirty {
+            let key = chunk_key(x, z, TAG_BLOCK_ENTITIES, None);
+            if self.block_entities.is_empty() {
+                if !new {
+                    batch.delete(&key);
+                }
+            } else {
+                let mut w = W::with_capacity(1024);
+                for tag in self.block_entities.values() {
+                    nbt::write_root(&mut w, "", tag, Flavor::LittleEndian);
+                }
+                batch.put(&key, &w.0);
+            }
+        }
         self.dirty = 0;
+        self.block_entities_dirty = false;
         self.on_disk = true;
     }
 }

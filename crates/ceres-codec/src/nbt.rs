@@ -87,6 +87,16 @@ impl Tag {
     pub fn empty_compound() -> Tag {
         Tag::Compound(Vec::new())
     }
+    /// Inserts or replaces a key in a Compound tag.
+    pub fn set(&mut self, key: &str, val: Tag) {
+        if let Tag::Compound(v) = self {
+            if let Some((_, existing)) = v.iter_mut().find(|(k, _)| k == key) {
+                *existing = val;
+            } else {
+                v.push((key.to_string(), val));
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------- reading
@@ -281,6 +291,13 @@ pub fn to_network(t: &Tag) -> Vec<u8> {
     w.0
 }
 
+/// Little-endian root compound with an empty name (disk format for block entities, level.dat, player data).
+pub fn to_le(t: &Tag) -> Vec<u8> {
+    let mut w = W::new();
+    write_root(&mut w, "", t, Flavor::LittleEndian);
+    w.0
+}
+
 /// Stable key for a block state ("name" + sorted "states"), used to map world palettes to network IDs.
 pub fn state_key(name: &str, states: Option<&Tag>) -> String {
     let mut key = String::with_capacity(64);
@@ -299,4 +316,44 @@ pub fn state_key(name: &str, states: Option<&Tag>) -> String {
         }
     }
     key
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nbt_all_flavors_roundtrip() {
+        let mut root = Tag::Compound(vec![
+            ("b".into(), Tag::Byte(-5)),
+            ("s".into(), Tag::Short(1234)),
+            ("i".into(), Tag::Int(-98765)),
+            ("l".into(), Tag::Long(1234567890123)),
+            ("f".into(), Tag::Float(3.5)),
+            ("d".into(), Tag::Double(-42.125)),
+            ("str".into(), Tag::String("olá".into())),
+            ("bytes".into(), Tag::ByteArray(vec![1, 2, 3, 255])),
+            ("ints".into(), Tag::IntArray(vec![-10, 0, 10])),
+            ("longs".into(), Tag::LongArray(vec![-1, 1])),
+            ("list".into(), Tag::List(8, vec![Tag::String("a".into()), Tag::String("b".into())])),
+        ]);
+        root.set("s", Tag::Short(4321));
+        for flavor in [Flavor::BigEndian, Flavor::LittleEndian, Flavor::Network] {
+            let mut w = W::new();
+            write_root(&mut w, "root", &root, flavor);
+            let mut r = R::new(&w.0);
+            let (name, decoded) = read_root(&mut r, flavor).unwrap();
+            assert_eq!(name, "root");
+            assert_eq!(decoded, root);
+            assert!(r.eof());
+        }
+    }
+
+    #[test]
+    fn state_key_sorts_properties() {
+        let a = Tag::Compound(vec![("z".into(), Tag::Int(1)), ("a".into(), Tag::String("top".into()))]);
+        let b = Tag::Compound(vec![("a".into(), Tag::String("top".into())), ("z".into(), Tag::Int(1))]);
+        assert_eq!(state_key("minecraft:oak_stairs", Some(&a)), "minecraft:oak_stairs|a=top|z=1");
+        assert_eq!(state_key("minecraft:oak_stairs", Some(&a)), state_key("minecraft:oak_stairs", Some(&b)));
+    }
 }

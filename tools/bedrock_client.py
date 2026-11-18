@@ -243,7 +243,8 @@ def break_block(c, pos):
 
 
 def place_block(c, clicked, face, block):
-    item = struct.pack("<hH", 1, 1) + uvarint(0) + b"\x00" + uvarint(block & 0xffffffff) + uvarint(0)
+    # an empty hand when no block is given (id 1 is a real item and would be placed)
+    item = struct.pack("<hH", 1 if block else 0, 1 if block else 0) + uvarint(0) + b"\x00" + uvarint(block & 0xffffffff) + uvarint(0)
     data = svarint(0) + b"\x01" + _block_pos(clicked) + bytes([face]) + svarint(0) + b"\x00" + item
     data += struct.pack("<fff", *c.pos) + struct.pack("<fff", 0.5, 1.0, 0.5) + uvarint(0) + b"\x01\x00"
     c.send(uvarint(0x1e) + svarint(0) + b"\x00" + uvarint(2) + uvarint(0) + data)

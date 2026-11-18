@@ -3,6 +3,8 @@
 
 # runtime data (each server has its own)
 /worlds/
+/players/
+/nethernet.key
 /server.properties
 /server.out
 /*.log

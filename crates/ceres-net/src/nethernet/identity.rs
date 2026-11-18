@@ -22,6 +22,22 @@ impl ServerIdentity {
                 break k;
             }
         };
+        Self::from_key(key, domain)
+    }
+
+    /// Loads the 48-byte P-384 signing key from `path`, or generates and saves one when missing.
+    pub fn load_or_generate(path: &std::path::Path, domain: &str) -> Self {
+        if let Ok(bytes) = std::fs::read(path) {
+            if let Ok(key) = SigningKey::from_slice(&bytes) {
+                return Self::from_key(key, domain);
+            }
+        }
+        let id = Self::generate(domain);
+        let _ = std::fs::write(path, id.key.to_bytes().as_slice());
+        id
+    }
+
+    fn from_key(key: SigningKey, domain: &str) -> Self {
         let der = key.verifying_key().to_public_key_der().expect("encode public key");
         ServerIdentity { public_key_b64: STANDARD.encode(der.as_bytes()), key, domain: domain.to_string() }
     }
@@ -68,4 +84,20 @@ impl ServerIdentity {
 /// json_encode() of a string (PHP escapes "/" by default).
 fn json_str(s: &str) -> String {
     serde_json::to_string(s).unwrap().replace('/', "\\/")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identity_signs_sdp_fingerprint() {
+        let id = ServerIdentity::generate("self");
+        let sdp = "v=0\r\na=fingerprint:sha-256 AA:BB:CC:DD\r\n";
+        let attr = id.identity_attribute(sdp).expect("identity attribute");
+        let decoded = STANDARD.decode(attr).unwrap();
+        let val: serde_json::Value = serde_json::from_slice(&decoded).unwrap();
+        assert_eq!(val["idp"]["domain"], "self");
+        assert!(val["assertion"].as_str().unwrap().contains("fingerprints"));
+    }
 }

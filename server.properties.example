@@ -5,3 +5,6 @@ gamemode=creative
 difficulty=peaceful
 level-name=world
 view-distance=10
+white-list=off
+pvp=on
+keep-inventory=off

@@ -47,6 +47,9 @@ impl W {
     pub fn u64_le(&mut self, v: u64) {
         self.bytes(&v.to_le_bytes());
     }
+    pub fn i64_le(&mut self, v: i64) {
+        self.bytes(&v.to_le_bytes());
+    }
     pub fn f32_le(&mut self, v: f32) {
         self.bytes(&v.to_le_bytes());
     }
@@ -208,5 +211,67 @@ impl<'a> R<'a> {
     pub fn string(&mut self) -> Res<String> {
         let n = self.uvarint()? as usize;
         Ok(String::from_utf8_lossy(self.take(n)?).into_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn varint_roundtrip() {
+        let cases = [0u32, 1, 127, 128, 255, 16384, u32::MAX];
+        let mut w = W::new();
+        for &v in &cases {
+            w.uvarint(v);
+        }
+        let mut r = R::new(&w.0);
+        for &v in &cases {
+            assert_eq!(r.uvarint().unwrap(), v);
+        }
+        assert!(r.eof());
+    }
+
+    #[test]
+    fn signed_zigzag_roundtrip() {
+        let cases32 = [0i32, -1, 1, -2, 2, -64, 64, i32::MIN, i32::MAX];
+        let mut w = W::new();
+        for &v in &cases32 {
+            w.varint(v);
+        }
+        let mut r = R::new(&w.0);
+        for &v in &cases32 {
+            assert_eq!(r.varint().unwrap(), v);
+        }
+
+        let cases64 = [0i64, -1, 1, -1000, 1000, i64::MIN, i64::MAX];
+        let mut w = W::new();
+        for &v in &cases64 {
+            w.varlong(v);
+        }
+        let mut r = R::new(&w.0);
+        for &v in &cases64 {
+            assert_eq!(r.varlong().unwrap(), v);
+        }
+    }
+
+    #[test]
+    fn primitives_and_strings() {
+        let mut w = W::new();
+        w.triad_le(0x123456);
+        w.i16_le(-321);
+        w.i32_le(-999_999);
+        w.i64_le(-123_456_789_012);
+        w.f32_le(1.62);
+        w.string("CeresMC §6Servidor");
+
+        let mut r = R::new(&w.0);
+        assert_eq!(r.triad_le().unwrap(), 0x123456);
+        assert_eq!(r.i16_le().unwrap(), -321);
+        assert_eq!(r.i32_le().unwrap(), -999_999);
+        assert_eq!(r.i64_le().unwrap(), -123_456_789_012);
+        assert!((r.f32_le().unwrap() - 1.62).abs() < 1e-5);
+        assert_eq!(r.string().unwrap(), "CeresMC §6Servidor");
+        assert!(r.eof());
     }
 }

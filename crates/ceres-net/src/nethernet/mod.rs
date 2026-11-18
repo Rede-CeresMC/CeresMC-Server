@@ -39,8 +39,9 @@ use http::*;
 use peer::*;
 use sdp::*;
 
-static IDENTITY: std::sync::LazyLock<identity::ServerIdentity> =
-    std::sync::LazyLock::new(|| identity::ServerIdentity::generate("self"));
+static IDENTITY: std::sync::LazyLock<identity::ServerIdentity> = std::sync::LazyLock::new(|| {
+    identity::ServerIdentity::load_or_generate(std::path::Path::new("nethernet.key"), "self")
+});
 
 const RELIABLE_CHANNEL: &str = "ReliableDataChannel";
 const MAX_MESSAGE_SIZE: usize = 262144;

@@ -11,6 +11,9 @@ gamemode=survival
 difficulty=normal
 level-name=world
 view-distance=10
+white-list=off
+pvp=on
+keep-inventory=off
 ";
 
 pub struct Config {
@@ -22,9 +25,18 @@ pub struct Config {
     pub difficulty: i32,
     pub level_name: String,
     pub chunks_per_tick: usize,
+    pub white_list: bool,
+    pub pvp: bool,
+    pub keep_inventory: bool,
+    pub max_packets_per_sec: u32,
+    pub max_batch_bytes: usize,
     /// Names in ops.txt get operator rights even though logins are not verified yet (anyone can
     /// pick any name). Only for local testing.
     pub allow_unverified_ops: bool,
+}
+
+fn flag(s: &str) -> bool {
+    matches!(s.to_ascii_lowercase().as_str(), "on" | "true" | "1" | "yes")
 }
 
 impl Config {
@@ -62,7 +74,12 @@ impl Config {
             },
             level_name: get("level-name", "world"),
             chunks_per_tick: 8,
-            allow_unverified_ops: matches!(get("allow-unverified-ops", "off").as_str(), "on" | "true" | "1"),
+            white_list: flag(&get("white-list", "off")),
+            pvp: flag(&get("pvp", "on")),
+            keep_inventory: flag(&get("keep-inventory", "off")),
+            max_packets_per_sec: get("max-packets-per-sec", "600").parse().unwrap_or(600).max(50),
+            max_batch_bytes: get("max-batch-bytes", "2097152").parse().unwrap_or(2 * 1024 * 1024).max(65536),
+            allow_unverified_ops: flag(&get("allow-unverified-ops", "off")),
         }
     }
 }

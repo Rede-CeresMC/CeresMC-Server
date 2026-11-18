@@ -1,7 +1,9 @@
-//! Packet handling: login flow, resource packs, StartGame, input and chat.
+//! Packet handling: login flow, moderation checks, resource packs, StartGame, input, equipment,
+//! combat, signs and chat.
 
 use super::*;
 use base64::Engine;
+use ceres_protocol::{InvTransaction, entity_use_action, window};
 
 impl Server {
     pub(crate) fn handle_packet(&mut self, sid: SessionId, buf: &[u8]) -> Res<()> {
@@ -22,7 +24,7 @@ impl Server {
                         play_status::LOGIN_FAILED_SERVER
                     };
                     p.out.push(protocol::play_status(status));
-                    p.close = Some("incompatible protocol".into());
+                    p.close = Some("Versão incompatível do Minecraft".into());
                     return Ok(());
                 }
                 // NetworkSettings itself goes out uncompressed; everything after is compressed
@@ -39,26 +41,47 @@ impl Server {
                 let blob_len = r.uvarint()? as usize;
                 let mut blob = R::new(r.take(blob_len)?);
                 let auth_len = blob.u32_le()? as usize;
-                let _auth_json = blob.take(auth_len)?;
+                let auth_json = blob.take(auth_len)?;
                 let cd_len = blob.u32_le()? as usize;
                 let client_data = blob.take(cd_len)?;
                 let cd = jwt_payload(client_data).unwrap_or_default();
-                let name = cd["ThirdPartyName"]
-                    .as_str()
-                    .filter(|s| !s.is_empty())
-                    .map(str::to_string)
+                let (chain_name, xuid, identity_uuid) = extract_auth_claims(auth_json);
+                let name = chain_name
+                    .or_else(|| cd["ThirdPartyName"].as_str().filter(|s| !s.is_empty()).map(str::to_string))
                     .unwrap_or_else(|| format!("Player{sid}"));
-                // TODO: verify the auth chain (xbox-auth) and enable encryption
-                // logins are not verified yet: a name alone must not grant operator rights
-                p.op = self.cfg.allow_unverified_ops && self.ops.contains(&name.to_ascii_lowercase());
+
+                let is_op = self.cfg.allow_unverified_ops && self.ops.contains(&name.to_ascii_lowercase());
+                let ip = self.players[&sid].addr.ip();
+                if let Err(reason) = self.moderation.check_login(&name, ip, self.cfg.white_list, is_op) {
+                    self.kick(sid, &reason);
+                    return Ok(());
+                }
+                let online = self.players.values().filter(|q| q.state == State::Spawned).count();
+                if online >= self.cfg.max_players && !is_op {
+                    self.kick(sid, "§cO servidor está cheio!");
+                    return Ok(());
+                }
+                // Kick duplicate session with the same name
+                if let Some((&dup_sid, _)) = self
+                    .players
+                    .iter()
+                    .find(|(osid, q)| **osid != sid && !q.name.is_empty() && q.name.eq_ignore_ascii_case(&name))
+                {
+                    self.kick(dup_sid, "§cVocê entrou de outro local.");
+                }
+
+                let p = self.players.get_mut(&sid).unwrap();
+                p.op = is_op;
                 p.name = name;
                 p.entity_id = self.next_entity_id;
                 self.next_entity_id += 1;
+                let uuid =
+                    identity_uuid.map(|u| skin::uuid_wire(&u)).unwrap_or_else(|| skin::wire(skin::random_uuid()));
                 p.info = Some(PlayerInfo {
-                    uuid: skin::wire(skin::random_uuid()),
+                    uuid,
                     entity_id: p.entity_id,
                     name: p.name.clone(),
-                    xuid: String::new(),
+                    xuid,
                     device_id: cd["DeviceId"].as_str().unwrap_or("").to_string(),
                     build_platform: cd["DeviceOS"].as_i64().unwrap_or(0) as i32,
                     skin: std::rc::Rc::new(skin::encode(&cd)),
@@ -73,7 +96,7 @@ impl Server {
                 match status {
                     2 => p.out.push(protocol::resource_pack_stack()), // have all packs
                     3 => self.start_game(sid),                        // completed
-                    0 => self.kick(sid, "You must accept resource packs"),
+                    0 => self.kick(sid, "§cVocê precisa aceitar os pacotes de recursos."),
                     _ => {}
                 }
             }
@@ -96,6 +119,13 @@ impl Server {
             (State::PreSpawn | State::Spawned, protocol::ITEM_STACK_REQUEST) => {
                 self.on_item_stack_request(sid, &mut r)?
             }
+            (State::Spawned, protocol::MOB_EQUIPMENT) => self.on_mob_equipment(sid, &mut r)?,
+            (State::Spawned, protocol::BLOCK_PICK_REQUEST) => self.on_block_pick(sid, &mut r)?,
+            (State::Spawned, protocol::BLOCK_ACTOR_DATA) => self.on_block_actor_data(sid, &mut r)?,
+            (State::Spawned, protocol::mp::ANIMATE) => self.on_animate(sid, &mut r)?,
+            (State::Spawned, protocol::mp::EMOTE) => self.on_emote(sid, &mut r)?,
+            (State::Spawned, protocol::mp::PLAYER_SKIN) => self.on_player_skin(sid, &mut r)?,
+            (State::Spawned, protocol::mp::RESPAWN) => self.on_respawn(sid, &mut r)?,
             (State::Spawned, protocol::COMMAND_REQUEST) => {
                 let line = protocol::read_command_request(&mut r)?;
                 self.run_command(commands::Sender::Player(sid), &line);
@@ -108,12 +138,46 @@ impl Server {
                 }
             }
             (State::Spawned, protocol::CONTAINER_CLOSE) => {
-                let (window, ty) = (r.u8()?, r.u8()?);
-                p.out.push(protocol::container_close(window, ty, false));
+                let (win, ty) = (r.u8()?, r.u8()?);
+                p.out.push(protocol::container_close(win, ty, false));
             }
             (State::Spawned, protocol::INVENTORY_TRANSACTION) => {
-                if let Some(u) = protocol::read_inventory_transaction(&mut r)? {
-                    self.on_use_item(sid, u);
+                if let Some(tx) = protocol::read_inventory_transaction(&mut r)? {
+                    match tx {
+                        InvTransaction::UseItem(u) => self.on_use_item(sid, u),
+                        InvTransaction::Drop { slot, count, expected } => {
+                            let drop_opt = self.players.get_mut(&sid).and_then(|p| {
+                                let cur = p.inventory.main.get(slot as usize)?;
+                                if cur.id != expected.id || cur.count < count {
+                                    return None;
+                                }
+                                let mut dropped = cur.clone();
+                                dropped.count = count;
+                                dropped.stack_id = 0;
+                                let rem = p.inventory.consume_slot(slot, count)?;
+                                p.out.push(protocol::inventory_slot(window::INVENTORY as u32, slot as u32, &rem));
+                                Some(dropped)
+                            });
+                            match drop_opt {
+                                Some(dropped) => {
+                                    self.broadcast_equipment(sid);
+                                    self.drop_from_player(sid, dropped);
+                                }
+                                None => self.sync_full_inventory(sid),
+                            }
+                        }
+                        InvTransaction::UseOnEntity { target_eid, action, hotbar_slot } => {
+                            if (0..9).contains(&hotbar_slot) {
+                                if let Some(p) = self.players.get_mut(&sid) {
+                                    p.inventory.held_slot = hotbar_slot as u8;
+                                }
+                            }
+                            if action == entity_use_action::ATTACK {
+                                self.on_attack_entity(sid, target_eid);
+                            }
+                        }
+                        InvTransaction::Mismatch => self.sync_full_inventory(sid),
+                    }
                 }
             }
             (_, id::CLIENT_CACHE_STATUS) => {}
@@ -132,12 +196,13 @@ impl Server {
     }
 
     pub(crate) fn start_game(&mut self, sid: SessionId) {
-        let Some(p) = self.players.get_mut(&sid) else { return };
-        let world = &self.worlds.worlds[p.world];
-        let mut spawn = world.spawn;
-        if !(-64..=320).contains(&spawn[1]) {
-            spawn[1] = 100;
-        }
+        self.load_player_state(sid);
+        let Some(p_world) = self.players.get(&sid).map(|p| p.world) else { return };
+        let spawn = self.worlds.worlds[p_world].safe_spawn(&self.gd);
+        let time = self.worlds.worlds[p_world].time as i32;
+
+        let nametag = self.nametag_of(&self.players[&sid]);
+        let p = self.players.get_mut(&sid).unwrap();
         p.pos = [spawn[0] as f32 + 0.5, spawn[1] as f32 + 1.62, spawn[2] as f32 + 0.5];
         p.out.push(self.gd.jigsaw_structures.clone());
         p.out.push(self.gd.voxel_shapes.clone());
@@ -149,7 +214,7 @@ impl Server {
             yaw: 0.0,
             spawn,
             difficulty: self.cfg.difficulty,
-            time: world.time as i32,
+            time,
             world_name: &self.cfg.motd,
             software: &self.software,
             block_definitions: &self.gd.block_definitions,
@@ -159,12 +224,10 @@ impl Server {
         p.out.push(self.gd.actor_identifiers.clone());
         p.out.push(self.gd.biome_definitions.clone());
         p.out.push(self.gd.creative_content.clone());
-        p.out.push(protocol::update_attributes(p.entity_id));
-        p.out.push(protocol::set_actor_data(p.entity_id, &p.name));
-        p.out.push(protocol::empty_inventory(0, 36)); // main inventory
-        p.out.push(protocol::empty_inventory(119, 1)); // off hand
-        p.out.push(protocol::empty_inventory(120, 4)); // armor
+        p.out.push(protocol::update_attributes_health(p.entity_id, p.health));
+        p.out.push(protocol::set_actor_data_state(p.entity_id, &nametag, &p.actor_state));
         p.state = State::PreSpawn;
+        self.sync_full_inventory(sid);
         self.send_pre_spawn_players(sid);
         self.send_available_commands(sid);
         let p = self.players.get_mut(&sid).unwrap();
@@ -178,4 +241,39 @@ pub(crate) fn jwt_payload(token: &[u8]) -> Option<serde_json::Value> {
     let part = s.split('.').nth(1)?;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(part.trim_end_matches('=')).ok()?;
     serde_json::from_slice(&bytes).ok()
+}
+
+/// Extracts `(displayName, XUID, identityUUID)` from the Xbox/OpenID login auth JSON if present.
+fn extract_auth_claims(auth_json: &[u8]) -> (Option<String>, String, Option<String>) {
+    let Ok(v) = serde_json::from_slice::<serde_json::Value>(auth_json) else {
+        return (None, String::new(), None);
+    };
+    // Modern Token (1.21.50+) or legacy Certificate chain
+    if let Some(tok) = v["Token"].as_str().filter(|t| !t.is_empty()) {
+        if let Some(claims) = jwt_payload(tok.as_bytes()) {
+            let name = claims["xname"].as_str().filter(|s| !s.is_empty()).map(str::to_string);
+            let xuid = claims["xid"].as_str().unwrap_or("").to_string();
+            return (name, xuid, None);
+        }
+    }
+    if let Some(cert_str) = v["Certificate"].as_str() {
+        if let Ok(cert) = serde_json::from_str::<serde_json::Value>(cert_str) {
+            if let Some(chain) = cert["chain"].as_array() {
+                for link in chain {
+                    if let Some(s) = link.as_str() {
+                        if let Some(p) = jwt_payload(s.as_bytes()) {
+                            let extra = &p["extraData"];
+                            if extra.is_object() {
+                                let name = extra["displayName"].as_str().filter(|n| !n.is_empty()).map(str::to_string);
+                                let xuid = extra["XUID"].as_str().unwrap_or("").to_string();
+                                let id = extra["identity"].as_str().filter(|u| !u.is_empty()).map(str::to_string);
+                                return (name, xuid, id);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    (None, String::new(), None)
 }

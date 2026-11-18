@@ -1,10 +1,13 @@
-//! Game layer: player sessions, login flow and chunk streaming. Single-threaded tick loop.
+//! Game layer: player sessions, login flow, entities, combat, moderation and chunk streaming.
 
 mod blocks;
 mod chunks;
+mod combat;
 mod commands;
 mod handler;
 mod inventory;
+mod items;
+mod moderation;
 mod players;
 mod skin;
 
@@ -12,9 +15,8 @@ use crate::config::Config;
 
 use ceres_codec::binary::{R, Res};
 use ceres_net::transport::{NetEvent, SessionId, Transport};
-use ceres_protocol::{self as protocol, PlayerInfo, id, play_status};
-use ceres_world::GameData;
-use ceres_world::WorldManager;
+use ceres_protocol::{self as protocol, ActorState, PlayerInfo, id, play_status};
+use ceres_world::{GameData, WorldManager};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
@@ -42,6 +44,14 @@ pub(crate) struct Player {
     /// set at login; what other clients need to draw this player
     info: Option<PlayerInfo>,
     inventory: inventory::Inventory,
+    actor_state: ActorState,
+    flying: bool,
+    last_swing_tick: u64,
+    health: f32,
+    dead: bool,
+    hurt_cooldown: u8,
+    fall_start_y: Option<f32>,
+    spawn_point: Option<(usize, [i32; 3])>,
     /// protocol game mode: 0 survival, 1 creative, 2 adventure, 6 spectator
     gamemode: i32,
     op: bool,
@@ -52,6 +62,8 @@ pub(crate) struct Player {
     sent: HashSet<(i32, i32)>,
     queue: VecDeque<(i32, i32)>,
     spawn_sent: bool,
+    pkt_sec: u64,
+    pkt_count: u32,
     out: Vec<Vec<u8>>,
     close: Option<String>,
 }
@@ -64,8 +76,12 @@ pub struct Server {
     /// which transport owns which session
     owner: HashMap<SessionId, usize>,
     players: HashMap<SessionId, Player>,
+    items: Vec<items::ItemEntity>,
+    moderation: moderation::Moderation,
     next_entity_id: i64,
     ticks: u64,
+    tick_ms: VecDeque<f32>,
+    started_at: Instant,
     /// lowercase names from ops.txt
     ops: HashSet<String>,
     console: std::sync::mpsc::Receiver<String>,
@@ -83,8 +99,12 @@ impl Server {
             transports,
             owner: HashMap::new(),
             players: HashMap::new(),
+            items: Vec::new(),
+            moderation: moderation::Moderation::load(),
             next_entity_id: 1,
             ticks: 0,
+            tick_ms: VecDeque::with_capacity(100),
+            started_at: Instant::now(),
             ops: load_ops(),
             console: spawn_console(),
             software: format!("Ceres-RS {}", env!("CARGO_PKG_VERSION")),
@@ -145,6 +165,14 @@ impl Server {
                             rot: [0.0; 3],
                             info: None,
                             inventory: Default::default(),
+                            actor_state: Default::default(),
+                            flying: false,
+                            last_swing_tick: 0,
+                            health: 20.0,
+                            dead: false,
+                            hurt_cooldown: 0,
+                            fall_start_y: None,
+                            spawn_point: None,
                             gamemode: self.cfg.gamemode,
                             op: false,
                             teleport_to: None,
@@ -153,15 +181,22 @@ impl Server {
                             sent: HashSet::new(),
                             queue: VecDeque::new(),
                             spawn_sent: false,
+                            pkt_sec: 0,
+                            pkt_count: 0,
                             out: Vec::new(),
                             close: None,
                         },
                     );
                 }
                 NetEvent::Packet(sid, payload) => {
+                    if payload.len() > self.cfg.max_batch_bytes {
+                        eprintln!("[Net] session {sid}: oversized batch ({} bytes)", payload.len());
+                        self.kick(sid, "Pacote grande demais");
+                        continue;
+                    }
                     if let Err(e) = self.handle_batch(sid, &payload) {
                         eprintln!("[Net] session {sid}: {e}");
-                        self.kick(sid, "Bad packet");
+                        self.kick(sid, "Pacote inválido");
                     }
                 }
                 NetEvent::Disconnected(sid, reason) => {
@@ -183,14 +218,14 @@ impl Server {
         self.transports.get_mut(ti)
     }
 
-    fn kick(&mut self, sid: SessionId, msg: &str) {
+    pub(crate) fn kick(&mut self, sid: SessionId, msg: &str) {
         if let Some(p) = self.players.get_mut(&sid) {
             p.out.push(protocol::disconnect(msg));
             p.close = Some(msg.to_string());
         }
     }
 
-    fn update_status(&mut self) {
+    pub(crate) fn update_status(&mut self) {
         let online = self.players.values().filter(|p| p.state == State::Spawned).count();
         let (motd, max) = (self.cfg.motd.clone(), self.cfg.max_players);
         for t in self.transports.iter_mut() {
@@ -199,8 +234,23 @@ impl Server {
     }
 
     fn handle_batch(&mut self, sid: SessionId, payload: &[u8]) -> Res<()> {
-        let Some(p) = self.players.get(&sid) else { return Ok(()) };
-        let packets = protocol::decode_batch(payload, p.compression)?;
+        let sec = self.started_at.elapsed().as_secs();
+        let max_rate = self.cfg.max_packets_per_sec;
+        let compression = {
+            let Some(p) = self.players.get_mut(&sid) else { return Ok(()) };
+            if p.pkt_sec != sec {
+                p.pkt_sec = sec;
+                p.pkt_count = 0;
+            }
+            p.compression
+        };
+        let packets = protocol::decode_batch(payload, compression)?;
+        if let Some(p) = self.players.get_mut(&sid) {
+            p.pkt_count = p.pkt_count.saturating_add(packets.len() as u32);
+            if p.pkt_count > max_rate {
+                return Err(format!("packet flood ({}/s > {max_rate}/s)", p.pkt_count));
+            }
+        }
         for pk in packets {
             self.handle_packet(sid, &pk)?;
         }
@@ -245,24 +295,19 @@ impl Server {
     pub(crate) fn save_ops(&self) {
         let mut names: Vec<&String> = self.ops.iter().collect();
         names.sort();
-        let text: String = names
-            .iter()
-            .map(|n| {
-                format!(
-                    "{n}
-"
-                )
-            })
-            .collect();
+        let text: String = names.iter().map(|n| format!("{n}\n")).collect();
         if let Err(e) = std::fs::write(OPS_FILE, text) {
             eprintln!("[Server] could not write {OPS_FILE}: {e}");
         }
     }
 
-    /// Saves every world, disconnects everyone and exits.
+    /// Saves every world and player, disconnects everyone and exits.
     pub(crate) fn shutdown(&mut self, reason: &str) -> ! {
-        println!("[Server] stopping: saving worlds...");
+        println!("[Server] stopping: saving worlds and players...");
         self.save_worlds();
+        for w in self.worlds.worlds.iter_mut() {
+            let _ = w.save_level_dat();
+        }
         let sids: Vec<SessionId> = self.players.keys().copied().collect();
         for sid in sids {
             self.kick(sid, reason);

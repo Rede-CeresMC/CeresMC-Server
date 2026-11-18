@@ -33,12 +33,12 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] Atributos padrão (vida, fome, velocidade...)
 - [x] Abilities: voo no criativo
 - [x] 🔴 Gamemode por jogador (hoje é um só para o servidor)
-- [ ] 🟠 Animações: braço balançando (Animate), agachar, correr, nadar (SetActorData por jogador)
-- [ ] 🟠 Item na mão visível para os outros (MobEquipment)
-- [ ] 🟠 Armadura visível para os outros (MobArmorEquipment)
-- [ ] 🟠 Nametag, cor e permissão de operador
-- [ ] 🟢 Emotes
-- [ ] 🟢 Trocar skin em jogo (PlayerSkin)
+- [x] 🟠 Animações: braço balançando (Animate), agachar, correr, nadar (SetActorData por jogador)
+- [x] 🟠 Item na mão visível para os outros (MobEquipment)
+- [x] 🟠 Armadura visível para os outros (MobArmorEquipment)
+- [x] 🟠 Nametag, cor e permissão de operador
+- [x] 🟢 Emotes
+- [x] 🟢 Trocar skin em jogo (PlayerSkin)
 
 ### Blocos
 
@@ -46,26 +46,26 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] Colocar (InventoryTransaction), com alcance e espaço livre
 - [x] Reenviar o bloco real quando a ação é recusada
 - [x] Salvar no LevelDB a cada 5 s (subchunk v8, chunk v42)
-- [ ] 🔴 Orientação ao colocar: escadas, troncos, baús, fornalhas, portas, lajes
-- [ ] 🔴 Blocos substituíveis: grama alta, água, lava, neve fina, ar
-- [ ] 🟠 Colisão: não colocar dentro de jogadores e entidades
+- [x] 🔴 Orientação ao colocar: escadas, troncos, baús, fornalhas, portas, lajes
+- [x] 🔴 Blocos substituíveis: grama alta, água, lava, neve fina, ar
+- [x] 🟠 Colisão: não colocar dentro de jogadores e entidades
 - [ ] 🟠 Blocos de duas partes: portas, camas, plantas altas
-- [ ] 🟠 Lajes duplas, encaixe de cercas, muros e painéis de vidro (estados de conexão)
+- [~] 🟠 Lajes duplas ✔, encaixe de cercas, muros e painéis de vidro (estados de conexão)
 - [ ] 🟠 Tempo de quebra no survival (dureza, ferramenta, eficiência, efeitos)
-- [ ] 🟠 Rachaduras ao quebrar (LevelEvent) e partículas/sons de quebrar e colocar
-- [ ] 🟢 Pegar bloco com o botão do meio (BlockPickRequest)
+- [x] 🟠 Rachaduras ao quebrar (LevelEvent) e partículas/sons de quebrar e colocar
+- [x] 🟢 Pegar bloco com o botão do meio (BlockPickRequest)
 
 ### Inventário
 
 - [x] Menu criativo (2221 itens, 128 grupos)
 - [x] Abrir e fechar o próprio inventário
 - [x] ItemStackRequest: criar, mover, dividir, trocar, descartar, com resposta por slot
-- [ ] 🔴 Itens reais no servidor: id, meta, NBT, tamanho máximo da pilha
-- [ ] 🔴 Item na mão (hotbar selecionada, MobEquipment)
-- [ ] 🟠 Inventário de sobrevivência com regras (sem criar itens do nada)
-- [ ] 🟠 Armadura e mão secundária
-- [ ] 🟠 Salvar o inventário do jogador (formato vanilla, no LevelDB)
-- [ ] 🟠 Largar itens no chão (depende de entidades de item)
+- [x] 🔴 Itens reais no servidor: id, meta, NBT, tamanho máximo da pilha
+- [x] 🔴 Item na mão (hotbar selecionada, MobEquipment)
+- [x] 🟠 Inventário de sobrevivência com regras (sem criar itens do nada)
+- [x] 🟠 Armadura e mão secundária
+- [x] 🟠 Salvar o inventário do jogador (em NBT por jogador)
+- [x] 🟠 Largar itens no chão (entidades de item com física, fusão e coleta)
 - [ ] 🟢 Craft 2x2 no inventário
 
 ### Comandos
@@ -73,36 +73,36 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] 🔴 Ler CommandRequest e responder (CommandOutput / mensagem)
 - [x] 🔴 AvailableCommands: lista e autocompletar ao digitar `/`
 - [x] `/gamemode`, `/tp`, `/list`, `/say`, `/help`
-- [ ] 🔴 `/give` (depende de itens reais no inventário)
-- [x] 🔴 `/world` (trocar de mundo) e `/worlds` (listar)
-- [~] 🟠 `/time` ✔, `/weather`, `/kill`, `/clear`, `/effect`, `/setworldspawn`, `/spawnpoint`
-- [~] 🟠 `/op`, `/deop`, `/stop`, `/save-all` ✔ · `/kick`, `/ban`, `/pardon`, `/whitelist`
-- [ ] 🟠 Seletores: `@p`, `@a`, `@s`, `@r`, `@e` com argumentos
+- [x] 🔴 `/give` (itens reais no inventário)
+- [x] 🔴 `/world` (trocar/criar mundo) e `/worlds` (listar)
+- [~] 🟠 `/time` ✔, `/weather` ✔, `/kill` ✔, `/clear` ✔, `/setworldspawn` ✔, `/spawnpoint` ✔, `/difficulty` ✔ · `/effect`
+- [x] 🟠 `/op`, `/deop`, `/stop`, `/save-all`, `/kick`, `/ban`, `/pardon`, `/whitelist`
+- [~] 🟠 Seletores: `@p`, `@a`, `@s`, `@r` ✔ · `@e` com argumentos
 - [x] 🟢 Comandos pelo console do servidor (stdin)
 
 ### Segurança e conexão
 
 - [ ] 🔴 Verificar a cadeia de login Xbox (JWT, chaves da Mojang/OpenID)
-- [ ] 🔴 XUID e UUID reais do jogador
+- [~] 🔴 XUID e UUID lidos dos claims de login (falta validar assinatura)
 - [ ] 🟠 Criptografia no RakNet (ECDH P-384 + AES-256-CTR)
-- [ ] 🟠 Identidade do NetherNet persistente (chave salva em disco)
+- [x] 🟠 Identidade do NetherNet persistente (chave salva em disco)
 - [ ] 🟠 TLS na sinalização do NetherNet (o cliente tenta TLS primeiro)
-- [ ] 🟠 Proteção contra flood: limite de pacotes por segundo, tamanho máximo de batch
-- [ ] 🟠 Desconectar com motivo traduzido (kick, servidor cheio, versão errada)
+- [x] 🟠 Proteção contra flood: limite de pacotes por segundo, tamanho máximo de batch
+- [x] 🟠 Desconectar com motivo traduzido (kick, ban, whitelist, servidor cheio, versão errada)
 - [ ] 🟢 Descoberta do NetherNet na LAN (UDP 7551)
-- [ ] 🟢 Ping RakNet com contagem real e `server-portv6`
+- [x] 🟢 Ping RakNet com contagem real e `server-portv6`
 
 ### Mundo
 
 - [x] Quebrar/colocar persistentes
 - [x] 🔴 Salvar ao desligar (Ctrl+C / `/stop`) sem perder nada
-- [ ] 🟠 Baús, placas, fornalhas etc. (block entities da chave 0x31) enviados nos chunks
-- [ ] 🟠 Entidades salvas nos chunks (0x32) preservadas ao salvar
-- [ ] 🟠 Dia e noite (SetTime, `doDaylightCycle`)
-- [ ] 🟠 Spawn seguro (achar o chão em vez de y fixo)
-- [ ] 🟠 Trocar de mundo e de dimensão (ChangeDimension, chunks do novo mundo)
-- [ ] 🟢 Criar mundo novo vazio/plano pelo servidor
-- [ ] 🟢 Ler e escrever `level.dat` (spawn, tempo, gamerules)
+- [x] 🟠 Baús, placas, fornalhas etc. (block entities da chave 0x31) enviados nos chunks + edição de placas
+- [x] 🟠 Entidades salvas nos chunks (0x32) preservadas ao salvar
+- [x] 🟠 Dia e noite (SetTime, `doDaylightCycle`)
+- [x] 🟠 Spawn seguro (achar o chão em vez de y fixo)
+- [~] 🟠 Trocar de mundo ✔ e de dimensão (ChangeDimension)
+- [x] 🟢 Criar mundo novo vazio/plano pelo servidor (`/world create`)
+- [x] 🟢 Ler e escrever `level.dat` (spawn, tempo, gamerules)
 
 ---
 
@@ -110,11 +110,11 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 ### Vida e combate
 
-- [ ] Dano: queda, fogo, lava, afogamento, sufocar, vazio, fome
-- [ ] Morte e respawn (tela de morte, cama/âncora, keepInventory)
-- [ ] Regeneração natural, fome, saturação, exaustão
-- [ ] Combate PvP: dano por item, knockback, crítico, cooldown
-- [ ] Armadura: proteção, durabilidade
+- [~] Dano: queda ✔, vazio ✔ · fogo, lava, afogamento, sufocar, fome
+- [x] Morte e respawn (tela de morte, spawnpoint pessoal, keepInventory)
+- [~] Regeneração natural ✔ · fome, saturação, exaustão
+- [x] Combate PvP: dano por item, knockback, crítico, cooldown
+- [~] Armadura: proteção ✔ · durabilidade
 - [ ] Efeitos de poção (MobEffect), duração e amplificador
 - [ ] Encantamentos: efeitos em dano, quebra, proteção, durabilidade
 - [ ] Comida e itens consumíveis (comer, beber, demora de uso)

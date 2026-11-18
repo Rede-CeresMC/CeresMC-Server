@@ -15,15 +15,16 @@ Servidor de **Minecraft: Bedrock Edition** escrito em **Rust**, da Rede CeresMC.
 
 ## O que já funciona
 
-- Aparece na lista de servidores (RakNet e NetherNet).
-- Login completo até o spawn, pelos dois transportes.
-- Lê mundos vanilla (LevelDB) e envia os chunks; o chunk já comprimido fica em cache e é compartilhado entre jogadores.
-- Vários mundos carregados a partir de `worlds/`.
-- Multiplayer básico: lista de jogadores com skin, ver os outros andando, chat, voo no criativo.
-- Quebrar e colocar blocos, visível para todos e salvo no LevelDB a cada 5 segundos.
-- Inventário criativo: abrir, pegar itens do menu criativo, mover, dividir, trocar e descartar.
-- Comandos com autocompletar: `/help`, `/list`, `/worlds`, `/say`, `/gamemode`, `/tp`, `/world`, `/time`, `/save-all`, `/stop`, `/op`, `/deop`. Operadores ficam em `ops.txt`, mas só valem depois da verificação Xbox (até lá, `allow-unverified-ops=on` liga isso para testes locais, sabendo que qualquer um pode usar qualquer nome). O console sempre aceita todos os comandos.
-- Ctrl+C ou `/stop` salvam os mundos antes de desligar.
+- Aparece na lista de servidores (RakNet e NetherNet, com identidade persistente em `nethernet.key`).
+- Login completo até o spawn, pelos dois transportes, com proteção contra flood, bans e whitelist.
+- Lê mundos vanilla (LevelDB) com block entities (`0x31`: placas etc.) e envia os chunks; o chunk já comprimido fica em cache e é compartilhado entre jogadores.
+- Vários mundos carregados a partir de `worlds/`, criação automática/dinâmica de mundos planos e void (`/world create`), ciclo dia/noite, clima e salvamento de `level.dat`.
+- Multiplayer completo: lista de jogadores com skin (e troca de skin em jogo), animações de braço, agachar/correr/nadar/planar, emotes, nametag `[OP]`, item na mão (`MobEquipment`) e armadura (`MobArmorEquipment`).
+- Blocos: quebrar e colocar com orientação (escadas, troncos, lajes, lajes duplas, fornalhas/baús, alçapões, tochas, placas editáveis), blocos substituíveis, interação (portas/alçapões/portões/alavancas), colisão com jogadores, partículas/sons, botão do meio (`BlockPickRequest`) e salvamento no LevelDB.
+- Inventário real e entidades de item: IDs, meta, NBT, pilha máxima, regras de sobrevivência, armadura e mão secundária, persistência em `players/`, largar itens (`Q` ou arrastar) com física, fusão de pilhas e coleta automática.
+- Vida, dano e PvP: combate corpo a corpo com dano por arma, redução de armadura, crítico, knockback, dano de queda/vazio, regeneração natural, morte e respawn.
+- Comandos com autocompletar e seletores (`@s`, `@p`, `@a`, `@r`): `/help`, `/list`, `/worlds`, `/tps`, `/say`, `/gamemode`, `/tp`, `/give`, `/clear`, `/kill`, `/world`, `/time`, `/weather`, `/difficulty`, `/setworldspawn`, `/spawnpoint`, `/gamerule`, `/title`, `/toast`, `/transfer`, `/kick`, `/ban`, `/pardon`, `/banlist`, `/whitelist`, `/save-all`, `/stop`, `/op`, `/deop`.
+- Ctrl+C ou `/stop` salvam mundos, `level.dat` e jogadores antes de desligar.
 
 ## Compilar e rodar
 

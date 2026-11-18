@@ -1,6 +1,8 @@
-//! Chunk streaming, the game tick and flushing queued packets.
+//! Chunk streaming, world daylight/weather ticking, survival/entity ticks and packet flushing.
 
 use super::*;
+use ceres_protocol::level_event;
+use ceres_world::Weather;
 
 /// Changed chunks are written to disk every 5 seconds.
 const SAVE_INTERVAL_TICKS: u64 = 100;
@@ -35,11 +37,46 @@ impl Server {
         ));
     }
 
+    fn tick_worlds(&mut self) {
+        let mut time_syncs: Vec<(usize, i32)> = Vec::new();
+        let mut weather_cleared: Vec<usize> = Vec::new();
+
+        for (wi, w) in self.worlds.worlds.iter_mut().enumerate() {
+            if w.do_daylight_cycle {
+                w.time = w.time.wrapping_add(1);
+                if self.ticks % 200 == 0 {
+                    w.mark_level_dat_dirty();
+                    time_syncs.push((wi, w.time as i32));
+                }
+            }
+            if w.weather != Weather::Clear && w.weather_ticks > 0 {
+                w.weather_ticks -= 1;
+                if w.weather_ticks == 0 {
+                    w.weather = Weather::Clear;
+                    weather_cleared.push(wi);
+                }
+            }
+        }
+
+        for (wi, t) in time_syncs {
+            self.broadcast(&protocol::set_time(t), |_, p| p.world == wi);
+        }
+        for wi in weather_cleared {
+            self.broadcast(&protocol::level_event(level_event::STOP_THUNDER, [0.0; 3], 0), |_, p| p.world == wi);
+            self.broadcast(&protocol::level_event(level_event::STOP_RAIN, [0.0; 3], 0), |_, p| p.world == wi);
+        }
+    }
+
     pub(crate) fn tick(&mut self) {
+        let tick_start = Instant::now();
         self.ticks += 1;
         if self.ticks % SAVE_INTERVAL_TICKS == 0 {
             self.save_worlds();
         }
+        self.tick_worlds();
+        self.tick_players_survival();
+        self.tick_items();
+
         let sids: Vec<SessionId> = self.players.keys().copied().collect();
         for sid in sids {
             let Some(p) = self.players.get_mut(&sid) else { continue };
@@ -81,6 +118,12 @@ impl Server {
                 .collect();
             w.evict_except(|x, z| views.iter().any(|((cx, cz), r)| (x - cx).pow(2) + (z - cz).pow(2) <= r * r));
         }
+
+        let ms = tick_start.elapsed().as_secs_f32() * 1000.0;
+        if self.tick_ms.len() >= 100 {
+            self.tick_ms.pop_front();
+        }
+        self.tick_ms.push_back(ms);
     }
 
     pub(crate) fn flush_players(&mut self) {

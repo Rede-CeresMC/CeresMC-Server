@@ -1,7 +1,8 @@
-//! Player list, AddPlayer, movement and abilities.
+//! Player list, AddPlayer, movement, abilities, animations, emotes, skins, health/combat and item entities.
 
 #![allow(unused_imports)]
 
+use crate::packets::inventory::{INVENTORY_CONTENT, ItemDesc, write_item};
 use crate::{COMPRESSION_ZLIB, VERSION, id, packet};
 use ceres_codec::binary::{R, Res, W};
 
@@ -9,9 +10,77 @@ pub mod mp {
     pub const TEXT: u32 = 0x09;
     pub const ADD_PLAYER: u32 = 0x0c;
     pub const REMOVE_ACTOR: u32 = 0x0e;
+    pub const ADD_ITEM_ACTOR: u32 = 0x0f;
+    pub const TAKE_ITEM_ACTOR: u32 = 0x11;
+    pub const MOVE_ACTOR_ABSOLUTE: u32 = 0x12;
     pub const MOVE_PLAYER: u32 = 0x13;
+    pub const ACTOR_EVENT: u32 = 0x1b;
+    pub const SET_ACTOR_MOTION: u32 = 0x28;
+    pub const ANIMATE: u32 = 0x2c;
+    pub const RESPAWN: u32 = 0x2d;
     pub const PLAYER_LIST: u32 = 0x3f;
+    pub const PLAYER_SKIN: u32 = 0x5d;
+    pub const EMOTE: u32 = 0x8a;
     pub const UPDATE_ABILITIES: u32 = 0xbb;
+}
+
+pub mod actor_event {
+    pub const HURT_ANIMATION: u8 = 2;
+    pub const DEATH_ANIMATION: u8 = 3;
+    pub const RESPAWN: u8 = 18;
+}
+
+pub mod respawn_state {
+    pub const SEARCHING_FOR_SPAWN: u8 = 0;
+    pub const READY_TO_SPAWN: u8 = 1;
+    pub const CLIENT_READY_TO_SPAWN: u8 = 2;
+}
+
+/// Synced entity state flags for a player (EntityMetadataFlags).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ActorState {
+    pub sneaking: bool,
+    pub sprinting: bool,
+    pub swimming: bool,
+    pub gliding: bool,
+    pub crawling: bool,
+    pub emoting: bool,
+}
+
+impl ActorState {
+    fn flags(&self) -> (i64, i64) {
+        let mut f1: i64 = (1 << 14) | (1 << 15) | (1 << 35) | (1 << 48) | (1 << 49);
+        let mut f2: i64 = 0;
+        if self.sneaking {
+            f1 |= 1 << 1;
+        }
+        if self.sprinting {
+            f1 |= 1 << 3;
+        }
+        if self.gliding {
+            f1 |= 1 << 32;
+        }
+        if self.swimming {
+            f1 |= 1 << 57;
+        }
+        if self.emoting {
+            f2 |= 1 << (92 - 64);
+        }
+        if self.crawling {
+            f2 |= 1 << (114 - 64);
+        }
+        (f1, f2)
+    }
+
+    pub fn hitbox_height(&self) -> f32 {
+        if self.swimming || self.gliding || self.crawling {
+            0.6
+        } else if self.sneaking {
+            1.5
+        } else {
+            1.8
+        }
+    }
 }
 
 /// Everything another client needs to draw a player.
@@ -111,9 +180,9 @@ pub fn update_abilities(a: &Abilities) -> Vec<u8> {
     packet(mp::UPDATE_ABILITIES, |w| write_abilities(w, a))
 }
 
-fn player_metadata(w: &mut W, name: &str) {
-    let flags: i64 = (1 << 14) | (1 << 15) | (1 << 35) | (1 << 48) | (1 << 49);
-    w.uvarint(5);
+fn player_metadata(w: &mut W, name: &str, state: &ActorState) {
+    let (flags, flags2) = state.flags();
+    w.uvarint(6);
     // key, type, type again (that's how putEntityMetadata writes it)
     w.uvarint(0);
     w.uvarint(7);
@@ -134,11 +203,27 @@ fn player_metadata(w: &mut W, name: &str) {
     w.uvarint(54);
     w.uvarint(3);
     w.u8(3);
-    w.f32_le(1.8);
+    w.f32_le(state.hitbox_height());
+    w.uvarint(92); // FLAGS2
+    w.uvarint(7);
+    w.u8(7);
+    w.varlong(flags2);
 }
 
 /// `feet` is the position of the feet (not the eyes).
-pub fn add_player(p: &PlayerInfo, feet: [f32; 3], pitch: f32, yaw: f32, head_yaw: f32, gamemode: i32) -> Vec<u8> {
+#[allow(clippy::too_many_arguments)]
+pub fn add_player(
+    p: &PlayerInfo,
+    feet: [f32; 3],
+    pitch: f32,
+    yaw: f32,
+    head_yaw: f32,
+    gamemode: i32,
+    held: &ItemDesc,
+    nametag: &str,
+    state: &ActorState,
+    abilities: &Abilities,
+) -> Vec<u8> {
     packet(mp::ADD_PLAYER, |w| {
         w.bytes(&p.uuid);
         w.string(&p.name);
@@ -153,20 +238,12 @@ pub fn add_player(p: &PlayerInfo, feet: [f32; 3], pitch: f32, yaw: f32, head_yaw
         w.f32_le(pitch);
         w.f32_le(yaw);
         w.f32_le(head_yaw);
-        // held item: air
-        w.bytes(&[0, 0, 0, 0]);
-        w.uvarint(0);
-        w.bool(false);
-        w.uvarint(0);
-        w.string("");
+        write_item(w, held);
         w.varint(gamemode);
-        player_metadata(w, &p.name);
+        player_metadata(w, nametag, state);
         w.uvarint(0); // synced int properties
         w.uvarint(0); // synced float properties
-        write_abilities(
-            w,
-            &Abilities { entity_id: p.entity_id, operator: false, creative: false, spectator: false, flying: false },
-        );
+        write_abilities(w, abilities);
         w.uvarint(0); // links
         w.bool(false); // passenger of block
         w.string(&p.device_id);
@@ -211,37 +288,36 @@ pub fn move_player(
 
 pub const UPDATE_ATTRIBUTES: u32 = 0x1d;
 pub const SET_ACTOR_DATA: u32 = 0x27;
-pub const INVENTORY_CONTENT: u32 = 0x31;
 
 const F32_MAX: f32 = f32::MAX;
 
 /// Default player attributes (values from PocketMine's AttributeFactory). Without
 /// minecraft:movement the client walks at speed 0 and can only fly.
-pub fn update_attributes(entity_id: i64) -> Vec<u8> {
-    let attrs: [(&str, f32, f32, f32); 12] = [
-        ("minecraft:absorption", 0.0, F32_MAX, 0.0),
-        ("minecraft:player.saturation", 0.0, 20.0, 20.0),
-        ("minecraft:player.exhaustion", 0.0, 5.0, 0.0),
-        ("minecraft:knockback_resistance", 0.0, 1.0, 0.0),
-        ("minecraft:health", 0.0, 20.0, 20.0),
-        ("minecraft:movement", 0.0, F32_MAX, 0.1),
-        ("minecraft:player.hunger", 0.0, 20.0, 20.0),
-        ("minecraft:player.level", 0.0, 24791.0, 0.0),
-        ("minecraft:player.experience", 0.0, 1.0, 0.0),
-        ("minecraft:underwater_movement", 0.0, F32_MAX, 0.02),
-        ("minecraft:luck", -1024.0, 1024.0, 0.0),
-        ("minecraft:lava_movement", 0.0, F32_MAX, 0.02),
+pub fn update_attributes_health(entity_id: i64, health: f32) -> Vec<u8> {
+    let attrs: [(&str, f32, f32, f32, f32); 12] = [
+        ("minecraft:absorption", 0.0, F32_MAX, 0.0, 0.0),
+        ("minecraft:player.saturation", 0.0, 20.0, 20.0, 20.0),
+        ("minecraft:player.exhaustion", 0.0, 5.0, 0.0, 0.0),
+        ("minecraft:knockback_resistance", 0.0, 1.0, 0.0, 0.0),
+        ("minecraft:health", 0.0, 20.0, health.clamp(0.0, 20.0), 20.0),
+        ("minecraft:movement", 0.0, F32_MAX, 0.1, 0.1),
+        ("minecraft:player.hunger", 0.0, 20.0, 20.0, 20.0),
+        ("minecraft:player.level", 0.0, 24791.0, 0.0, 0.0),
+        ("minecraft:player.experience", 0.0, 1.0, 0.0, 0.0),
+        ("minecraft:underwater_movement", 0.0, F32_MAX, 0.02, 0.02),
+        ("minecraft:luck", -1024.0, 1024.0, 0.0, 0.0),
+        ("minecraft:lava_movement", 0.0, F32_MAX, 0.02, 0.02),
     ];
     packet(UPDATE_ATTRIBUTES, |w| {
         w.uvarlong(entity_id as u64);
         w.uvarint(attrs.len() as u32);
-        for (name, min, max, value) in attrs {
+        for (name, min, max, value, def) in attrs {
             w.f32_le(min);
             w.f32_le(max);
             w.f32_le(value);
             w.f32_le(min); // default min
             w.f32_le(max); // default max
-            w.f32_le(value); // default
+            w.f32_le(def); // default
             w.string(name);
             w.uvarint(0); // modifiers
         }
@@ -249,20 +325,28 @@ pub fn update_attributes(entity_id: i64) -> Vec<u8> {
     })
 }
 
-/// The player's own entity metadata (flags such as gravity and collision).
-pub fn set_actor_data(entity_id: i64, name: &str) -> Vec<u8> {
+pub fn update_attributes(entity_id: i64) -> Vec<u8> {
+    update_attributes_health(entity_id, 20.0)
+}
+
+/// Entity metadata with custom nametag and state flags (sneak, sprint, swim, glide, crawl, emote).
+pub fn set_actor_data_state(entity_id: i64, nametag: &str, state: &ActorState) -> Vec<u8> {
     packet(SET_ACTOR_DATA, |w| {
         w.uvarlong(entity_id as u64);
-        player_metadata(w, name);
+        player_metadata(w, nametag, state);
         w.uvarint(0); // synced int properties
         w.uvarint(0); // synced float properties
         w.uvarlong(0); // tick
     })
 }
 
+pub fn set_actor_data(entity_id: i64, name: &str) -> Vec<u8> {
+    set_actor_data_state(entity_id, name, &ActorState::default())
+}
+
 /// A whole inventory window filled with air.
 pub fn empty_inventory(window_id: u32, slots: usize) -> Vec<u8> {
-    const AIR: [u8; 8] = [0; 8]; // id, count, meta, no stack id, block id 0, no extra data
+    const AIR: [u8; 8] = [0; 8];
     packet(INVENTORY_CONTENT, |w| {
         w.uvarint(window_id);
         w.uvarint(slots as u32);
@@ -272,5 +356,220 @@ pub fn empty_inventory(window_id: u32, slots: usize) -> Vec<u8> {
         w.u8(0); // container name: id 0
         w.bool(false); // no dynamic id
         w.bytes(&AIR); // storage item
+    })
+}
+
+/// AnimatePacket (protocol 2225): u8 action, uvarlong runtimeId, f32 data, optional string, u8 handSlot.
+pub fn animate(entity_id: i64, action: u8) -> Vec<u8> {
+    packet(mp::ANIMATE, |w| {
+        w.u8(action);
+        w.uvarlong(entity_id as u64);
+        w.f32_le(0.0);
+        w.bool(false); // no swing source
+        w.u8(0); // HandSlot::MAIN_HAND
+    })
+}
+
+pub fn animate_swing(entity_id: i64) -> Vec<u8> {
+    animate(entity_id, 1)
+}
+
+pub fn read_animate(r: &mut R) -> Res<(u8, i64)> {
+    let action = r.u8()?;
+    let eid = r.uvarlong()? as i64;
+    let _data = r.f32_le()?;
+    if r.bool()? {
+        r.string()?;
+    }
+    let _hand = r.u8()?;
+    Ok((action, eid))
+}
+
+/// EmotePacket (0x8a).
+pub fn emote(entity_id: i64, emote_id: &str, ticks: u32, xuid: &str, platform_id: &str, flags: u8) -> Vec<u8> {
+    packet(mp::EMOTE, |w| {
+        w.uvarlong(entity_id as u64);
+        w.string(emote_id);
+        w.uvarint(ticks);
+        w.string(xuid);
+        w.string(platform_id);
+        w.u8(flags);
+    })
+}
+
+pub fn read_emote(r: &mut R) -> Res<(String, u32, u8)> {
+    let _eid = r.uvarlong()?;
+    let emote_id = r.string()?;
+    let ticks = r.uvarint()?;
+    let _xuid = r.string()?;
+    let _platform = r.string()?;
+    let flags = r.u8()?;
+    Ok((emote_id, ticks, flags))
+}
+
+/// Advances `r` past one CommonTypes::getSkin() payload and returns its exact wire bytes.
+pub fn read_skin_bytes<'a>(r: &mut R<'a>) -> Res<&'a [u8]> {
+    let start = r.p;
+    let skip_str = |r: &mut R<'a>| -> Res<()> {
+        let n = r.uvarint()? as usize;
+        r.take(n)?;
+        Ok(())
+    };
+    let skip_img = |r: &mut R<'a>| -> Res<()> {
+        r.u32_le()?;
+        r.u32_le()?;
+        skip_str(r)
+    };
+    skip_str(r)?; // skinId
+    skip_str(r)?; // resourcePatch
+    skip_img(r)?; // skinImage
+    let anims = r.uvarint()?.min(128);
+    for _ in 0..anims {
+        skip_img(r)?;
+        r.uvarint()?;
+        r.f32_le()?;
+        r.uvarint()?;
+    }
+    skip_img(r)?; // capeImage
+    skip_str(r)?; // geometryData
+    skip_str(r)?; // geometryDataEngineVersion
+    skip_str(r)?; // animationData
+    skip_str(r)?; // capeId
+    skip_str(r)?; // fullSkinId
+    r.u8()?; // armSize
+    r.i32_le()?; // skinColor
+    let pieces = r.uvarint()?.min(128);
+    for _ in 0..pieces {
+        skip_str(r)?;
+        r.i32_le()?;
+        r.take(16)?;
+        r.bool()?;
+        skip_str(r)?;
+    }
+    let tints = r.uvarint()?.min(128);
+    for _ in 0..tints {
+        skip_str(r)?;
+        for _ in 0..4 {
+            r.i32_le()?;
+        }
+    }
+    for _ in 0..5 {
+        r.bool()?;
+    }
+    skip_str(r)?; // trustedSkinFlag
+    skip_str(r)?; // profileHash
+    Ok(&r.b[start..r.p])
+}
+
+/// PlayerSkinPacket (0x5d): returns (skin_wire_bytes, old_name, new_name).
+pub fn read_player_skin(r: &mut R) -> Res<(Vec<u8>, String, String)> {
+    let _uuid = r.take(16)?;
+    let skin = read_skin_bytes(r)?.to_vec();
+    let old_name = r.string()?;
+    let new_name = r.string()?;
+    Ok((skin, old_name, new_name))
+}
+
+pub fn player_skin(uuid: &[u8; 16], skin: &[u8], old_name: &str, new_name: &str) -> Vec<u8> {
+    packet(mp::PLAYER_SKIN, |w| {
+        w.bytes(uuid);
+        w.bytes(skin);
+        w.string(old_name);
+        w.string(new_name);
+    })
+}
+
+/// ActorEventPacket (0x1b): hurt flash, death animation, etc.
+pub fn actor_event(entity_id: i64, event_id: u8, data: i32) -> Vec<u8> {
+    packet(mp::ACTOR_EVENT, |w| {
+        w.uvarlong(entity_id as u64);
+        w.u8(event_id);
+        w.varint(data);
+        w.bool(false); // optional firePosition
+    })
+}
+
+/// SetActorMotionPacket (0x28): knockback / velocity.
+pub fn set_actor_motion(entity_id: i64, motion: [f32; 3]) -> Vec<u8> {
+    packet(mp::SET_ACTOR_MOTION, |w| {
+        w.uvarlong(entity_id as u64);
+        for v in motion {
+            w.f32_le(v);
+        }
+        w.uvarlong(0); // tick
+    })
+}
+
+/// RespawnPacket (0x2d).
+pub fn respawn(pos: [f32; 3], state: u8, entity_id: i64) -> Vec<u8> {
+    packet(mp::RESPAWN, |w| {
+        for v in pos {
+            w.f32_le(v);
+        }
+        w.u8(state);
+        w.uvarlong(entity_id as u64);
+    })
+}
+
+pub fn read_respawn(r: &mut R) -> Res<([f32; 3], u8, i64)> {
+    let pos = [r.f32_le()?, r.f32_le()?, r.f32_le()?];
+    let state = r.u8()?;
+    let eid = r.uvarlong()? as i64;
+    Ok((pos, state, eid))
+}
+
+/// AddItemActorPacket (0x0f): spawns a dropped item entity in the world.
+pub fn add_item_actor(entity_id: i64, item: &ItemDesc, pos: [f32; 3], motion: [f32; 3]) -> Vec<u8> {
+    let mut legacy = item.clone();
+    legacy.stack_id = 0;
+    packet(mp::ADD_ITEM_ACTOR, |w| {
+        w.varlong(entity_id);
+        w.uvarlong(entity_id as u64);
+        write_item(w, &legacy);
+        for v in pos {
+            w.f32_le(v);
+        }
+        for v in motion {
+            w.f32_le(v);
+        }
+        // metadata: affected by gravity + collision, hitbox 0.25 x 0.25
+        let flags: i64 = (1 << 48) | (1 << 49);
+        w.uvarint(3);
+        w.uvarint(0);
+        w.uvarint(7);
+        w.u8(7);
+        w.varlong(flags);
+        w.uvarint(53);
+        w.uvarint(3);
+        w.u8(3);
+        w.f32_le(0.25);
+        w.uvarint(54);
+        w.uvarint(3);
+        w.u8(3);
+        w.f32_le(0.25);
+        w.bool(false); // isFromFishing
+    })
+}
+
+/// TakeItemActorPacket (0x11): plays the item pickup animation toward `taker_eid`.
+pub fn take_item_actor(item_eid: i64, taker_eid: i64) -> Vec<u8> {
+    packet(mp::TAKE_ITEM_ACTOR, |w| {
+        w.uvarlong(item_eid as u64);
+        w.uvarlong(taker_eid as u64);
+    })
+}
+
+/// MoveActorAbsolutePacket (0x12): updates non-player entity position.
+pub fn move_actor_absolute(entity_id: i64, pos: [f32; 3], on_ground: bool, teleport: bool) -> Vec<u8> {
+    packet(mp::MOVE_ACTOR_ABSOLUTE, |w| {
+        w.uvarlong(entity_id as u64);
+        let flags = (on_ground as u8) | ((teleport as u8) << 1);
+        w.u8(flags);
+        for v in pos {
+            w.f32_le(v);
+        }
+        w.u8(0); // pitch
+        w.u8(0); // yaw
+        w.u8(0); // head yaw
     })
 }

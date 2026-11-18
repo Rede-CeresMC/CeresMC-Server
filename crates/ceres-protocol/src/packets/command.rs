@@ -1,13 +1,28 @@
-//! Commands: the list shown to the client (AvailableCommands), requests, and the packets commands
-//! need (game mode, time).
+//! Commands: AvailableCommands, CommandRequest, and server admin packets (time, gamemode, spawn,
+//! difficulty, titles, actionbars, toasts, transfers).
 
 use crate::packet;
+use crate::packets::inventory::write_block_pos;
 use ceres_codec::binary::{R, Res};
 
 pub const SET_TIME: u32 = 0x0a;
+pub const SET_SPAWN_POSITION: u32 = 0x2b;
+pub const SET_DIFFICULTY: u32 = 0x3c;
 pub const SET_PLAYER_GAME_TYPE: u32 = 0x3e;
 pub const AVAILABLE_COMMANDS: u32 = 0x4c;
 pub const COMMAND_REQUEST: u32 = 0x4d;
+pub const TRANSFER: u32 = 0x55;
+pub const SET_TITLE: u32 = 0x58;
+pub const TOAST_REQUEST: u32 = 0xba;
+
+pub mod title_type {
+    pub const CLEAR: i32 = 0;
+    pub const RESET: i32 = 1;
+    pub const TITLE: i32 = 2;
+    pub const SUBTITLE: i32 = 3;
+    pub const ACTIONBAR: i32 = 4;
+    pub const TIMES: i32 = 5;
+}
 
 const ARG_FLAG_VALID: u32 = 0x100000;
 const ARG_FLAG_ENUM: u32 = 0x200000;
@@ -139,4 +154,60 @@ pub fn set_player_game_type(mode: i32) -> Vec<u8> {
 
 pub fn set_time(time: i32) -> Vec<u8> {
     packet(SET_TIME, |w| w.varint(time))
+}
+
+pub fn set_difficulty(difficulty: u32) -> Vec<u8> {
+    packet(SET_DIFFICULTY, |w| w.uvarint(difficulty))
+}
+
+/// SetSpawnPositionPacket (0x2b) for the world spawn.
+pub fn set_world_spawn(pos: [i32; 3]) -> Vec<u8> {
+    packet(SET_SPAWN_POSITION, |w| {
+        w.varint(1); // TYPE_WORLD_SPAWN
+        write_block_pos(w, pos);
+        w.varint(0); // dimension: overworld
+        write_block_pos(w, [i32::MIN, i32::MIN, i32::MIN]);
+    })
+}
+
+/// SetSpawnPositionPacket (0x2b) for a player's personal spawnpoint.
+pub fn set_player_spawn(pos: [i32; 3]) -> Vec<u8> {
+    packet(SET_SPAWN_POSITION, |w| {
+        w.varint(0); // TYPE_PLAYER_SPAWN
+        write_block_pos(w, pos);
+        w.varint(0); // dimension: overworld
+        write_block_pos(w, pos);
+    })
+}
+
+/// SetTitlePacket (0x58).
+pub fn set_title(ty: i32, text: &str, fade_in: i32, stay: i32, fade_out: i32) -> Vec<u8> {
+    packet(SET_TITLE, |w| {
+        w.varint(ty);
+        w.string(text);
+        w.varint(fade_in);
+        w.varint(stay);
+        w.varint(fade_out);
+        w.string(""); // xuid
+        w.string(""); // platform online id
+        w.string(""); // filtered title text
+    })
+}
+
+/// ToastRequestPacket (0xba).
+pub fn toast_request(title: &str, body: &str) -> Vec<u8> {
+    packet(TOAST_REQUEST, |w| {
+        w.string(title);
+        w.string(body);
+    })
+}
+
+/// TransferPacket (0x55, protocol 2225).
+pub fn transfer(address: &str, port: u16) -> Vec<u8> {
+    packet(TRANSFER, |w| {
+        w.string(address);
+        w.u16_le(port);
+        w.bool(false); // reload world
+        w.bool(false); // optional GatheringJoinInfo
+    })
 }

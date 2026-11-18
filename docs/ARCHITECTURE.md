@@ -13,8 +13,8 @@ ceres-server ──► ceres-net ──► ceres-protocol ──► ceres-codec
 | `ceres-codec` | `W`/`R` (buffers com varints, LE/BE) e NBT nos três formatos: big-endian (arquivos de dados), little-endian (mundo) e rede (varints). |
 | `ceres-protocol` | Constantes do protocolo, codec de batch (deflate + prefixo de algoritmo) e os construtores de pacotes, separados por fase em `packets/`. A ordem dos campos segue o `bedrock-protocol` do Altay. |
 | `ceres-net` | A trait `Transport` e suas implementações: `raknet/` (UDP) e `nethernet/` (WebRTC, com sinalização HTTP em TCP na mesma porta). |
-| `ceres-world` | `data/`: registros vanilla carregados uma vez (paleta de blocos, itens, biomas, voxel shapes); pacotes estáticos já pré-codificados. `world/`: mundos LevelDB, conversão de chunk disco → rede, multiworld. |
-| `ceres-server` | Binário `ceres`: configuração, loop principal, sessões, fluxo de login e envio de chunks. |
+| `ceres-world` | `data/`: registros vanilla carregados uma vez (paleta de blocos, estados/orientação, itens, pilha máxima, biomas, voxel shapes); pacotes estáticos já pré-codificados. `world/`: mundos LevelDB, block entities (`0x31`), `level.dat`, criação de mundos planos/void e multiworld. |
+| `ceres-server` | Binário `ceres`: configuração, loop principal, sessões, inventário real + equipamentos, entidades de item, combate/vida/respawn, blocos/placas, comandos e moderação. |
 
 ## Rede
 
