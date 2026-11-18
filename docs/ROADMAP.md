@@ -49,7 +49,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] 🔴 Orientação ao colocar: escadas, troncos, baús, fornalhas, portas, lajes
 - [x] 🔴 Blocos substituíveis: grama alta, água, lava, neve fina, ar
 - [x] 🟠 Colisão: não colocar dentro de jogadores e entidades
-- [ ] 🟠 Blocos de duas partes: portas, camas, plantas altas
+- [x] 🟠 Blocos de duas partes: portas (abrem inteiras; de ferro não abrem com a mão), camas (cor no block entity), plantas altas
 - [~] 🟠 Lajes duplas ✔, encaixe de cercas, muros e painéis de vidro (estados de conexão)
 - [x] 🟠 Tempo de quebra no survival: dureza, ferramenta certa, tier, Eficiência (quebrar rápido demais é recusado; sem drop sem a ferramenta certa) · efeitos (pressa, cansaço) depois
 - [x] 🟠 Rachaduras ao quebrar (LevelEvent) e partículas/sons de quebrar e colocar

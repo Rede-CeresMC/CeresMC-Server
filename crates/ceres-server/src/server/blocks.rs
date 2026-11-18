@@ -53,7 +53,7 @@ impl Server {
     }
 
     /// True if a full block at `pos` intersects any living non-spectator player in `world`.
-    fn collides_with_player(&self, world: usize, pos: [i32; 3]) -> bool {
+    pub(crate) fn collides_with_player(&self, world: usize, pos: [i32; 3]) -> bool {
         let (bx0, bx1) = (pos[0] as f32, pos[0] as f32 + 1.0);
         let (by0, by1) = (pos[1] as f32, pos[1] as f32 + 1.0);
         let (bz0, bz1) = (pos[2] as f32, pos[2] as f32 + 1.0);
@@ -86,7 +86,7 @@ impl Server {
     }
 
     /// Changes a block and shows it to everyone in that world.
-    fn change_block(&mut self, world: usize, pos: [i32; 3], id: i32) -> bool {
+    pub(crate) fn change_block(&mut self, world: usize, pos: [i32; 3], id: i32) -> bool {
         if !self.worlds.worlds[world].set_block(pos, id, &self.gd) {
             return false;
         }
@@ -117,10 +117,19 @@ impl Server {
         } else {
             Vec::new()
         };
+        let bed_color = if self.gd.block_name(old) == "minecraft:bed" {
+            self.worlds.worlds[world]
+                .get_block_entity(pos, &self.gd)
+                .and_then(|t| t.get("color").and_then(|v| v.as_i64()))
+                .unwrap_or(0) as u32
+        } else {
+            0
+        };
         if !self.change_block(world, pos, air) {
             self.resync(sid, pos);
             return;
         }
+        self.break_partner(world, pos, old);
         self.swing_arm(sid);
         let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
         // a broken container spills what it held, in every game mode (like vanilla)
@@ -145,7 +154,7 @@ impl Server {
                 let drop = ItemDesc {
                     id: ce.id,
                     count,
-                    meta: ce.meta,
+                    meta: if bed_color != 0 { bed_color } else { ce.meta },
                     stack_id: 0,
                     block_runtime_id: ce.block_runtime_id,
                     extra: ce.extra,
@@ -195,8 +204,11 @@ impl Server {
             return;
         }
         if !sneaking {
-            if let Some(toggled) = self.gd.toggle_interactive(clicked_id) {
+            // iron doors and trapdoors only open with redstone
+            let iron = self.gd.block_name(clicked_id).starts_with("minecraft:iron_");
+            if let Some(toggled) = self.gd.toggle_interactive(clicked_id).filter(|_| !iron) {
                 self.change_block(world, clicked, toggled);
+                self.toggle_partner(world, clicked, toggled);
                 let center = [clicked[0] as f32 + 0.5, clicked[1] as f32 + 0.5, clicked[2] as f32 + 0.5];
                 let ev = if self.gd.block_name(clicked_id).ends_with("lever") {
                     level_event::SOUND_CLICK
@@ -222,6 +234,10 @@ impl Server {
                         let standing = info.name.replace("_sign", "_standing_sign");
                         b = self.gd.default_block(&standing).unwrap_or(0);
                     }
+                    // items placed as the block of the same name (beds, doors...)
+                    if b == 0 {
+                        b = self.gd.default_block(&info.name).unwrap_or(0);
+                    }
                 }
             }
             (b, None)
@@ -243,6 +259,10 @@ impl Server {
                     if b == 0 && info.name.ends_with("_sign") {
                         let standing = info.name.replace("_sign", "_standing_sign");
                         b = self.gd.default_block(&standing).unwrap_or(0);
+                    }
+                    // items placed as the block of the same name (beds, doors...)
+                    if b == 0 {
+                        b = self.gd.default_block(&info.name).unwrap_or(0);
                     }
                 }
             }
@@ -299,6 +319,23 @@ impl Server {
             self.resync(sid, clicked);
             return;
         };
+
+        // doors, tall plants and beds take two blocks
+        let item_meta = if gm == 1 {
+            u.item.meta
+        } else {
+            self.players.get(&sid).map(|p| p.inventory.held_item().meta).unwrap_or(0)
+        };
+        if let Some(placed) = self.place_two_part(world, target, final_block, yaw, item_meta) {
+            if placed {
+                let placed_id = self.worlds.worlds[world].get_block(target, &self.gd);
+                self.finish_placement(sid, world, target, placed_id, survival_slot);
+            } else {
+                self.resync(sid, target);
+                self.resync(sid, clicked);
+            }
+            return;
+        }
 
         if self.gd.is_solid(final_block) && self.collides_with_player(world, target) {
             self.resync(sid, target);

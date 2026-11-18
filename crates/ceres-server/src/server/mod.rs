@@ -9,6 +9,7 @@ mod durability;
 mod effects;
 mod food;
 mod furnace;
+mod twopart;
 mod handler;
 mod inventory;
 mod items;
