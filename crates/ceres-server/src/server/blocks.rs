@@ -291,6 +291,13 @@ impl Server {
             }
         }
 
+        // cauldrons take and give buckets and bottles
+        if self.use_cauldron(sid, clicked) {
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
         // buckets fill from or empty into the world instead of placing a block
         if self.use_bucket(sid, clicked, side(clicked, face)) {
             return;

@@ -32,6 +32,7 @@ impl Server {
         let in_water = is(&head_name, "water") || is(&feet_name, "water");
         let head_in_water = is(&head_name, "water");
         let in_fire = matches!(feet_name.as_str(), "minecraft:fire" | "minecraft:soul_fire");
+        let in_cauldron_water = self.is_water_cauldron(feet_block);
         let noclip = self.players.get(&sid).is_some_and(|p| p.noclip);
         let suffocating = self.gd.is_solid(head_block) && !in_lava && !noclip;
 
@@ -47,7 +48,7 @@ impl Server {
             hurts.push((1.0, format!("§c{name} morreu queimado"), false));
             p.fire_ticks = p.fire_ticks.max(FIRE_BURN_TICKS);
         }
-        if in_water {
+        if in_water || in_cauldron_water {
             p.fire_ticks = 0;
         }
         if p.fire_ticks > 0 {

@@ -3,6 +3,7 @@
 mod armor;
 mod brewing;
 mod blocks;
+mod cauldron;
 mod chunks;
 mod combat;
 mod commands;

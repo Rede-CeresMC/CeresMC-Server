@@ -153,6 +153,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 ### Blocos com interface
 
 - [x] Baú ✔, barril ✔, shulker box ✔ (abrir, mover itens, vários jogadores no mesmo baú, salvar no formato vanilla, derrubar ao quebrar), baú duplo ✔ (pairx/pairz vanilla, 54 slots, cada metade guarda os seus itens)
+- [x] Caldeirão: baldes de água e lava enchem e esvaziam, frasco tira água de 2 em 2, garrafa de água devolve, apaga quem está pegando fogo
 - [x] Mesa de encantamento: estantes (até 15, com o espaço livre), 3 opções com custo e encantamentos vanilla por poder e encantabilidade, nível e lápis conferidos no servidor, livro vira livro encantado
 - [x] Bancada de trabalho e receitas (CraftingData a partir de recipes.json, receita conferida no servidor)
 - [~] Fornalha, alto-forno, defumador ✔ (receitas vanilla, combustível, progresso, bloco aceso, formato vanilla) · retomar fornalhas acesas ✔ · XP da fornalha

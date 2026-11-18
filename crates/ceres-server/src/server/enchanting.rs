@@ -21,6 +21,8 @@ pub(crate) struct EnchantOffer {
     /// minimum level shown and needed
     pub cost: u32,
     pub enchants: Vec<(u8, u8)>,
+    /// the item the option was rolled for: it only applies to exactly that item
+    pub input: ItemDesc,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -215,6 +217,7 @@ impl Server {
                         net_id: NEXT_OFFER_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
                         cost,
                         enchants: self.roll_enchants(kind, enchantability, cost),
+                        input: input.clone(),
                     })
                     .filter(|o| !o.enchants.is_empty())
                     .collect()

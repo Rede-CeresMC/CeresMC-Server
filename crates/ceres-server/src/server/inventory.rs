@@ -372,6 +372,8 @@ impl Inventory {
         // crafting: the recipe of this request and the ingredients the client says it used up
         let mut recipe: Option<(&ceres_world::Recipe, u16)> = None;
         let mut consumed: Vec<ItemDesc> = Vec::new();
+        // where each consumed item came from
+        let mut consumed_from: Vec<Loc> = Vec::new();
         // enchanting table: index of the option bought
         let mut enchant_choice: Option<usize> = None;
 
@@ -406,13 +408,22 @@ impl Inventory {
                     if !creative && (self.player_level < offer.cost || self.player_level < i as u32 + 1 || !lapis_ok) {
                         return None;
                     }
-                    if self.enchant_input.is_empty() {
+                    // the option is for exactly the item it was rolled for
+                    let snap = &offer.input;
+                    let same = !self.enchant_input.is_empty()
+                        && self.enchant_input.id == snap.id
+                        && self.enchant_input.meta == snap.meta
+                        && self.enchant_input.extra == snap.extra;
+                    if !same {
                         return None;
                     }
                     self.crafted = Some(super::enchanting::enchanted(&self.enchant_input, &offer, gd));
                     enchant_choice = Some(i);
                 }
                 StackAction::CraftRecipe { net_id, reps, .. } => {
+                    if enchant_choice.is_some() {
+                        return None;
+                    }
                     let r = gd.recipes.get(&net_id)?;
                     let open_ui = self.container.as_ref().map(|c| c.ui);
                     let allowed = match r.block.as_str() {
@@ -441,6 +452,7 @@ impl Inventory {
                     let mut used = s.clone();
                     used.count = count as u16;
                     consumed.push(used);
+                    consumed_from.push(loc);
                     s.count -= count as u16;
                     if s.count > 0 {
                         s.stack_id = self.alloc_id();
@@ -593,12 +605,23 @@ impl Inventory {
         }
 
         let craft_ok = match (recipe, enchant_choice) {
-            (Some((r, reps)), _) => ingredients_match(r, reps, consumed, gd),
-            // enchanting: exactly the item, plus 1-3 lapis (none in creative)
+            // a recipe and an enchantment in one request: refused
+            (Some(_), Some(_)) => false,
+            (Some((r, reps)), None) => ingredients_match(r, reps, consumed, gd),
+            // enchanting: exactly the item, plus 1-3 lapis (none needed in creative)
             (None, Some(i)) => {
-                let item_used = consumed.iter().filter(|c| gd.items_by_id.get(&c.id).is_none_or(|it| it.name != "minecraft:lapis_lazuli")).map(|c| c.count).sum::<u16>();
-                let lapis_used = consumed.iter().filter(|c| gd.items_by_id.get(&c.id).is_some_and(|it| it.name == "minecraft:lapis_lazuli")).map(|c| c.count).sum::<u16>();
-                let ok = item_used == 1 && (creative || lapis_used as usize == i + 1);
+                // exactly one item taken from the item slot, lapis only from the lapis slot
+                let mut item_used = 0u16;
+                let mut lapis_used = 0u16;
+                let mut other = false;
+                for (loc, c) in consumed_from.iter().zip(&consumed) {
+                    match loc {
+                        Loc::EnchantInput => item_used += c.count,
+                        Loc::EnchantLapis => lapis_used += c.count,
+                        _ => other = true,
+                    }
+                }
+                let ok = !other && item_used == 1 && (if creative { lapis_used as usize <= i + 1 } else { lapis_used as usize == i + 1 });
                 if ok {
                     self.enchant_paid = Some(i as u32 + 1);
                 }
