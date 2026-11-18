@@ -30,3 +30,6 @@ __pycache__/
 
 # local notes
 /GUIA-LOCAL.md
+
+# vanilla data from Mojang (all rights reserved): local only, never in the repository
+/data/behavior/
