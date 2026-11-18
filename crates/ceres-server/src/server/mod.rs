@@ -16,6 +16,7 @@ mod handler;
 mod inventory;
 mod items;
 mod liquids;
+mod loot;
 mod moderation;
 mod players;
 mod skin;

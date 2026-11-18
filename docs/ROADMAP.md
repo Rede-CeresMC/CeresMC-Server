@@ -125,6 +125,8 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 - [x] Água e lava escorrendo: cai primeiro, espalha (água 7, lava 3), seca sem fonte, fonte infinita, obsidiana/pedregulho/pedra quando se encontram
 
+- [x] Drops vanilla dos blocos: minérios (diamante, carvão, ferro bruto...), pedra → pedregulho, grama → terra, vidro/gelo → nada, folhas, cascalho, grama alta; Toque Suave e Fortuna
+
 ### Itens
 
 - [x] Durabilidade de ferramentas e armas (NBT `Damage`, Inquebrável, quebra com som)

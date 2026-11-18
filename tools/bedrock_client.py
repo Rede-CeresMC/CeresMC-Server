@@ -220,6 +220,25 @@ def block_id(name):
     return struct.unpack(">i", d[q + 13:q + 17])[0]
 
 
+def item_id(name):
+    """Network id of an item, from data/item_palette.json."""
+    import json, os
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "item_palette.json")
+    return next(i["id"] for i in json.load(open(path))["items"] if i["name"] == name)
+
+
+def dropped_items(c, since=0):
+    """Item ids of the AddItemActor packets received."""
+    out = []
+    for pid, d in c.received[since:]:
+        if pid != 0x0f:
+            continue
+        _, p = read_uvarint(d, 0)  # unique id
+        _, p = read_uvarint(d, p)  # runtime id
+        out.append(struct.unpack("<h", d[p:p + 2])[0])
+    return out
+
+
 def _block_pos(pos):
     return b"".join(svarint(v) for v in pos)
 

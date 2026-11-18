@@ -2,7 +2,7 @@
 player collects."""
 import sys, os, struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bedrock_client import Client, block_id, uvarint, string, read_uvarint
+from bedrock_client import Client, block_id, uvarint, string, read_uvarint, item_id, dropped_items
 from bedrock_client import _auth_input
 
 STONE = block_id("minecraft:stone")
@@ -67,6 +67,7 @@ c.send(_auth_input(c, [(26, POS, 1)]))
 c.pump(4.0, lambda: (attribute(c, "minecraft:player.level", n) or 6) > 6 or (attribute(c, "minecraft:player.experience", n) or 0) > 0.1)
 orbs = [d for p, d in c.received[n:] if p == 0x0d and b"xp_orb" in d]
 check(bool(orbs), f"mining diamond ore drops experience orbs ({len(orbs)})")
+check(item_id("minecraft:diamond") in dropped_items(c, n), "diamond ore drops a diamond, not the ore block")
 prog = attribute(c, "minecraft:player.experience", n)
 check(prog is not None and prog > 0, f"the orbs fly to the player and are collected (progress {prog})")
 

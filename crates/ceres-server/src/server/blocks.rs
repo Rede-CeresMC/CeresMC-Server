@@ -145,17 +145,34 @@ impl Server {
 
         // Survival block drops (nothing when the tool is not good enough, like stone by hand); the
         // tool is checked before it wears, so a tool breaking on its last block still drops it
-        let held = self.players.get(&sid).map(|p| p.inventory.held_item().id).unwrap_or(0);
+        let held_item = self.players.get(&sid).map(|p| p.inventory.held_item().clone()).unwrap_or_default();
+        let held = held_item.id;
+        let (fortune, silk_touch) = loot::loot_enchants(&held_item);
         if self.gd.break_info(old).is_some_and(|b| b.hardness > 0.0) {
             self.wear_held_item(sid, false);
         }
         self.exhaust(sid, food::exhaustion::MINE);
         if gm == 0 && self.gd.can_harvest(old, held) {
-            let xp = xp::block_xp(self.gd.block_name(old));
+            let xp = if silk_touch { 0 } else { xp::block_xp(self.gd.block_name(old)) };
             if xp > 0 {
                 self.spawn_xp(world, center, xp);
             }
-            if let Some(ce) = self.gd.block_to_item.get(&old).cloned() {
+            if let loot::Loot::Items(items) = loot::block_loot(self.gd.block_name(old), fortune, silk_touch) {
+                for (name, count) in items {
+                    let Some(info) = self.gd.items_by_name.get(&name) else { continue };
+                    let drop = ItemDesc {
+                        id: info.id,
+                        count: count.min(64) as u16,
+                        meta: 0,
+                        stack_id: 0,
+                        block_runtime_id: info.block_runtime_id,
+                        extra: ceres_world::extra_data(None),
+                    };
+                    let rx = (rand::random::<f32>() - 0.5) * 0.15;
+                    let rz = (rand::random::<f32>() - 0.5) * 0.15;
+                    self.spawn_item(world, center, [rx, 0.15, rz], drop, 10);
+                }
+            } else if let Some(ce) = self.gd.block_to_item.get(&old).cloned() {
                 let count = if self.gd.block_name(old).contains("_double_slab") { 2 } else { 1 };
                 let drop = ItemDesc {
                     id: ce.id,

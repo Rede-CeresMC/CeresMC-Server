@@ -2,7 +2,7 @@
 refused, breaking after the right time works, and the tool decides whether the block drops."""
 import sys, os, struct, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bedrock_client import Client, block_id, update_blocks, uvarint, string
+from bedrock_client import Client, block_id, update_blocks, uvarint, string, item_id, dropped_items
 from bedrock_client import _auth_input
 
 STONE = block_id("minecraft:stone")
@@ -64,7 +64,7 @@ command(c, "/give @s wooden_pickaxe 1")
 check(state_after(c, ROW[2], lambda: mine(c, ROW[2], 0.3)) == STONE, "stone with a wooden pickaxe in 0.3 s is refused")
 n = len(c.received)
 check(state_after(c, ROW[2], lambda: mine(c, ROW[2], 1.2)) not in (STONE, None), "stone with a wooden pickaxe after 1.2 s works")
-check(any(p == 0x0f for p, _ in c.received[n:]), "the stone dropped (pickaxe can harvest it)")
+check(item_id("minecraft:cobblestone") in dropped_items(c, n), f"stone drops cobblestone ({dropped_items(c, n)})")
 
 def slot_damage(c, since):
     """Damage NBT of the last InventorySlot the server sent for hotbar slot 0."""
