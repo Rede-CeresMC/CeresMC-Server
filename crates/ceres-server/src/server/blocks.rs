@@ -47,7 +47,7 @@ fn default_sign_nbt(pos: [i32; 3]) -> Tag {
 }
 
 impl Server {
-    fn in_reach(p: &Player, pos: [i32; 3]) -> bool {
+    pub(crate) fn in_reach(p: &Player, pos: [i32; 3]) -> bool {
         let d = |i: usize| p.pos[i] - (pos[i] as f32 + 0.5);
         d(0) * d(0) + d(1) * d(1) + d(2) * d(2) <= REACH * REACH
     }

@@ -82,8 +82,8 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 ### Segurança e conexão
 
-- [ ] 🔴 Verificar a cadeia de login Xbox (JWT, chaves da Mojang/OpenID)
-- [~] 🔴 XUID e UUID lidos dos claims de login (falta validar assinatura)
+- [x] 🔴 Verificar o login Xbox: token OpenID (RS256, chaves da Mojang), emissor, público, validade e assinatura ES384 dos dados do cliente (`xbox-auth`)
+- [x] 🔴 XUID e gamertag verificados (vêm do token assinado pela Mojang)
 - [ ] 🟠 Criptografia no RakNet (ECDH P-384 + AES-256-CTR)
 - [x] 🟠 Identidade do NetherNet persistente (chave salva em disco)
 - [ ] 🟠 TLS na sinalização do NetherNet (o cliente tenta TLS primeiro)

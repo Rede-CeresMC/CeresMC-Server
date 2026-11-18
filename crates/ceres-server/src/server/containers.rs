@@ -138,6 +138,19 @@ impl Server {
             .count()
     }
 
+    /// The open container may only be used while the player is alive, in its world, within reach,
+    /// and the block is still that kind of container.
+    pub(crate) fn container_still_valid(&mut self, sid: SessionId) -> bool {
+        let Some(p) = self.players.get(&sid) else { return false };
+        let Some(c) = p.inventory.container.as_ref() else { return true };
+        if p.dead || p.world != c.world || !Self::in_reach(p, c.pos) {
+            return false;
+        }
+        let (world, pos, ui) = (c.world, c.pos, c.ui);
+        let block = self.worlds.worlds[world].get_block(pos, &self.gd);
+        container_kind(self.gd.block_name(block)).is_some_and(|(u, _, _)| u == ui)
+    }
+
     /// Writes an open container back to its block entity and shows the change to other viewers.
     pub(crate) fn sync_container(&mut self, sid: SessionId) {
         let Some(p) = self.players.get_mut(&sid) else { return };

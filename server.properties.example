@@ -8,3 +8,4 @@ view-distance=10
 white-list=off
 pvp=on
 keep-inventory=off
+xbox-auth=on

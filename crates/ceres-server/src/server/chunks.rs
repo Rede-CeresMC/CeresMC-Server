@@ -68,6 +68,7 @@ impl Server {
     }
 
     pub(crate) fn tick(&mut self) {
+        self.retry_pending_logins();
         let tick_start = Instant::now();
         self.ticks += 1;
         if self.ticks % SAVE_INTERVAL_TICKS == 0 {
@@ -152,11 +153,36 @@ impl Server {
             if let Some(t) = self.transport(sid) {
                 t.close(sid);
             }
+            self.close_container(sid, false);
             if let Some(p) = self.players.remove(&sid) {
                 println!("[Game] closed {} ({})", p.addr, p.close.clone().unwrap_or_default());
                 self.on_left(&p);
             }
             self.owner.remove(&sid);
+        }
+    }
+
+    /// Logins held until Mojang's keys are loaded: resumed when they arrive, refused after 15 s.
+    fn retry_pending_logins(&mut self) {
+        if self.pending_logins.is_empty() {
+            return;
+        }
+        let ready = self.auth_keys.read().unwrap().is_some();
+        let pending = std::mem::take(&mut self.pending_logins);
+        for (sid, packet, since) in pending {
+            if !self.players.contains_key(&sid) {
+                continue;
+            }
+            if ready {
+                if let Err(e) = self.handle_packet(sid, &packet) {
+                    eprintln!("[Net] session {sid}: {e}");
+                    self.kick(sid, "Pacote inválido");
+                }
+            } else if since.elapsed().as_secs() >= 15 {
+                self.kick(sid, "§cNão foi possível verificar contas Xbox agora. Tente de novo em instantes.");
+            } else {
+                self.pending_logins.push((sid, packet, since));
+            }
         }
     }
 }

@@ -113,6 +113,7 @@ impl Server {
     }
 
     pub(crate) fn kill_player(&mut self, sid: SessionId, death_msg: &str) {
+        self.close_container(sid, true);
         let Some(p) = self.players.get_mut(&sid) else { return };
         if p.dead {
             return;

@@ -1,5 +1,6 @@
 //! CeresMC Server: entry point.
 
+mod auth;
 mod config;
 mod server;
 
@@ -58,5 +59,10 @@ fn main() {
         .unwrap_or_else(|e| eprintln!("[Server] Ctrl+C handler not installed: {e}"));
     println!("Done ({:.3}s)! Type \"help\" for commands.", started.elapsed().as_secs_f64());
 
-    server::Server::new(cfg, gd, worlds, transports).run();
+    // Mojang's login keys are fetched in the background; logins verify once they are loaded
+    let auth_keys = auth::spawn_key_fetcher(ceres_protocol::VERSION);
+    if !cfg.xbox_auth {
+        eprintln!("[Server] WARNING: xbox-auth is off: anyone can join with any name");
+    }
+    server::Server::new(cfg, gd, worlds, transports, auth_keys).run();
 }

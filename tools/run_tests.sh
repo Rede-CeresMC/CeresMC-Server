@@ -32,6 +32,7 @@ server-port=$PORT
 gamemode=creative
 level-name=world
 allow-unverified-ops=on
+xbox-auth=off
 view-distance=4
 EOF
 
@@ -55,6 +56,16 @@ SERVER=$!
 for _ in $(seq 1 100); do grep -q "Done" "$RUN/server2.out" 2>/dev/null && break; sleep 0.1; done
 python -I tools/blocks_test.py check || status=1
 python -I tools/containers_test.py check || status=1
+
+# third run: Xbox Live verification on, fake logins must be refused
+stop_server
+sed -i 's/^xbox-auth=off$/xbox-auth=on/' "$RUN/server.properties"
+(cd "$RUN" && exec "$EXE" > server3.out 2>&1) &
+SERVER=$!
+for _ in $(seq 1 100); do grep -q "Done" "$RUN/server3.out" 2>/dev/null && break; sleep 0.1; done
+# give the server time to download the keys so the signature check itself is tested
+for _ in $(seq 1 150); do grep -q "Xbox Live keys loaded" "$RUN/server3.out" 2>/dev/null && break; sleep 0.1; done
+python -I tools/auth_test.py || status=1
 
 if grep -E "bad packet|panicked" "$RUN"/server*.out; then status=1; fi
 [ $status -eq 0 ] && echo "ALL TESTS PASSED" || echo "SOME TESTS FAILED"

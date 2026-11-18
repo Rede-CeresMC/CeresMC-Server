@@ -45,12 +45,40 @@ impl Server {
                 let cd_len = blob.u32_le()? as usize;
                 let client_data = blob.take(cd_len)?;
                 let cd = jwt_payload(client_data).unwrap_or_default();
-                let (chain_name, xuid, identity_uuid) = extract_auth_claims(auth_json);
-                let name = chain_name
+                let (chain_name, mut xuid, identity_uuid) = extract_auth_claims(auth_json);
+                let mut name = chain_name
                     .or_else(|| cd["ThirdPartyName"].as_str().filter(|s| !s.is_empty()).map(str::to_string))
                     .unwrap_or_else(|| format!("Player{sid}"));
 
-                let is_op = self.cfg.allow_unverified_ops && self.ops.contains(&name.to_ascii_lowercase());
+                // Xbox Live verification: the token's gamertag and XUID replace whatever the client claims
+                let keys = self.auth_keys.read().unwrap().clone();
+                if keys.is_none() && self.cfg.xbox_auth {
+                    // Mojang's keys are still downloading (server just started): hold the login
+                    self.pending_logins.push((sid, buf.to_vec(), Instant::now()));
+                    return Ok(());
+                }
+                let verified = match crate::auth::verify_login(auth_json, client_data, keys.as_deref()) {
+                    Ok(v) => {
+                        name = v.gamertag;
+                        xuid = v.xuid;
+                        true
+                    }
+                    Err(e) => {
+                        if self.cfg.xbox_auth {
+                            println!("[Auth] refused login from {} ({name}): {e}", self.players[&sid].addr);
+                            self.kick(sid, &format!("§cFalha ao verificar sua conta Xbox: {e}"));
+                            return Ok(());
+                        }
+                        if ceres_net::debug_enabled() {
+                            println!("[Auth] unverified login ({name}): {e}");
+                        }
+                        false
+                    }
+                };
+
+                // operators need a verified account (or allow-unverified-ops for local tests)
+                let is_op =
+                    (verified || self.cfg.allow_unverified_ops) && self.ops.contains(&name.to_ascii_lowercase());
                 let ip = self.players[&sid].addr.ip();
                 if let Err(reason) = self.moderation.check_login(&name, ip, self.cfg.white_list, is_op) {
                     self.kick(sid, &reason);
@@ -66,7 +94,7 @@ impl Server {
                 if self
                     .players
                     .iter()
-                    .any(|(osid, q)| *osid != sid && !q.name.is_empty() && q.name.eq_ignore_ascii_case(&name))
+                    .any(|(osid, q)| *osid != sid && !q.name.is_empty() && q.name.to_lowercase() == name.to_lowercase())
                 {
                     self.kick(sid, "§cJá existe um jogador com esse nome online.");
                     return Ok(());

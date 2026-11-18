@@ -303,6 +303,7 @@ impl Server {
 
     /// Moves a player to `feet` in their current world.
     pub(crate) fn teleport(&mut self, sid: SessionId, feet: [f32; 3]) {
+        self.close_container(sid, true);
         let Some(p) = self.players.get_mut(&sid) else { return };
         p.pos = [feet[0], feet[1] + EYE_HEIGHT, feet[2]];
         p.teleport_to = Some(p.pos);

@@ -33,6 +33,8 @@ pub struct Config {
     /// Names in ops.txt get operator rights even though logins are not verified yet (anyone can
     /// pick any name). Only for local testing.
     pub allow_unverified_ops: bool,
+    /// Verify Xbox Live logins (OpenID token + client data signature) and refuse the ones that fail.
+    pub xbox_auth: bool,
 }
 
 fn flag(s: &str) -> bool {
@@ -80,6 +82,7 @@ impl Config {
             max_packets_per_sec: get("max-packets-per-sec", "600").parse().unwrap_or(600).max(50),
             max_batch_bytes: get("max-batch-bytes", "2097152").parse().unwrap_or(2 * 1024 * 1024).max(65536),
             allow_unverified_ops: flag(&get("allow-unverified-ops", "off")),
+            xbox_auth: flag(&get("xbox-auth", "on")),
         }
     }
 }

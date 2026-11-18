@@ -75,6 +75,10 @@ pub(crate) struct Player {
 }
 
 pub struct Server {
+    /// logins waiting for Mojang's keys: (session, Login packet, since)
+    pending_logins: Vec<(SessionId, Vec<u8>, Instant)>,
+    /// Mojang's login keys, filled in by a background thread
+    auth_keys: crate::auth::SharedKeys,
     cfg: Config,
     gd: GameData,
     worlds: WorldManager,
@@ -97,8 +101,16 @@ pub struct Server {
 const TICK: Duration = Duration::from_millis(50);
 
 impl Server {
-    pub fn new(cfg: Config, gd: GameData, worlds: WorldManager, transports: Vec<Box<dyn Transport>>) -> Self {
+    pub fn new(
+        cfg: Config,
+        gd: GameData,
+        worlds: WorldManager,
+        transports: Vec<Box<dyn Transport>>,
+        auth_keys: crate::auth::SharedKeys,
+    ) -> Self {
         Server {
+            auth_keys,
+            pending_logins: Vec::new(),
             cfg,
             gd,
             worlds,
@@ -209,6 +221,7 @@ impl Server {
                     }
                 }
                 NetEvent::Disconnected(sid, reason) => {
+                    self.close_container(sid, false);
                     if let Some(p) = self.players.remove(&sid) {
                         if !p.name.is_empty() {
                             println!("[Game] {} left ({reason})", p.name);

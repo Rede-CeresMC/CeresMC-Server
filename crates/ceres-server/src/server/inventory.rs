@@ -573,6 +573,9 @@ impl Server {
     }
 
     pub(crate) fn handle_single_stack_request(&mut self, sid: SessionId, req: StackRequest) {
+        if !self.container_still_valid(sid) {
+            self.close_container(sid, true);
+        }
         let Some(p) = self.players.get_mut(&sid) else { return };
         let creative = p.gamemode == 1;
         let result = p.inventory.apply(&req, creative, &self.gd);
