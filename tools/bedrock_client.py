@@ -51,7 +51,9 @@ def jwt(payload):
 
 
 class Client:
-    def __init__(self, name, host="127.0.0.1", port=19132):
+    def __init__(self, name, host="127.0.0.1", port=None):
+        import os
+        port = port or int(os.environ.get("CERES_PORT", "19132"))
         self.name, self.addr = name, (host, port)
         self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.seq = self.msg = self.order = 0
@@ -167,7 +169,7 @@ class Client:
             self.compression = True
             auth = json.dumps({"AuthenticationType": 2, "Certificate": "{}", "Token": ""}).encode()
             cd = jwt({"ThirdPartyName": self.name, "SkinId": "test", "SkinImageWidth": 64, "SkinImageHeight": 64,
-                      "SkinData": base64.b64encode(bytes(64 * 64 * 4)).decode(), "DeviceOS": 7, "DeviceId": "bot"}).encode()
+                      "SkinData": base64.b64encode(bytes(64 * 64 * 4)).decode(), "DeviceOS": 8, "DeviceId": "bot"}).encode()
             blob = struct.pack("<I", len(auth)) + auth + struct.pack("<I", len(cd)) + cd
             self.send(uvarint(0x01) + struct.pack(">I", PROTOCOL) + uvarint(len(blob)) + blob)
         elif pid == 0x06:

@@ -147,6 +147,11 @@ impl Server {
         p.out.push(self.gd.actor_identifiers.clone());
         p.out.push(self.gd.biome_definitions.clone());
         p.out.push(self.gd.creative_content.clone());
+        p.out.push(protocol::update_attributes(p.entity_id));
+        p.out.push(protocol::set_actor_data(p.entity_id, &p.name));
+        p.out.push(protocol::empty_inventory(0, 36)); // main inventory
+        p.out.push(protocol::empty_inventory(119, 1)); // off hand
+        p.out.push(protocol::empty_inventory(120, 4)); // armor
         p.state = State::PreSpawn;
         self.send_pre_spawn_players(sid);
         let p = self.players.get_mut(&sid).unwrap();

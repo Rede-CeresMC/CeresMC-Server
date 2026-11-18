@@ -36,11 +36,10 @@ mkdir worlds            # coloque aqui pastas de mundo com level.dat + db/
 O servidor procura `data/`, `worlds/` e `server.properties` na pasta onde é executado.
 `CERES_DEBUG=1` liga logs detalhados de rede.
 
-Teste rápido sem abrir o jogo (precisa do servidor rodando): dois bots entram, se veem, andam e conversam.
+Testes com bots, sem abrir o jogo. Eles sobem um servidor separado (porta 19140, cópia do mundo) e não atrapalham quem está jogando:
 
 ```sh
-python tools/smoke_client.py
-python tools/blocks_test.py          # depois de reiniciar o servidor: python tools/blocks_test.py check
+bash tools/run_tests.sh
 ```
 
 ## Estrutura
