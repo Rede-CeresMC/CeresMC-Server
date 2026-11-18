@@ -232,10 +232,14 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 ### API de plugins
 
-- [ ] Escolher o runtime: WASM (recomendado), Lua ou Rust nativo
-- [ ] Carregar, descarregar e recarregar plugins sem reiniciar
+- [ ] 🔴 Plugins em **Rust compilado para WASM** (decidido): rápido, isolado (um erro no plugin não derruba o servidor), não quebra quando o servidor atualiza
+- [ ] 🔴 Plugin em pasta (`plugins/Nome/` com `plugin.yml` + código): o servidor compila sozinho com `cargo` ao ligar e no `/reload`; para produção, só o `.wasm`
+- [ ] 🔴 `/reload` sem desligar o servidor, e `/plugin enable|disable <nome>` com o servidor rodando
+- [ ] 🔴 Desligar um plugin limpa tudo o que ele registrou: comandos, eventos, tarefas agendadas, menus e formulários abertos (sem resto e sem crash)
+- [ ] 🟢 Opcional, depois: scripts em JavaScript (QuickJS) sobre a mesma API, para coisas rápidas sem compilar
 - [ ] API: jogadores, mundos, blocos, itens, entidades, comandos, eventos, mensagens
 - [ ] Formulários (ModalForm, CustomForm, SimpleForm) e DDUI
+- [ ] 🔴 Menus de baú sem baú visível: inventário de uma entidade invisível só para o jogador (27 slots) ou baú duplo enterrado só para ele (54 slots); nada aparece em terceira pessoa; cliques viram ações e ninguém tira os itens
 - [ ] Scoreboards, bossbar, títulos, actionbar, toasts
 - [ ] Armazenamento por plugin (arquivo e banco de dados)
 - [ ] Permissões por plugin e por jogador
