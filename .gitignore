@@ -23,3 +23,6 @@ __pycache__/
 /ops.txt
 /banned-*.txt
 /white-list.txt
+
+# local notes
+/GUIA-LOCAL.md
