@@ -63,6 +63,8 @@ pub(crate) struct Player {
     /// sign whose editor was opened for this player, and when
     editing_sign: Option<([i32; 3], Instant)>,
     last_skin_change: Option<Instant>,
+    /// survival: block being mined and when it started
+    breaking: Option<([i32; 3], Instant)>,
     /// last window id handed out (1..=99) for block containers
     window_counter: u8,
     radius: i32,
@@ -199,6 +201,7 @@ impl Server {
                             teleport_to: None,
                             editing_sign: None,
                             last_skin_change: None,
+                            breaking: None,
                             window_counter: 0,
                             radius: 0,
                             center: None,

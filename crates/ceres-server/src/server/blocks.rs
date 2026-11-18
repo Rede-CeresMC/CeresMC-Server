@@ -132,8 +132,9 @@ impl Server {
         let destroy_fx = protocol::level_event(level_event::PARTICLE_DESTROY, center, old);
         self.broadcast(&destroy_fx, |o, q| o != sid && q.world == world);
 
-        // Survival block drops
-        if gm == 0 {
+        // Survival block drops (nothing when the tool is not good enough, like stone by hand)
+        let held = self.players.get(&sid).map(|p| p.inventory.held_item().id).unwrap_or(0);
+        if gm == 0 && self.gd.can_harvest(old, held) {
             if let Some(ce) = self.gd.block_to_item.get(&old).cloned() {
                 let count = if self.gd.block_name(old).contains("_double_slab") { 2 } else { 1 };
                 let drop = ItemDesc {
@@ -376,9 +377,47 @@ impl Server {
         Ok(())
     }
 
+    /// Survival mining must take as long as vanilla says (hardness, tool, tier, Efficiency).
+    /// A little faster is tolerated for lag; much faster (instant mining, nukers) is refused.
+    fn mining_done(&mut self, sid: SessionId, pos: [i32; 3]) -> bool {
+        let Some(p) = self.players.get(&sid) else { return false };
+        if p.gamemode == 1 {
+            return true;
+        }
+        let block = self.worlds.worlds[p.world].get_block(pos, &self.gd);
+        let held = p.inventory.held_item();
+        let Some(needed) = self.gd.break_time(block, held.id, enchant_level(held, ENCHANT_EFFICIENCY)) else {
+            return false; // unbreakable
+        };
+        let elapsed = match p.breaking {
+            Some((at, since)) if at == pos => since.elapsed().as_secs_f32(),
+            _ => 0.0,
+        };
+        let ok = elapsed + 0.15 >= needed * 0.8;
+        if !ok && ceres_net::debug_enabled() {
+            println!("[Debug] {sid}: block broken too fast ({elapsed:.2}s of {needed:.2}s) at {pos:?}");
+        }
+        ok
+    }
+
+    /// Ticks a survival player needs for the block, for the crack animation others see.
+    fn break_ticks(&mut self, sid: SessionId, pos: [i32; 3]) -> u32 {
+        let Some(p) = self.players.get(&sid) else { return 20 };
+        let block = self.worlds.worlds[p.world].get_block(pos, &self.gd);
+        let held = p.inventory.held_item();
+        let secs = self.gd.break_time(block, held.id, enchant_level(held, ENCHANT_EFFICIENCY)).unwrap_or(0.0);
+        ((secs * 20.0) as u32).max(1)
+    }
+
     pub(crate) fn on_use_item(&mut self, sid: SessionId, u: UseItem) {
         match u.action {
-            use_item_action::BREAK_BLOCK => self.break_block(sid, u.block_pos),
+            use_item_action::BREAK_BLOCK => {
+                if self.mining_done(sid, u.block_pos) {
+                    self.break_block(sid, u.block_pos);
+                } else {
+                    self.resync(sid, u.block_pos);
+                }
+            }
             use_item_action::CLICK_BLOCK => self.place_block(sid, u),
             _ => {}
         }
@@ -389,17 +428,38 @@ impl Server {
         let fpos = [pos[0] as f32, pos[1] as f32, pos[2] as f32];
         match action {
             block_action::START_BREAK | block_action::CONTINUE_DESTROY_BLOCK => {
+                // continuing onto a new block starts its timer
+                if let Some(p) = self.players.get_mut(&sid) {
+                    if p.breaking.is_none_or(|(at, _)| at != pos) {
+                        p.breaking = Some((pos, Instant::now()));
+                    }
+                }
                 self.swing_arm(sid);
-                let pk = protocol::level_event(level_event::BLOCK_START_BREAK, fpos, 65535 / 20);
+                let ticks = self.break_ticks(sid, pos);
+                let pk = protocol::level_event(level_event::BLOCK_START_BREAK, fpos, (65535 / ticks) as i32);
                 self.broadcast(&pk, |o, q| o != sid && q.world == world);
             }
             block_action::ABORT_BREAK | block_action::STOP_BREAK => {
+                if action == block_action::ABORT_BREAK {
+                    if let Some(p) = self.players.get_mut(&sid) {
+                        p.breaking = None;
+                    }
+                }
                 let pk = protocol::level_event(level_event::BLOCK_STOP_BREAK, fpos, 0);
                 self.broadcast(&pk, |o, q| o != sid && q.world == world);
             }
             block_action::CREATIVE_PLAYER_DESTROY_BLOCK | block_action::PREDICT_DESTROY_BLOCK => {
                 let stop = protocol::level_event(level_event::BLOCK_STOP_BREAK, fpos, 0);
                 self.broadcast(&stop, |o, q| o != sid && q.world == world);
+                let creative_only = action == block_action::CREATIVE_PLAYER_DESTROY_BLOCK
+                    && self.players.get(&sid).is_some_and(|p| p.gamemode != 1);
+                if creative_only || !self.mining_done(sid, pos) {
+                    self.resync(sid, pos);
+                    return;
+                }
+                if let Some(p) = self.players.get_mut(&sid) {
+                    p.breaking = None;
+                }
                 self.break_block(sid, pos);
             }
             _ => {}
@@ -421,4 +481,22 @@ impl Server {
             }
         }
     }
+}
+
+const ENCHANT_EFFICIENCY: i16 = 15;
+
+/// Level of an enchantment on an item (0 when it does not have it).
+pub(crate) fn enchant_level(item: &ItemDesc, id: i16) -> u8 {
+    use ceres_codec::nbt::{self, Flavor};
+    // network extra data: 0xffff, version 1, little-endian NBT
+    if item.extra.len() <= 3 || item.extra[0] != 0xff || item.extra[1] != 0xff {
+        return 0;
+    }
+    let Ok((_, tag)) = nbt::read_root(&mut R::new(&item.extra[3..]), Flavor::LittleEndian) else { return 0 };
+    tag.get("ench")
+        .and_then(|l| l.as_list())
+        .and_then(|l| l.iter().find(|e| e.get("id").and_then(|v| v.as_i64()) == Some(id as i64)))
+        .and_then(|e| e.get("lvl").and_then(|v| v.as_i64()))
+        .unwrap_or(0)
+        .clamp(0, 255) as u8
 }

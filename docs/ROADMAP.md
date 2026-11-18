@@ -51,7 +51,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] 🟠 Colisão: não colocar dentro de jogadores e entidades
 - [ ] 🟠 Blocos de duas partes: portas, camas, plantas altas
 - [~] 🟠 Lajes duplas ✔, encaixe de cercas, muros e painéis de vidro (estados de conexão)
-- [ ] 🟠 Tempo de quebra no survival (dureza, ferramenta, eficiência, efeitos)
+- [x] 🟠 Tempo de quebra no survival: dureza, ferramenta certa, tier, Eficiência (quebrar rápido demais é recusado; sem drop sem a ferramenta certa) · efeitos (pressa, cansaço) depois
 - [x] 🟠 Rachaduras ao quebrar (LevelEvent) e partículas/sons de quebrar e colocar
 - [x] 🟢 Pegar bloco com o botão do meio (BlockPickRequest)
 
