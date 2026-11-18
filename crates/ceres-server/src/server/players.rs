@@ -305,10 +305,15 @@ impl Server {
 
     pub(crate) fn on_player_skin(&mut self, sid: SessionId, r: &mut R) -> Res<()> {
         let (skin_bytes, old_name, new_name) = protocol::read_player_skin(r)?;
-        if skin_bytes.len() > 2 * 1024 * 1024 {
+        if skin_bytes.len() > 1024 * 1024 || old_name.len() > 64 || new_name.len() > 64 {
             return Ok(());
         }
         let Some(p) = self.players.get_mut(&sid) else { return Ok(()) };
+        // every change is sent to everyone: at most one every 10 seconds
+        if p.last_skin_change.is_some_and(|t| t.elapsed().as_secs() < 10) {
+            return Ok(());
+        }
+        p.last_skin_change = Some(Instant::now());
         let Some(info) = p.info.as_mut() else { return Ok(()) };
         info.skin = std::rc::Rc::new(skin_bytes.clone());
         let uuid = info.uuid;

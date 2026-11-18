@@ -638,3 +638,37 @@ mod tests {
         assert_eq!(decoded, diamond);
     }
 }
+
+/// Container UI ids used by item stack requests for block containers.
+pub mod block_container {
+    pub const CHEST: u8 = 7; // LEVEL_ENTITY: chests and trapped chests
+    pub const SHULKER_BOX: u8 = 30;
+    pub const BARREL: u8 = 58;
+}
+
+pub const BLOCK_EVENT: u32 = 0x1a;
+/// WindowTypes::CONTAINER
+pub const WINDOW_TYPE_CONTAINER: u8 = 0;
+
+/// Opens a block container window (chest, barrel, shulker box) at `pos`.
+pub fn open_block_container(window_id: u8, window_type: u8, pos: [i32; 3]) -> Vec<u8> {
+    crate::packet(CONTAINER_OPEN, |w| {
+        w.u8(window_id);
+        w.u8(window_type);
+        w.varint(pos[0]);
+        w.varint(pos[1]);
+        w.varint(pos[2]);
+        w.varlong(-1); // no entity
+    })
+}
+
+/// BlockEvent: type 1 on chests opens (data 1) or closes (data 0) the lid.
+pub fn block_event(pos: [i32; 3], event_type: i32, data: i32) -> Vec<u8> {
+    crate::packet(BLOCK_EVENT, |w| {
+        w.varint(pos[0]);
+        w.varint(pos[1]);
+        w.varint(pos[2]);
+        w.varint(event_type);
+        w.varint(data);
+    })
+}

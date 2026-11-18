@@ -131,7 +131,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 ### Blocos com interface
 
-- [ ] Baú, baú duplo, barril, shulker box (abrir, sincronizar, salvar)
+- [~] Baú ✔, barril ✔, shulker box ✔ (abrir, mover itens, vários jogadores no mesmo baú, salvar no formato vanilla, derrubar ao quebrar) · baú duplo
 - [ ] Bancada de trabalho e receitas (CraftingData a partir de recipes.json)
 - [ ] Fornalha, alto-forno, defumador (queima, combustível, XP)
 - [ ] Bigorna, mesa de encantamento, rebolo, tear, cortador de pedra

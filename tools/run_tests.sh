@@ -46,6 +46,7 @@ python -I tools/smoke_client.py || status=1
 python -I tools/blocks_test.py || status=1
 python -I tools/inventory_test.py || status=1
 python -I tools/commands_test.py || status=1
+python -I tools/containers_test.py || status=1
 python -I tools/gameplay_test.py || status=1
 
 stop_server
@@ -53,6 +54,7 @@ stop_server
 SERVER=$!
 for _ in $(seq 1 100); do grep -q "Done" "$RUN/server2.out" 2>/dev/null && break; sleep 0.1; done
 python -I tools/blocks_test.py check || status=1
+python -I tools/containers_test.py check || status=1
 
 if grep -E "bad packet|panicked" "$RUN"/server*.out; then status=1; fi
 [ $status -eq 0 ] && echo "ALL TESTS PASSED" || echo "SOME TESTS FAILED"

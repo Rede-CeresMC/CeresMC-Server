@@ -15,6 +15,20 @@ pub(crate) struct Inventory {
     created: Option<ItemDesc>,
     next_stack_id: i32,
     pub(crate) dirty: bool,
+    /// block container (chest, barrel...) the player has open
+    pub(crate) container: Option<OpenContainer>,
+}
+
+#[derive(Clone)]
+pub(crate) struct OpenContainer {
+    /// container UI id the client uses for its slots in item stack requests
+    pub(crate) ui: u8,
+    pub(crate) window: u8,
+    pub(crate) world: usize,
+    pub(crate) pos: [i32; 3],
+    pub(crate) items: Vec<ItemDesc>,
+    /// changed since it was last written back to the block entity
+    pub(crate) changed: bool,
 }
 
 impl Default for Inventory {
@@ -28,6 +42,7 @@ impl Default for Inventory {
             created: None,
             next_stack_id: 1,
             dirty: false,
+            container: None,
         }
     }
 }
@@ -38,9 +53,15 @@ enum Loc {
     Armor(usize),
     Offhand,
     Cursor,
+    Container(usize),
 }
 
-fn locate(s: &SlotRef) -> Option<Loc> {
+fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
+    if let Some(c) = open {
+        if s.container == c.ui {
+            return ((s.slot as usize) < c.items.len()).then_some(Loc::Container(s.slot as usize));
+        }
+    }
     match s.container {
         container::COMBINED_HOTBAR_AND_INVENTORY | container::HOTBAR | container::INVENTORY => {
             (s.slot < 36).then_some(Loc::Main(s.slot as usize))
@@ -69,6 +90,7 @@ impl Inventory {
             Loc::Armor(i) => &self.armor[i],
             Loc::Offhand => &self.offhand,
             Loc::Cursor => &self.cursor,
+            Loc::Container(i) => &self.container.as_ref().expect("open container").items[i],
         }
     }
 
@@ -83,6 +105,13 @@ impl Inventory {
             Loc::Armor(i) => self.armor[i] = item,
             Loc::Offhand => self.offhand = item,
             Loc::Cursor => self.cursor = item,
+            Loc::Container(i) => {
+                if let Some(c) = self.container.as_mut() {
+                    c.items[i] = item;
+                    c.changed = true;
+                }
+                return;
+            }
         }
         self.dirty = true;
     }
@@ -206,6 +235,7 @@ impl Inventory {
             self.cursor.clone(),
             self.created.clone(),
             self.next_stack_id,
+            self.container.clone(),
         );
         let res = self.apply_inner(req, creative, gd);
         if res.is_none() {
@@ -215,6 +245,7 @@ impl Inventory {
             self.cursor = backup.3;
             self.created = backup.4;
             self.next_stack_id = backup.5;
+            self.container = backup.6;
         }
         res
     }
@@ -257,12 +288,12 @@ impl Inventory {
                         c.count = 64;
                         c
                     } else {
-                        self.slot_ref(locate(&src)?).clone()
+                        self.slot_ref(locate(&src, self.container.as_ref())?).clone()
                     };
                     if source.is_empty() || source.count < count as u16 {
                         return None;
                     }
-                    let dst_loc = locate(&dst)?;
+                    let dst_loc = locate(&dst, self.container.as_ref())?;
                     let max_stack = if matches!(dst_loc, Loc::Armor(_)) { 1 } else { gd.max_stack(source.id) as u16 };
                     let mut target = self.slot_ref(dst_loc).clone();
                     if !target.is_empty() && !target.same_type(&source) {
@@ -278,7 +309,7 @@ impl Inventory {
                     target.count = new_count;
                     target.stack_id = self.alloc_id();
                     if !from_creative {
-                        let src_loc = locate(&src)?;
+                        let src_loc = locate(&src, self.container.as_ref())?;
                         let mut rem = source;
                         rem.count -= count as u16;
                         if rem.count > 0 {
@@ -291,7 +322,7 @@ impl Inventory {
                     touched.push(dst);
                 }
                 StackAction::Swap { a, b } => {
-                    let (la, lb) = (locate(&a)?, locate(&b)?);
+                    let (la, lb) = (locate(&a, self.container.as_ref())?, locate(&b, self.container.as_ref())?);
                     let (mut sa, mut sb) = (self.slot_ref(la).clone(), self.slot_ref(lb).clone());
                     if matches!(la, Loc::Armor(_)) && !sb.is_empty() && sb.count > 1 {
                         return None;
@@ -325,7 +356,7 @@ impl Inventory {
                         }
                         continue;
                     }
-                    let loc = locate(&src)?;
+                    let loc = locate(&src, self.container.as_ref())?;
                     let mut s = self.slot_ref(loc).clone();
                     if s.is_empty() || s.count < count as u16 {
                         return None;
@@ -346,7 +377,7 @@ impl Inventory {
                     if src.container == container::CREATED_OUTPUT {
                         continue;
                     }
-                    let loc = locate(&src)?;
+                    let loc = locate(&src, self.container.as_ref())?;
                     let mut s = self.slot_ref(loc).clone();
                     s.count = s.count.saturating_sub(count as u16);
                     if s.count > 0 {
@@ -365,7 +396,7 @@ impl Inventory {
             if out.iter().any(|o| o.container == s.container && o.slot == s.slot) {
                 continue;
             }
-            let Some(loc) = locate(&s) else { continue };
+            let Some(loc) = locate(&s, self.container.as_ref()) else { continue };
             let st = self.slot_ref(loc);
             out.push(SlotResult { container: s.container, slot: s.slot, count: st.count as u8, stack_id: st.stack_id });
         }
@@ -447,12 +478,13 @@ impl Inventory {
 const PLAYERS_DIR: &str = "players";
 
 fn player_file_path(name: &str) -> Option<std::path::PathBuf> {
-    let clean: String =
-        name.to_ascii_lowercase().chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').collect();
-    if clean.is_empty() {
+    // hex of the whole lowercase name: distinct names can never share a file
+    // TODO: key on the verified XUID once Xbox login verification exists
+    if name.is_empty() || name.len() > 64 {
         return None;
     }
-    Some(std::path::Path::new(PLAYERS_DIR).join(format!("{clean}.nbt")))
+    let hex: String = name.to_lowercase().bytes().map(|b| format!("{b:02x}")).collect();
+    Some(std::path::Path::new(PLAYERS_DIR).join(format!("{hex}.nbt")))
 }
 
 impl Server {
@@ -554,6 +586,7 @@ impl Server {
         p.out.push(protocol::item_stack_response(req.id, ok, &slots));
         if ok {
             self.broadcast_equipment(sid);
+            self.sync_container(sid);
             for item in dropped {
                 self.drop_from_player(sid, item);
             }

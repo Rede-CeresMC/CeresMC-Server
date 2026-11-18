@@ -112,12 +112,23 @@ impl Server {
             self.resync(sid, pos);
             return;
         }
+        let contents = if containers::container_kind(self.gd.block_name(old)).is_some() {
+            self.take_container_items(world, pos)
+        } else {
+            Vec::new()
+        };
         if !self.change_block(world, pos, air) {
             self.resync(sid, pos);
             return;
         }
         self.swing_arm(sid);
         let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
+        // a broken container spills what it held, in every game mode (like vanilla)
+        for item in contents {
+            let rx = (rand::random::<f32>() - 0.5) * 0.2;
+            let rz = (rand::random::<f32>() - 0.5) * 0.2;
+            self.spawn_item(world, center, [rx, 0.2, rz], item, 10);
+        }
         let destroy_fx = protocol::level_event(level_event::PARTICLE_DESTROY, center, old);
         self.broadcast(&destroy_fx, |o, q| o != sid && q.world == world);
 
@@ -168,7 +179,15 @@ impl Server {
 
         let clicked_id = self.worlds.worlds[world].get_block(clicked, &self.gd);
 
-        // 1. Interactive blocks (doors, trapdoors, fence gates, levers) when not sneaking
+        // 1. Containers (chest, barrel, shulker box) and interactive blocks (doors, trapdoors,
+        //    fence gates, levers) when not sneaking
+        if !sneaking && self.open_container(sid, clicked) {
+            self.swing_arm(sid);
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
         if !sneaking {
             if let Some(toggled) = self.gd.toggle_interactive(clicked_id) {
                 self.change_block(world, clicked, toggled);
@@ -318,6 +337,7 @@ impl Server {
             self.broadcast(&be_pk, |_, q| q.world == world);
             if let Some(p) = self.players.get_mut(&sid) {
                 p.out.push(protocol::open_sign(pos, true));
+                p.editing_sign = Some((pos, Instant::now()));
             }
         }
     }
@@ -325,8 +345,11 @@ impl Server {
     /// Client edited a sign (BlockActorDataPacket 0x38).
     pub(crate) fn on_block_actor_data(&mut self, sid: SessionId, r: &mut R) -> Res<()> {
         let (pos, incoming) = protocol::read_block_actor_data(r)?;
-        let Some(p) = self.players.get(&sid) else { return Ok(()) };
-        if p.dead || p.gamemode == 2 || p.gamemode == 6 || !Self::in_reach(p, pos) {
+        let Some(p) = self.players.get_mut(&sid) else { return Ok(()) };
+        // only the sign whose editor we opened for this player, for a limited time
+        let allowed = matches!(p.editing_sign, Some((spos, at)) if spos == pos && at.elapsed().as_secs() < 120);
+        p.editing_sign = None;
+        if !allowed || p.dead || p.gamemode == 2 || p.gamemode == 6 || !Self::in_reach(p, pos) {
             return Ok(());
         }
         let world = p.world;
@@ -336,6 +359,9 @@ impl Server {
         }
         let mut sign =
             self.worlds.worlds[world].get_block_entity(pos, &self.gd).unwrap_or_else(|| default_sign_nbt(pos));
+        if sign.get("IsWaxed").and_then(|t| t.as_i64()).unwrap_or(0) != 0 {
+            return Ok(());
+        }
         for side_key in ["FrontText", "BackText"] {
             if let Some(text) = incoming.get(side_key).and_then(|t| t.get("Text")).and_then(|t| t.as_str()) {
                 let clean: String = text.chars().filter(|c| *c == '\n' || !c.is_control()).take(256).collect();

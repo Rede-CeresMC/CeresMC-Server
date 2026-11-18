@@ -4,6 +4,7 @@ mod blocks;
 mod chunks;
 mod combat;
 mod commands;
+mod containers;
 mod handler;
 mod inventory;
 mod items;
@@ -57,6 +58,11 @@ pub(crate) struct Player {
     op: bool,
     /// set by a teleport: movement far from here is stale and ignored until the client catches up
     teleport_to: Option<[f32; 3]>,
+    /// sign whose editor was opened for this player, and when
+    editing_sign: Option<([i32; 3], Instant)>,
+    last_skin_change: Option<Instant>,
+    /// last window id handed out (1..=99) for block containers
+    window_counter: u8,
     radius: i32,
     center: Option<(i32, i32)>,
     sent: HashSet<(i32, i32)>,
@@ -176,6 +182,9 @@ impl Server {
                             gamemode: self.cfg.gamemode,
                             op: false,
                             teleport_to: None,
+                            editing_sign: None,
+                            last_skin_change: None,
+                            window_counter: 0,
                             radius: 0,
                             center: None,
                             sent: HashSet::new(),

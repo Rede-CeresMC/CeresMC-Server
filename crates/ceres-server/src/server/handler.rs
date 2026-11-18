@@ -61,13 +61,15 @@ impl Server {
                     self.kick(sid, "§cO servidor está cheio!");
                     return Ok(());
                 }
-                // Kick duplicate session with the same name
-                if let Some((&dup_sid, _)) = self
+                // Logins are not verified yet, so a duplicate name must not push out the player who is
+                // online (anyone could kick anyone, and the new session would load a stale inventory).
+                if self
                     .players
                     .iter()
-                    .find(|(osid, q)| **osid != sid && !q.name.is_empty() && q.name.eq_ignore_ascii_case(&name))
+                    .any(|(osid, q)| *osid != sid && !q.name.is_empty() && q.name.eq_ignore_ascii_case(&name))
                 {
-                    self.kick(dup_sid, "§cVocê entrou de outro local.");
+                    self.kick(sid, "§cJá existe um jogador com esse nome online.");
+                    return Ok(());
                 }
 
                 let p = self.players.get_mut(&sid).unwrap();
@@ -139,7 +141,11 @@ impl Server {
             }
             (State::Spawned, protocol::CONTAINER_CLOSE) => {
                 let (win, ty) = (r.u8()?, r.u8()?);
+                let block_window = p.inventory.container.as_ref().is_some_and(|c| c.window == win);
                 p.out.push(protocol::container_close(win, ty, false));
+                if block_window {
+                    self.close_container(sid, false);
+                }
             }
             (State::Spawned, protocol::INVENTORY_TRANSACTION) => {
                 if let Some(tx) = protocol::read_inventory_transaction(&mut r)? {
