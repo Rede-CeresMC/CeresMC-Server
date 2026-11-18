@@ -43,25 +43,28 @@ fn ingredient_of(v: &serde_json::Value) -> Option<(Ingredient, u16)> {
     }
 }
 
+/// RecipeIngredient as recipes carry it since protocol 2225: a "valid" flag, the descriptor type as a
+/// string, the descriptor, and the count as a varint. (Item stack requests still use the older form.)
 fn write_ingredient(w: &mut W, ing: Option<&(Ingredient, u16)>) {
     match ing {
         Some((Ingredient::Name { name, aux }, count)) => {
             w.uvarint(1);
-            w.u8(1);
+            w.string("name");
             w.string(name);
             w.varint(aux.unwrap_or(WILDCARD_META));
-            w.i16_le(*count as i16);
+            w.varint(*count as i32);
         }
         Some((Ingredient::Tag(tag), count)) => {
-            w.uvarint(3);
-            w.u8(3);
+            w.uvarint(1);
+            w.string("item_tag");
             w.string(tag);
-            w.i16_le(*count as i16);
+            w.varint(WILDCARD_META);
+            w.varint(*count as i32);
         }
         None => {
             w.uvarint(0);
-            w.u8(0);
-            w.i16_le(0);
+            w.varint(WILDCARD_META);
+            w.varint(0);
         }
     }
 }

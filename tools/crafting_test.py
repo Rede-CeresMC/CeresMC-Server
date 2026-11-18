@@ -32,14 +32,23 @@ def read_string(d, p):
     return d[p:p + n].decode(errors="replace"), p + n
 
 def skip_ingredient(d, p):
-    ty, p = read_uvarint(d, p); p += 1
-    if ty == 1:
+    """RecipeIngredient of CraftingData (protocol 2225)."""
+    valid, p = read_uvarint(d, p)
+    if not valid:
+        _, p = read_svarint(d, p)  # aux 0x7fff
+        _, p = read_svarint(d, p)  # count
+        return p
+    kind, p = read_string(d, p)
+    if kind == "name":
         _, p = read_string(d, p); _, p = read_svarint(d, p)
-    elif ty == 2:
-        _, p = read_string(d, p); p += 1
-    elif ty in (3, 5):
-        _, p = read_string(d, p)
-    return p + 2
+    elif kind == "item_tag":
+        _, p = read_string(d, p); _, p = read_svarint(d, p)
+    elif kind == "molang":
+        _, p = read_string(d, p); p += 2
+    else:
+        raise ValueError("unknown descriptor " + kind)
+    _, p = read_svarint(d, p)  # count
+    return p
 
 def skip_output(d, p):
     iid, p = read_svarint(d, p)
@@ -89,6 +98,20 @@ def recipe_ids(c):
                 p = skip_output(d, p)
             net, p = skip_tail(d, p, shaped)
             out[name] = net
+    for _ in range(6):  # multi, user data, chemistry x2, smithing x2
+        n, p = read_uvarint(d, p)
+        if n:
+            raise ValueError("unexpected recipes in an empty bucket")
+    n, p = read_uvarint(d, p)  # potion mixes
+    for _ in range(n * 6):
+        _, p = read_svarint(d, p)
+    n, p = read_uvarint(d, p)  # container mixes
+    for _ in range(n * 3):
+        _, p = read_svarint(d, p)
+    n, p = read_uvarint(d, p)  # material reducer
+    p += 1  # clean recipes
+    if p != len(d):
+        raise ValueError(f"CraftingData has {len(d) - p} bytes left over")
     return out
 
 def give(c, what):
