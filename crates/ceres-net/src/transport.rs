@@ -6,8 +6,9 @@ use std::net::SocketAddr;
 pub type SessionId = u64;
 
 pub enum NetEvent {
-    /// A client finished the transport handshake and may now send game packets.
-    Connected(SessionId, SocketAddr),
+    /// A client finished the transport handshake and may now send game packets. The last field is
+    /// the client key the transport proved the peer holds (NetherNet identity), if any.
+    Connected(SessionId, SocketAddr, Option<String>),
     /// One game-layer payload (the bytes after RakNet's 0xFE / NetherNet's message framing).
     Packet(SessionId, Vec<u8>),
     Disconnected(SessionId, String),

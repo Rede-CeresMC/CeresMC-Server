@@ -31,6 +31,8 @@ pub type SharedKeys = Arc<RwLock<Option<Arc<MojangKeys>>>>;
 pub struct Verified {
     pub xuid: String,
     pub gamertag: String,
+    /// the client's key (base64 DER) the token vouches for
+    pub cpk: String,
 }
 
 fn http_get(url: &str) -> Result<String, String> {
@@ -177,5 +179,5 @@ pub fn verify_login(auth_json: &[u8], client_data: &[u8], keys: Option<&MojangKe
     verify_client_data(client_data, &cpk_der)?;
     let xuid = claims["xid"].as_str().filter(|x| !x.is_empty()).ok_or("token without XUID")?.to_string();
     let gamertag = claims["xname"].as_str().filter(|x| !x.is_empty()).ok_or("token without gamertag")?.to_string();
-    Ok(Verified { xuid, gamertag })
+    Ok(Verified { xuid, gamertag, cpk: cpk.to_string() })
 }

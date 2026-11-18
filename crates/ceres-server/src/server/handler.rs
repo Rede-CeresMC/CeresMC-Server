@@ -63,7 +63,14 @@ impl Server {
                     self.pending_logins.push((sid, buf.to_vec(), Instant::now()));
                     return Ok(());
                 }
-                let verified = match crate::auth::verify_login(auth_json, client_data, keys.as_deref()) {
+                let mut result = crate::auth::verify_login(auth_json, client_data, keys.as_deref());
+                // NetherNet: the login must come from the key that signed the connection's offer
+                if let (Ok(v), Some(bound)) = (&result, &self.players[&sid].transport_key) {
+                    if v.cpk != *bound {
+                        result = Err("login identity does not match the connection's identity".into());
+                    }
+                }
+                let verified = match result {
                     Ok(v) => {
                         name = v.gamertag;
                         xuid = v.xuid;

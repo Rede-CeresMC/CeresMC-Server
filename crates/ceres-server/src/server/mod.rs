@@ -33,6 +33,8 @@ pub(crate) enum State {
 
 pub(crate) struct Player {
     addr: SocketAddr,
+    /// client key the transport tied the connection to (NetherNet identity); the login must match
+    transport_key: Option<String>,
     state: State,
     compression: bool,
     name: String,
@@ -137,7 +139,7 @@ impl Server {
             for ti in 0..self.transports.len() {
                 self.transports[ti].poll(&mut events);
                 for e in &events {
-                    if let NetEvent::Connected(sid, _) = e {
+                    if let NetEvent::Connected(sid, _, _) = e {
                         self.owner.insert(*sid, ti);
                     }
                 }
@@ -168,12 +170,13 @@ impl Server {
     fn pending_events(&mut self, events: &mut Vec<NetEvent>) {
         for e in events.drain(..) {
             match e {
-                NetEvent::Connected(sid, addr) => {
+                NetEvent::Connected(sid, addr, transport_key) => {
                     println!("[Net] {addr} connected (session {sid})");
                     self.players.insert(
                         sid,
                         Player {
                             addr,
+                            transport_key,
                             state: State::AwaitNetworkSettings,
                             compression: false,
                             name: String::new(),

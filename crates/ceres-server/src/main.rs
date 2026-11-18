@@ -48,6 +48,7 @@ fn main() {
     println!("[Net] RakNet listening on {addr} (UDP)");
     let mut transports: Vec<Box<dyn Transport>> = vec![Box::new(rak)];
     // NetherNet session ids start high so they never collide with RakNet ones
+    ceres_net::nethernet::set_require_identity(cfg.nethernet_require_identity);
     match NetherNetServer::start(addr, 1 << 40, &worlds.worlds[worlds.default].display_name, cfg.gamemode) {
         Ok(n) => {
             println!("[Net] NetherNet signalling on {addr} (TCP/HTTP)");

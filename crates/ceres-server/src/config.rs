@@ -35,6 +35,8 @@ pub struct Config {
     pub allow_unverified_ops: bool,
     /// Verify Xbox Live logins (OpenID token + client data signature) and refuse the ones that fail.
     pub xbox_auth: bool,
+    /// NetherNet: refuse offers without a signed client identity (`auto` = when xbox-auth is on)
+    pub nethernet_require_identity: bool,
 }
 
 fn flag(s: &str) -> bool {
@@ -83,6 +85,10 @@ impl Config {
             max_batch_bytes: get("max-batch-bytes", "2097152").parse().unwrap_or(2 * 1024 * 1024).max(65536),
             allow_unverified_ops: flag(&get("allow-unverified-ops", "off")),
             xbox_auth: flag(&get("xbox-auth", "on")),
+            nethernet_require_identity: match get("nethernet-require-identity", "auto").to_ascii_lowercase().as_str() {
+                "auto" => flag(&get("xbox-auth", "on")),
+                v => flag(v),
+            },
         }
     }
 }

@@ -84,7 +84,8 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 - [x] 🔴 Verificar o login Xbox: token OpenID (RS256, chaves da Mojang), emissor, público, validade e assinatura ES384 dos dados do cliente (`xbox-auth`)
 - [x] 🔴 XUID e gamertag verificados (vêm do token assinado pela Mojang)
-- [ ] 🟠 Criptografia no RakNet (ECDH P-384 + AES-256-CTR)
+- [x] 🔴 NetherNet: identidade assinada na oferta (`a=identity`) ligada ao login (mesma `cpk`), impede reusar token de outro (`nethernet-require-identity`)
+- [ ] 🟢 Criptografia no RakNet (ECDH P-384 + AES-256-CTR). O Altay já não usa; só vale se o cliente ainda aceitar
 - [x] 🟠 Identidade do NetherNet persistente (chave salva em disco)
 - [ ] 🟠 TLS na sinalização do NetherNet (o cliente tenta TLS primeiro)
 - [x] 🟠 Proteção contra flood: limite de pacotes por segundo, tamanho máximo de batch

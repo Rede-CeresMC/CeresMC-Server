@@ -12,6 +12,8 @@ pub(crate) struct Handler {
     pub(crate) gathered: mpsc::UnboundedSender<()>,
     pub(crate) opened: AtomicBool,
     pub(crate) closed: AtomicBool,
+    /// client key the offer was signed with
+    pub(crate) identity: Option<String>,
 }
 
 impl Handler {
@@ -77,7 +79,7 @@ impl PeerConnectionEventHandler for H {
                 }
                 if !h.opened.swap(true, Ordering::SeqCst) {
                     println!("[NetherNet] {} opened a session ({})", h.peer, h.sid);
-                    h.emit(NetEvent::Connected(h.sid, h.peer));
+                    h.emit(NetEvent::Connected(h.sid, h.peer, h.identity.clone()));
                 }
             };
             if matches!(dc.ready_state().await, Ok(webrtc::data_channel::RTCDataChannelState::Open)) {
@@ -132,6 +134,11 @@ pub(crate) async fn negotiate(
     sessions: Sessions,
     ev_tx: std_mpsc::Sender<NetEvent>,
 ) -> Result<String, String> {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let identity = identity::client_identity(&offer, now).map_err(|e| format!("invalid identity: {e}"))?;
+    if identity.is_none() && REQUIRE_IDENTITY.load(Ordering::Relaxed) {
+        return Err("the offer carries no identity (nethernet-require-identity=off allows it)".into());
+    }
     let (gather_tx, mut gather_rx) = mpsc::unbounded_channel();
     let handler = Arc::new(Handler {
         sid,
@@ -141,6 +148,7 @@ pub(crate) async fn negotiate(
         gathered: gather_tx,
         opened: AtomicBool::new(false),
         closed: AtomicBool::new(false),
+        identity,
     });
     let engine = SettingEngineBuilder::new()
         .with_sctp_max_message_size(rtc::peer_connection::configuration::setting_engine::SctpMaxMessageSize::Bounded(

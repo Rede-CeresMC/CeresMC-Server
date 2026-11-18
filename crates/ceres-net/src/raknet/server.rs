@@ -152,7 +152,7 @@ impl RakNetServer {
             ID_NEW_INCOMING_CONNECTION => {
                 if !s.connected {
                     s.connected = true;
-                    out.push(NetEvent::Connected(s.id, from));
+                    out.push(NetEvent::Connected(s.id, from, None));
                 }
             }
             ID_DISCONNECTION_NOTIFICATION => {

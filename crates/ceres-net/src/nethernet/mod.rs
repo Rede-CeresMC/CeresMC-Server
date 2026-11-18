@@ -43,6 +43,13 @@ static IDENTITY: std::sync::LazyLock<identity::ServerIdentity> = std::sync::Lazy
     identity::ServerIdentity::load_or_generate(std::path::Path::new("nethernet.key"), "self")
 });
 
+/// Refuse offers that carry no client identity (see identity.rs). Set from the server's config.
+static REQUIRE_IDENTITY: AtomicBool = AtomicBool::new(false);
+
+pub fn set_require_identity(on: bool) {
+    REQUIRE_IDENTITY.store(on, Ordering::Relaxed);
+}
+
 const RELIABLE_CHANNEL: &str = "ReliableDataChannel";
 const MAX_MESSAGE_SIZE: usize = 262144;
 const MAX_PACKET_SIZE: usize = 4 * 1024 * 1024;

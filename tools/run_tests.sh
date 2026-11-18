@@ -69,6 +69,7 @@ for _ in $(seq 1 100); do grep -q "Done" "$RUN/server3.out" 2>/dev/null && break
 # give the server time to download the keys so the signature check itself is tested
 for _ in $(seq 1 150); do grep -q "Xbox Live keys loaded" "$RUN/server3.out" 2>/dev/null && break; sleep 0.1; done
 python -I tools/auth_test.py || status=1
+python -I tools/nethernet_identity_test.py "$RUN/server3.out" || status=1
 
 if grep -E "bad packet|panicked" "$RUN"/server*.out; then status=1; fi
 [ $status -eq 0 ] && echo "ALL TESTS PASSED" || echo "SOME TESTS FAILED"
