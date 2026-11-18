@@ -111,7 +111,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 ### Vida e combate
 
-- [~] Dano: queda ✔, vazio ✔ · fogo, lava, afogamento, sufocar, fome
+- [x] Dano: queda ✔, vazio ✔, lava ✔, fogo e queimar ✔, afogamento (bolhas de ar) ✔, sufocar ✔, fome ✔
 - [x] Morte e respawn (tela de morte, spawnpoint pessoal, keepInventory)
 - [x] Regeneração natural ✔ · fome, saturação, exaustão ✔ (correr, pular, lutar, apanhar, minerar; morrer de fome conforme a dificuldade)
 - [x] Combate PvP: dano por item, knockback, crítico, cooldown

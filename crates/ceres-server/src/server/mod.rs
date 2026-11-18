@@ -8,6 +8,7 @@ mod containers;
 mod doublechest;
 mod durability;
 mod effects;
+mod environment;
 mod falling;
 mod food;
 mod furnace;
@@ -74,6 +75,8 @@ pub(crate) struct Player {
     effects: HashMap<u8, effects::Effect>,
     /// extra hearts from Absorption, used up before health
     absorption: f32,
+    /// ticks left burning
+    fire_ticks: u32,
     xp_level: u32,
     /// points inside the current level
     xp_points: u32,
@@ -240,6 +243,7 @@ impl Server {
                             awaiting_release: false,
                             effects: HashMap::new(),
                             absorption: 0.0,
+                            fire_ticks: 0,
                             xp_level: 0,
                             xp_points: 0,
                             dead: false,

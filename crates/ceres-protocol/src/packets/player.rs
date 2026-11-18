@@ -45,12 +45,24 @@ pub struct ActorState {
     pub gliding: bool,
     pub crawling: bool,
     pub emoting: bool,
+    pub on_fire: bool,
+    /// ticks of air used up under water (0 = full air)
+    pub air_lost: i16,
 }
+
+/// Ticks of air a full bubble bar holds.
+pub const MAX_AIR_SUPPLY: i16 = 300;
 
 impl ActorState {
     fn flags(&self) -> (i64, i64) {
-        let mut f1: i64 = (1 << 14) | (1 << 15) | (1 << 35) | (1 << 48) | (1 << 49);
+        let mut f1: i64 = (1 << 14) | (1 << 15) | (1 << 48) | (1 << 49);
         let mut f2: i64 = 0;
+        if self.air_lost == 0 {
+            f1 |= 1 << 35; // BREATHING: no bubbles shown
+        }
+        if self.on_fire {
+            f1 |= 1;
+        }
         if self.sneaking {
             f1 |= 1 << 1;
         }
@@ -182,7 +194,7 @@ pub fn update_abilities(a: &Abilities) -> Vec<u8> {
 
 fn player_metadata(w: &mut W, name: &str, state: &ActorState) {
     let (flags, flags2) = state.flags();
-    w.uvarint(6);
+    w.uvarint(8);
     // key, type, type again (that's how putEntityMetadata writes it)
     w.uvarint(0);
     w.uvarint(7);
@@ -208,6 +220,14 @@ fn player_metadata(w: &mut W, name: &str, state: &ActorState) {
     w.uvarint(7);
     w.u8(7);
     w.varlong(flags2);
+    w.uvarint(7); // AIR (short)
+    w.uvarint(1);
+    w.u8(1);
+    w.i16_le(MAX_AIR_SUPPLY - state.air_lost.clamp(0, MAX_AIR_SUPPLY));
+    w.uvarint(42); // MAX_AIR (short)
+    w.uvarint(1);
+    w.u8(1);
+    w.i16_le(MAX_AIR_SUPPLY);
 }
 
 /// `feet` is the position of the feet (not the eyes).

@@ -212,6 +212,7 @@ impl Server {
             p.dead = false;
             p.health = 20.0;
             p.reset_food();
+            p.fire_ticks = 0;
             p.hurt_cooldown = 20;
             p.fall_start_y = None;
             p.actor_state = Default::default();
@@ -289,6 +290,7 @@ impl Server {
             self.tick_food(sid);
             if self.players.get(&sid).is_some_and(|p| p.gamemode != 1 && p.gamemode != 6) {
                 self.tick_effects(sid);
+                self.tick_environment(sid);
             }
             let Some(p) = self.players.get_mut(&sid) else { continue };
             if p.dead {
