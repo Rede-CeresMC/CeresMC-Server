@@ -113,6 +113,16 @@ impl Server {
         }
 
         let p = self.players.get_mut(&sid).unwrap();
+        // a hit that does no damage (snowball) only pushes: no invulnerability frames, no hunger
+        if raw_damage <= 0.0 {
+            let (world, eid) = (p.world, p.entity_id);
+            if let Some(kb) = knockback {
+                let mot_pk = protocol::set_actor_motion(eid, kb);
+                p.out.push(mot_pk.clone());
+                self.broadcast(&mot_pk, |o, q| o != sid && q.world == world);
+            }
+            return true;
+        }
         // absorption hearts go first
         if p.absorption > 0.0 {
             let taken = p.absorption.min(dmg);
@@ -147,6 +157,7 @@ impl Server {
     }
 
     pub(crate) fn kill_player(&mut self, sid: SessionId, death_msg: &str) {
+        self.stop_sleeping(sid);
         self.close_container(sid, true);
         let Some(p) = self.players.get_mut(&sid) else { return };
         if p.dead {

@@ -129,6 +129,8 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 - [x] Agricultura: sementes, cenoura, batata e beterraba na terra arada, crescimento por random ticks perto dos jogadores, farinha de osso, colheita conforme o estágio; fogo apaga sozinho
 
+- [x] Camas: definem o ponto de renascimento; à noite ou em tempestade o jogador deita; todos dormindo por 5 s pula a noite e limpa a chuva
+
 ### Itens
 
 - [x] Durabilidade de ferramentas e armas (NBT `Damage`, Inquebrável, quebra com som)

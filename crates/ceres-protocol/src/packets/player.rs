@@ -48,6 +48,8 @@ pub struct ActorState {
     pub on_fire: bool,
     /// ticks of air used up under water (0 = full air)
     pub air_lost: i16,
+    /// bed the player sleeps in
+    pub sleeping: Option<[i32; 3]>,
 }
 
 /// Ticks of air a full bubble bar holds.
@@ -194,7 +196,7 @@ pub fn update_abilities(a: &Abilities) -> Vec<u8> {
 
 fn player_metadata(w: &mut W, name: &str, state: &ActorState) {
     let (flags, flags2) = state.flags();
-    w.uvarint(8);
+    w.uvarint(if state.sleeping.is_some() { 10 } else { 9 });
     // key, type, type again (that's how putEntityMetadata writes it)
     w.uvarint(0);
     w.uvarint(7);
@@ -228,6 +230,19 @@ fn player_metadata(w: &mut W, name: &str, state: &ActorState) {
     w.uvarint(1);
     w.u8(1);
     w.i16_le(MAX_AIR_SUPPLY);
+    w.uvarint(26); // PLAYER_FLAGS (byte): bit 1 = sleeping
+    w.uvarint(0);
+    w.u8(0);
+    w.u8(if state.sleeping.is_some() { 1 << 1 } else { 0 });
+    // the bed position is only sent while sleeping (a 0,0,0 position moves the player there)
+    if let Some(bed) = state.sleeping {
+        w.uvarint(28); // PLAYER_BED_POSITION (block position)
+        w.uvarint(6);
+        w.u8(6);
+        w.varint(bed[0]);
+        w.varint(bed[1]);
+        w.varint(bed[2]);
+    }
 }
 
 /// `feet` is the position of the feet (not the eyes).

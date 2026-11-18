@@ -9,6 +9,10 @@ const MAX_AGE: u32 = 1200;
 const ENCHANT_POWER: i16 = 19;
 const ENCHANT_PUNCH: i16 = 20;
 const ENCHANT_INFINITY: i16 = 22;
+/// ticks between two throws (vanilla 4)
+const THROW_COOLDOWN: u64 = 4;
+const MAX_PER_PLAYER: usize = 64;
+const MAX_TOTAL: usize = 2000;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Kind {
@@ -62,6 +66,21 @@ fn look_vector(pitch: f32, yaw: f32) -> [f32; 3] {
 }
 
 impl Server {
+    /// Whether `sid` may launch a projectile now (cooldown and limits). Records the launch.
+    fn may_launch(&mut self, sid: SessionId) -> bool {
+        let ticks = self.ticks;
+        let mine = self.projectiles.iter().filter(|p| p.owner == sid).count();
+        if mine >= MAX_PER_PLAYER || self.projectiles.len() >= MAX_TOTAL {
+            return false;
+        }
+        let Some(p) = self.players.get_mut(&sid) else { return false };
+        if p.dead || p.gamemode == 6 || p.state != State::Spawned || ticks < p.last_throw + THROW_COOLDOWN {
+            return false;
+        }
+        p.last_throw = ticks;
+        true
+    }
+
     fn launch(&mut self, sid: SessionId, kind: Kind, speed: f32, power: u8, punch: u8, pickup: bool) {
         let Some(p) = self.players.get(&sid) else { return };
         let (world, pos, rot) = (p.world, p.pos, p.rot);
@@ -86,7 +105,12 @@ impl Server {
         let held = p.inventory.held_item().clone();
         let Some(name) = self.gd.items_by_id.get(&held.id).map(|i| i.name.clone()) else { return false };
         let Some(kind) = throwable(&name) else { return false };
-        if p.dead || gm == 6 {
+        if !self.may_launch(sid) {
+            // tell the client its item is still there
+            let slot = (self.players[&sid].inventory.held_slot as usize).min(8);
+            if let Some(p) = self.players.get_mut(&sid) {
+                p.out.push(protocol::inventory_slot(ceres_protocol::window::INVENTORY as u32, slot as u32, &p.inventory.main[slot]));
+            }
             return true;
         }
         self.launch(sid, kind, 1.5, 0, 0, false);
@@ -102,6 +126,9 @@ impl Server {
         let held = p.inventory.held_item();
         if self.gd.items_by_id.get(&held.id).is_none_or(|i| i.name != "minecraft:bow") {
             return false;
+        }
+        if p.dead || p.gamemode == 6 {
+            return true;
         }
         if p.bow_since.is_none() {
             p.bow_since = Some(ticks);
@@ -131,6 +158,10 @@ impl Server {
         if gm != 1 && arrow_slot.is_none() {
             return;
         }
+        if !self.may_launch(sid) {
+            return;
+        }
+        let Some(p) = self.players.get_mut(&sid) else { return };
         let pickup = gm != 1 && !infinity;
         if pickup {
             let slot = arrow_slot.unwrap();
@@ -186,6 +217,11 @@ impl Server {
                     break;
                 }
                 let bpos = [at[0].floor() as i32, at[1].floor() as i32, at[2].floor() as i32];
+                // never load chunks for a projectile: it stops where the loaded world ends
+                if !self.worlds.worlds[world].is_loaded(bpos) {
+                    hit = Some((at, None));
+                    break;
+                }
                 let b = self.worlds.worlds[world].get_block(bpos, &self.gd);
                 if self.gd.is_solid(b) {
                     hit = Some((at, None));

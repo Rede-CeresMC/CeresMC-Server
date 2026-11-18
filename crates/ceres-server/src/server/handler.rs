@@ -180,6 +180,7 @@ impl Server {
                     p.out.push(protocol::open_own_inventory(p.entity_id));
                 }
             }
+            (State::Spawned, sleep::PLAYER_ACTION) => self.on_player_action(sid, &mut r)?,
             (State::Spawned, protocol::CONTAINER_CLOSE) => {
                 let (win, ty) = (r.u8()?, r.u8()?);
                 let block_window = p.inventory.container.as_ref().is_some_and(|c| c.window == win);

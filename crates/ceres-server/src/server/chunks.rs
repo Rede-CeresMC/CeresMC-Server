@@ -83,6 +83,7 @@ impl Server {
         self.tick_liquids();
         self.random_ticks();
         self.tick_projectiles();
+        self.check_sleep();
 
         let sids: Vec<SessionId> = self.players.keys().copied().collect();
         for sid in sids {

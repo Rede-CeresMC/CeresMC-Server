@@ -228,6 +228,13 @@ impl Server {
 
         // 1. Containers (chest, barrel, shulker box) and interactive blocks (doors, trapdoors,
         //    fence gates, levers) when not sneaking
+        if !sneaking && self.use_bed(sid, clicked) {
+            self.swing_arm(sid);
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
         if !sneaking && self.open_container(sid, clicked) {
             self.swing_arm(sid);
             if let Some(t) = side(clicked, face) {

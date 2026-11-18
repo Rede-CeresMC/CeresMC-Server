@@ -23,6 +23,7 @@ mod moderation;
 mod players;
 mod projectiles;
 mod skin;
+mod sleep;
 mod xp;
 
 use crate::config::Config;
@@ -81,6 +82,10 @@ pub(crate) struct Player {
     fire_ticks: u32,
     /// tick the player started drawing a bow
     bow_since: Option<u64>,
+    /// tick the player lay down in a bed
+    sleep_since: u64,
+    /// tick of the last projectile thrown or shot
+    last_throw: u64,
     xp_level: u32,
     /// points inside the current level
     xp_points: u32,
@@ -251,6 +256,8 @@ impl Server {
                             absorption: 0.0,
                             fire_ticks: 0,
                             bow_since: None,
+                            sleep_since: 0,
+                            last_throw: 0,
                             xp_level: 0,
                             xp_points: 0,
                             dead: false,
