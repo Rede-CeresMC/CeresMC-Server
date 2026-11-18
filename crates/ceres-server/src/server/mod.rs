@@ -5,6 +5,7 @@ mod chunks;
 mod combat;
 mod commands;
 mod containers;
+mod doublechest;
 mod durability;
 mod effects;
 mod food;

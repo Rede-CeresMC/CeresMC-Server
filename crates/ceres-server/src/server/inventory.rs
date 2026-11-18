@@ -33,7 +33,10 @@ pub(crate) struct OpenContainer {
     pub(crate) ui: u8,
     pub(crate) window: u8,
     pub(crate) world: usize,
+    /// position of the container (the first half of a double chest)
     pub(crate) pos: [i32; 3],
+    /// second half of a double chest
+    pub(crate) pair: Option<[i32; 3]>,
     pub(crate) items: Vec<ItemDesc>,
     /// changed since it was last written back to the block entity
     pub(crate) changed: bool,

@@ -126,7 +126,14 @@ impl Server {
         }
         self.close_container(sid, false);
         let workbench = ui == WORKBENCH_UI;
-        let mut items = if workbench {
+        let double = if tile_id == "Chest" { self.double_chest_items(world, pos) } else { None };
+        let (pos, pair) = match &double {
+            Some((first, second, _)) => (*first, Some(*second)),
+            None => (pos, None),
+        };
+        let mut items = if let Some((_, _, items)) = double {
+            items
+        } else if workbench {
             Vec::new()
         } else {
             // a working furnace holds the newest contents itself
@@ -152,10 +159,12 @@ impl Server {
             p.out.push(protocol::open_block_container(window, ty, pos));
             p.out.push(protocol::inventory_content(window as u32, &items));
         }
-        p.inventory.container = Some(OpenContainer { ui, window, world, pos, items, changed: false });
+        p.inventory.container = Some(OpenContainer { ui, window, world, pos, pair, items, changed: false });
         if lid {
             let viewers = self.container_viewers(world, pos);
-            self.broadcast(&protocol::block_event(pos, 1, viewers as i32), |_, q| q.world == world);
+            for half in std::iter::once(pos).chain(pair) {
+                self.broadcast(&protocol::block_event(half, 1, viewers as i32), |_, q| q.world == world);
+            }
         }
         true
     }
@@ -188,14 +197,23 @@ impl Server {
             return;
         }
         c.changed = false;
-        let (world, pos, items) = (c.world, c.pos, c.items.clone());
+        let (world, pos, pair, items) = (c.world, c.pos, c.pair, c.items.clone());
         let block = self.worlds.worlds[world].get_block(pos, &self.gd);
         let Some((_, tile_id, _)) = container_kind(self.gd.block_name(block)) else { return };
-        let mut tile = self.worlds.worlds[world].get_block_entity(pos, &self.gd).unwrap_or_else(|| {
-            Tag::Compound(vec![("id".into(), Tag::String(tile_id.into())), ("isMovable".into(), Tag::Byte(1))])
-        });
-        tile.set("Items", items_to_list(&items, &self.gd));
-        self.worlds.worlds[world].set_block_entity(pos, tile, &self.gd);
+        // a double chest keeps 27 items in each half
+        let parts: Vec<([i32; 3], &[ItemDesc])> = match pair {
+            Some(second) if items.len() == 2 * CONTAINER_SLOTS => {
+                vec![(pos, &items[..CONTAINER_SLOTS]), (second, &items[CONTAINER_SLOTS..])]
+            }
+            _ => vec![(pos, &items[..])],
+        };
+        for (half, half_items) in parts {
+            let mut tile = self.worlds.worlds[world].get_block_entity(half, &self.gd).unwrap_or_else(|| {
+                Tag::Compound(vec![("id".into(), Tag::String(tile_id.into())), ("isMovable".into(), Tag::Byte(1))])
+            });
+            tile.set("Items", items_to_list(half_items, &self.gd));
+            self.worlds.worlds[world].set_block_entity(half, tile, &self.gd);
+        }
         // a furnace starts working on what the player put in
         if let Some((ui, _, _)) = container_kind(self.gd.block_name(block)).filter(|(u, _, _)| furnace::is_furnace_ui(*u)) {
             match self.furnaces.get_mut(&(world, pos)) {
@@ -244,12 +262,15 @@ impl Server {
         let block = self.worlds.worlds[c.world].get_block(c.pos, &self.gd);
         if let Some((_, _, true)) = container_kind(self.gd.block_name(block)) {
             let viewers = self.container_viewers(c.world, c.pos);
-            self.broadcast(&protocol::block_event(c.pos, 1, viewers as i32), |_, q| q.world == c.world);
+            for half in std::iter::once(c.pos).chain(c.pair) {
+                self.broadcast(&protocol::block_event(half, 1, viewers as i32), |_, q| q.world == c.world);
+            }
         }
     }
 
     /// Items stored in a container block, removed from it (used when the block is broken).
     pub(crate) fn take_container_items(&mut self, world: usize, pos: [i32; 3]) -> Vec<ItemDesc> {
+        self.unpair_chest(world, pos);
         let tile = self.worlds.worlds[world].get_block_entity(pos, &self.gd);
         let block = self.worlds.worlds[world].get_block(pos, &self.gd);
         let slots = container_kind(self.gd.block_name(block)).map_or(CONTAINER_SLOTS, |(ui, _, _)| slot_count(ui));
@@ -264,7 +285,9 @@ impl Server {
         let viewers: Vec<SessionId> = self
             .players
             .iter()
-            .filter(|(_, q)| q.inventory.container.as_ref().is_some_and(|c| c.world == world && c.pos == pos))
+            .filter(|(_, q)| {
+                q.inventory.container.as_ref().is_some_and(|c| c.world == world && (c.pos == pos || c.pair == Some(pos)))
+            })
             .map(|(s, _)| *s)
             .collect();
         for s in viewers {

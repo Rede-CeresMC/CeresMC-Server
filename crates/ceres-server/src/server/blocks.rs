@@ -372,6 +372,7 @@ impl Server {
             self.broadcast_equipment(sid);
         }
 
+        self.pair_new_chest(world, pos);
         // If a sign was placed, create its BlockEntity NBT and open the sign editor on the placer!
         if self.gd.is_sign(placed_id) {
             let nbt = default_sign_nbt(pos);
