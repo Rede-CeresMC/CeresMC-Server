@@ -5,6 +5,7 @@ mod chunks;
 mod combat;
 mod commands;
 mod containers;
+mod durability;
 mod handler;
 mod inventory;
 mod items;

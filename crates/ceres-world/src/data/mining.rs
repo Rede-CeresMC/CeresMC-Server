@@ -35,6 +35,8 @@ pub struct ToolInfo {
     pub speed: f32,
 }
 
+const UNKNOWN_HARDNESS: f32 = 1.5;
+
 const TOOL_TAGS: [(&str, Tool); 6] = [
     ("pickaxe", Tool::Pickaxe),
     ("axe", Tool::Axe),
@@ -111,7 +113,7 @@ impl GameData {
         Some(ToolInfo { tool, tier, speed })
     }
 
-    /// Break info of a block state (None when unknown: no limit is applied).
+    /// Break info of a block state (None when unknown).
     pub fn break_info(&self, block: i32) -> Option<BreakInfo> {
         self.break_info.get(self.block_name(block)).copied()
     }
@@ -128,7 +130,9 @@ impl GameData {
     /// Seconds a survival player needs to break `block` with `held_id` (with `efficiency` levels).
     /// None = unbreakable.
     pub fn break_time(&self, block: i32, held_id: i16, efficiency: u8) -> Option<f32> {
-        let Some(b) = self.break_info(block) else { return Some(0.0) };
+        // every palette block has an entry; anything else is treated as a plain 1.5-hardness block
+        // so an unexpected id can never be broken instantly
+        let Some(b) = self.break_info(block) else { return Some(UNKNOWN_HARDNESS * 1.5) };
         if b.hardness < 0.0 {
             return None;
         }

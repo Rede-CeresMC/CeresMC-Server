@@ -106,6 +106,9 @@ impl Server {
             self.broadcast(&mot_pk, |o, q| o != sid && q.world == world);
         }
 
+        if !bypass_armor {
+            self.wear_armor(sid, raw_damage);
+        }
         if health <= 0.0 {
             self.kill_player(sid, death_msg);
         }
@@ -216,7 +219,9 @@ impl Server {
         let kb = [dx / len * 0.4, 0.36, dz / len * 0.4];
         let msg = format!("§c{} foi morto por {}", vic.name, att.name);
         self.swing_arm(attacker_sid);
-        self.damage_player(victim_sid, dmg, &msg, false, Some(kb));
+        if self.damage_player(victim_sid, dmg, &msg, false, Some(kb)) {
+            self.wear_held_item(attacker_sid, true);
+        }
     }
 
     pub(crate) fn tick_players_survival(&mut self) {
@@ -269,7 +274,8 @@ impl Server {
                             let dmg = (dist - 3.0).floor();
                             if dmg >= 1.0 {
                                 let msg = format!("§c{name} caiu de um lugar alto");
-                                self.damage_player(sid, dmg, &msg, false, None);
+                                // armor does not soften falls
+                                self.damage_player(sid, dmg, &msg, true, None);
                             }
                         }
                     }

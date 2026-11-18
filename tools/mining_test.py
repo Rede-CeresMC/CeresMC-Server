@@ -66,6 +66,15 @@ n = len(c.received)
 check(state_after(c, ROW[2], lambda: mine(c, ROW[2], 1.2)) not in (STONE, None), "stone with a wooden pickaxe after 1.2 s works")
 check(any(p == 0x0f for p, _ in c.received[n:]), "the stone dropped (pickaxe can harvest it)")
 
+def slot_damage(c, since):
+    """Damage NBT of the last InventorySlot the server sent for hotbar slot 0."""
+    for pid, d in reversed(c.received[since:]):
+        if pid == 0x32 and d[:2] == bytes(2):
+            i = d.find(bytes([3, 6, 0]) + b"Damage")
+            return struct.unpack("<i", d[i + 9:i + 13])[0] if i >= 0 else 0
+    return None
+check(slot_damage(c, n) == 1, f"the pickaxe lost 1 durability (Damage={slot_damage(c, n)})")
+
 c.close()
 print("PASS" if ok else "FAILED")
 sys.exit(0 if ok else 1)

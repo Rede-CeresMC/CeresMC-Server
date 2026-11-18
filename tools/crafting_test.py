@@ -91,6 +91,12 @@ def recipe_ids(c):
             out[name] = net
     return out
 
+def give(c, what):
+    """/give and wait until the item is in the inventory."""
+    n = len(c.received)
+    command(c, "/give @s " + what)
+    c.pump(3.0, lambda: any(p == 0x32 for p, _ in c.received[n:]))
+
 def slot(container, s, stack_id=0):
     return bytes([container]) + b"\x00" + bytes([s]) + struct.pack("<i", stack_id)
 
@@ -154,7 +160,7 @@ check(planks and chest and table, "planks, chest and crafting table recipes are 
 
 command(c, "/gamemode survival")
 command(c, "/clear")
-command(c, "/give @s oak_log 2")
+give(c, "oak_log 2")
 
 # 1. log into the 2x2 grid, craft 4 planks into hotbar slot 1
 check(request(c, [take(1, slot(HOTBAR, 0), slot(CRAFT_IN, 28))]), "a log can be put into the 2x2 grid")
@@ -195,7 +201,7 @@ c.pump(3.0, lambda: any(p == 0x2e for p, _ in c.received[n:]))
 opens = [d for p, d in c.received[n:] if p == 0x2e]
 check(opens and opens[-1][1] == 1, "clicking a crafting table opens the workbench window")
 command(c, "/clear")
-command(c, "/give @s oak_planks 8")
+give(c, "oak_planks 8")
 check(request(c, [craft(chest), consume(8, HOTBAR, 0), take(1, slot(CREATED, 50), slot(HOTBAR, 1))]),
       "a chest (3x3) can be crafted at the crafting table")
 

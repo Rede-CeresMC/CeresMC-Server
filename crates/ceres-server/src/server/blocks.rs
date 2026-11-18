@@ -132,8 +132,12 @@ impl Server {
         let destroy_fx = protocol::level_event(level_event::PARTICLE_DESTROY, center, old);
         self.broadcast(&destroy_fx, |o, q| o != sid && q.world == world);
 
-        // Survival block drops (nothing when the tool is not good enough, like stone by hand)
+        // Survival block drops (nothing when the tool is not good enough, like stone by hand); the
+        // tool is checked before it wears, so a tool breaking on its last block still drops it
         let held = self.players.get(&sid).map(|p| p.inventory.held_item().id).unwrap_or(0);
+        if self.gd.break_info(old).is_some_and(|b| b.hardness > 0.0) {
+            self.wear_held_item(sid, false);
+        }
         if gm == 0 && self.gd.can_harvest(old, held) {
             if let Some(ce) = self.gd.block_to_item.get(&old).cloned() {
                 let count = if self.gd.block_name(old).contains("_double_slab") { 2 } else { 1 };
