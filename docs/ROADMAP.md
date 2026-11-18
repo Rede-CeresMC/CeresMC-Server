@@ -26,6 +26,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 ## Fase 1: jogável (em andamento)
 
 ### Jogadores
+
 - [x] Lista de jogadores com skin (incluindo persona, capa, animações)
 - [x] Ver outros jogadores: AddPlayer, MovePlayer, RemoveActor
 - [x] Chat e mensagens de entrar/sair
@@ -40,6 +41,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] 🟢 Trocar skin em jogo (PlayerSkin)
 
 ### Blocos
+
 - [x] Quebrar (PlayerAuthInput / criativo), visível para todos
 - [x] Colocar (InventoryTransaction), com alcance e espaço livre
 - [x] Reenviar o bloco real quando a ação é recusada
@@ -54,6 +56,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] 🟢 Pegar bloco com o botão do meio (BlockPickRequest)
 
 ### Inventário
+
 - [x] Menu criativo (2221 itens, 128 grupos)
 - [x] Abrir e fechar o próprio inventário
 - [x] ItemStackRequest: criar, mover, dividir, trocar, descartar, com resposta por slot
@@ -66,6 +69,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] 🟢 Craft 2x2 no inventário
 
 ### Comandos
+
 - [ ] 🔴 Ler CommandRequest e responder (CommandOutput / mensagem)
 - [ ] 🔴 AvailableCommands: lista e autocompletar ao digitar `/`
 - [ ] 🔴 `/gamemode`, `/tp`, `/give`, `/list`, `/say`, `/help`
@@ -76,6 +80,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] 🟢 Comandos pelo console do servidor (stdin)
 
 ### Segurança e conexão
+
 - [ ] 🔴 Verificar a cadeia de login Xbox (JWT, chaves da Mojang/OpenID)
 - [ ] 🔴 XUID e UUID reais do jogador
 - [ ] 🟠 Criptografia no RakNet (ECDH P-384 + AES-256-CTR)
@@ -87,6 +92,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] 🟢 Ping RakNet com contagem real e `server-portv6`
 
 ### Mundo
+
 - [x] Quebrar/colocar persistentes
 - [ ] 🔴 Salvar ao desligar (Ctrl+C / `/stop`) sem perder nada
 - [ ] 🟠 Baús, placas, fornalhas etc. (block entities da chave 0x31) enviados nos chunks
@@ -102,6 +108,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 ## Fase 2: survival
 
 ### Vida e combate
+
 - [ ] Dano: queda, fogo, lava, afogamento, sufocar, vazio, fome
 - [ ] Morte e respawn (tela de morte, cama/âncora, keepInventory)
 - [ ] Regeneração natural, fome, saturação, exaustão
@@ -113,6 +120,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] Experiência: orbes, níveis, gasto em encantar/bigorna
 
 ### Itens
+
 - [ ] Durabilidade de ferramentas e armas
 - [ ] Arco, besta, tridente, bola de neve, ovo, pérola do fim (projéteis)
 - [ ] Baldes (água, lava, leite, peixes)
@@ -121,6 +129,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] Fogos de artifício, elytra
 
 ### Blocos com interface
+
 - [ ] Baú, baú duplo, barril, shulker box (abrir, sincronizar, salvar)
 - [ ] Bancada de trabalho e receitas (CraftingData a partir de recipes.json)
 - [ ] Fornalha, alto-forno, defumador (queima, combustível, XP)
@@ -130,6 +139,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] Baú do fim, beacon, suporte de poções
 
 ### Física de blocos
+
 - [ ] Areia, cascalho e pó de concreto caindo (entidade de bloco caindo)
 - [ ] Água e lava fluindo, fonte infinita, pedra/obsidiana na mistura
 - [ ] Fogo espalhando e queimando
@@ -140,6 +150,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] Ticks aleatórios e agendados (salvos em 0x33 / 0x3a)
 
 ### Redstone
+
 - [ ] Pó de redstone e propagação de sinal
 - [ ] Tocha, repetidor, comparador, alavanca, botões, placas de pressão
 - [ ] Pistões e pistões grudentos (movendo blocos e entidades)
@@ -148,6 +159,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] Bloco de nota, TNT
 
 ### Clima e luz
+
 - [ ] Chuva, neve, trovoada (LevelEvent), raios
 - [ ] Iluminação (para spawn de mobs e crescimento de plantas)
 
@@ -156,6 +168,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 ## Fase 3: entidades e mobs
 
 ### Base
+
 - [ ] ECS (bevy_ecs ou hecs) para entidades
 - [ ] Física: gravidade, colisão com blocos, atrito, água
 - [ ] Movimento enviado aos jogadores (MoveActorDelta, SetActorMotion)
@@ -165,6 +178,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] Hitbox e interação (atacar, usar item em entidade)
 
 ### Mobs
+
 - [ ] Spawn natural por bioma, luz e limite de mobs
 - [ ] Pathfinding (A* em grade) e objetivos de IA (goals)
 - [ ] Passivos: vaca, porco, ovelha, galinha (criar, tosquiar, ordenhar)
@@ -195,6 +209,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 ## Fase 5: plataforma e plugins
 
 ### Arquitetura
+
 - [ ] Uma thread de tick por mundo
 - [ ] Pool de threads para carregar, comprimir e salvar chunks
 - [ ] Barramento de eventos (PlayerJoin, BlockBreak, Chat, Damage...)
@@ -203,6 +218,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] Configuração em YAML/TOML (além do `server.properties`)
 
 ### API de plugins
+
 - [ ] Escolher o runtime: WASM (recomendado), Lua ou Rust nativo
 - [ ] Carregar, descarregar e recarregar plugins sem reiniciar
 - [ ] API: jogadores, mundos, blocos, itens, entidades, comandos, eventos, mensagens
@@ -213,6 +229,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] Documentação e plugins de exemplo
 
 ### Administração
+
 - [ ] Sistema de permissões (grupos, herança)
 - [ ] Whitelist, bans por nome/IP/XUID
 - [ ] Console interativo com histórico e autocompletar
@@ -222,6 +239,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] Backup automático de mundos
 
 ### Rede e escala
+
 - [ ] Transferir jogador entre servidores (Transfer)
 - [ ] Modo proxy / várias instâncias (lobby, rankup, minigames)
 - [ ] Resource packs e behavior packs do servidor (enviar e forçar)
