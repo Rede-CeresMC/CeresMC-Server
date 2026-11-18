@@ -35,6 +35,8 @@ BotWater
 BotXp
 BotLava
 BotFarm
+BotArcher
+BotTarget
 " > "$RUN/ops.txt"
 cat > "$RUN/server.properties" <<EOF
 motd=CeresMC Test
@@ -70,6 +72,7 @@ python -I tools/liquids_test.py || status=1
 python -I tools/xp_test.py || status=1
 python -I tools/environment_test.py || status=1
 python -I tools/farming_test.py || status=1
+python -I tools/projectiles_test.py || status=1
 python -I tools/gameplay_test.py || status=1
 
 stop_server

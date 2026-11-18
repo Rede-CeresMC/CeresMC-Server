@@ -107,7 +107,10 @@ impl Server {
         let reduction = if bypass_armor { 0.0 } else { self.armor_reduction(p) };
         // Protection enchantments: 1 point per level, 4% each, at most 20 points
         let epf = if bypass_armor { 0 } else { armor_enchant_points(p, &[(ENCHANT_PROTECTION, 1)]) };
-        let mut dmg = (raw_damage * (1.0 - reduction) * (1.0 - epf as f32 * 0.04) * (1.0 - p.resistance())).max(0.5);
+        let mut dmg = raw_damage * (1.0 - reduction) * (1.0 - epf as f32 * 0.04) * (1.0 - p.resistance());
+        if raw_damage > 0.0 {
+            dmg = dmg.max(0.5); // a snowball hurts nothing, anything else at least half a heart
+        }
 
         let p = self.players.get_mut(&sid).unwrap();
         // absorption hearts go first

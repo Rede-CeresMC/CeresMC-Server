@@ -132,7 +132,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 ### Itens
 
 - [x] Durabilidade de ferramentas e armas (NBT `Damage`, Inquebrável, quebra com som)
-- [ ] Arco, besta, tridente, bola de neve, ovo, pérola do fim (projéteis)
+- [~] Projéteis ✔: arco (força pelo tempo, flechas, Força/Impacto/Infinidade), bola de neve, ovo, pérola do fim (teleporta, 5 de dano) · besta, tridente
 - [~] Baldes de água e lava ✔ (encher, esvaziar, pilha de baldes) · leite (vaca), peixes
 - [~] Isqueiro ✔, enxada ✔ (terra arada), pá ✔ (caminho), machado ✔ (descascar) · tesoura
 - [ ] Livros, mapas, bússola, relógio

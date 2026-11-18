@@ -788,6 +788,7 @@ impl Server {
         let Some(p) = self.players.get_mut(&sid) else { return Ok(()) };
         if p.inventory.held_slot != hotbar_slot {
             p.eating = None;
+            p.bow_since = None;
         }
         p.inventory.held_slot = hotbar_slot;
         p.inventory.dirty = true;

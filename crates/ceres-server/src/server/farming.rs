@@ -179,7 +179,11 @@ impl Server {
             .players
             .values()
             .filter(|p| p.state == State::Spawned)
-            .map(|p| (p.world, [p.pos[0].floor() as i32, p.pos[1].floor() as i32, p.pos[2].floor() as i32]))
+            .filter(|p| p.pos[0].abs() < 30_000_000.0 && p.pos[2].abs() < 30_000_000.0)
+            .map(|p| {
+                let y = (p.pos[1].floor() as i32).clamp(ceres_world::MIN_Y, ceres_world::MAX_Y);
+                (p.world, [p.pos[0].floor() as i32, y, p.pos[2].floor() as i32])
+            })
             .collect();
         let mut seen = std::collections::HashSet::new();
         for (world, c) in centers {

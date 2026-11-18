@@ -121,6 +121,9 @@ impl Server {
 
     /// A click in the air with the held item (InventoryTransaction UseItem CLICK_AIR).
     pub(crate) fn on_click_air(&mut self, sid: SessionId) {
+        if self.throw_held(sid) || self.start_bow(sid) {
+            return;
+        }
         let ticks = self.ticks;
         let Some(p) = self.players.get_mut(&sid) else { return };
         let held = p.inventory.held_item();
@@ -144,6 +147,7 @@ impl Server {
 
     /// The client let go of the use button (InventoryTransaction ReleaseItem).
     pub(crate) fn on_release_item(&mut self, sid: SessionId) {
+        self.release_bow(sid);
         if let Some(p) = self.players.get_mut(&sid) {
             p.eating = None;
             p.awaiting_release = false;

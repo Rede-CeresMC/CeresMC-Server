@@ -309,6 +309,31 @@ pub fn add_falling_block(entity_id: i64, pos: [f32; 3], block: i32) -> Vec<u8> {
     })
 }
 
+/// AddActor for a projectile (snowball, egg, ender pearl, arrow) with its shooter.
+pub fn add_projectile(entity_id: i64, kind: &str, pos: [f32; 3], motion: [f32; 3], owner: i64) -> Vec<u8> {
+    packet(ADD_ACTOR, |w| {
+        w.varlong(entity_id);
+        w.uvarlong(entity_id as u64);
+        w.string(kind);
+        for v in pos.into_iter().chain(motion) {
+            w.f32_le(v);
+        }
+        for _ in 0..4 {
+            w.f32_le(0.0);
+        }
+        w.uvarint(0); // attributes
+        w.uvarint(1); // metadata
+        w.uvarint(5); // OWNER_EID (long)
+        w.uvarint(7);
+        w.u8(7);
+        w.varlong(owner);
+        w.uvarint(0);
+        w.uvarint(0);
+        w.uvarint(0);
+        w.bool(false);
+    })
+}
+
 /// AddActor for an experience orb worth `value` points.
 pub fn add_xp_orb(entity_id: i64, pos: [f32; 3], motion: [f32; 3], value: i32) -> Vec<u8> {
     packet(ADD_ACTOR, |w| {

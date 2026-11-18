@@ -194,6 +194,10 @@ impl Server {
         if !pos.iter().chain([pitch, yaw, head_yaw].iter()).all(|v| v.is_finite()) {
             return Ok(());
         }
+        // the world border: nothing beyond 30 million blocks (or far above/below the world)
+        if pos[0].abs() > 30_000_000.0 || pos[2].abs() > 30_000_000.0 || pos[1].abs() > 20_000.0 {
+            return Ok(());
+        }
         let Some(p) = self.players.get_mut(&sid) else { return Ok(()) };
         if p.dead {
             return Ok(());

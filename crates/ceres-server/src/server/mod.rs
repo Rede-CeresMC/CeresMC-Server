@@ -21,6 +21,7 @@ mod liquids;
 mod loot;
 mod moderation;
 mod players;
+mod projectiles;
 mod skin;
 mod xp;
 
@@ -78,6 +79,8 @@ pub(crate) struct Player {
     absorption: f32,
     /// ticks left burning
     fire_ticks: u32,
+    /// tick the player started drawing a bow
+    bow_since: Option<u64>,
     xp_level: u32,
     /// points inside the current level
     xp_points: u32,
@@ -124,6 +127,7 @@ pub struct Server {
     /// falling sand, gravel...
     falling: Vec<falling::FallingBlock>,
     xp_orbs: Vec<xp::XpOrb>,
+    projectiles: Vec<projectiles::Projectile>,
     /// positions whose block may have lost its support
     gravity_queue: Vec<(usize, [i32; 3])>,
     /// liquid blocks due to flow, with the tick they are due
@@ -163,6 +167,7 @@ impl Server {
             items: Vec::new(),
             falling: Vec::new(),
             xp_orbs: Vec::new(),
+            projectiles: Vec::new(),
             gravity_queue: Vec::new(),
             liquid_queue: HashMap::new(),
             moderation: moderation::Moderation::load(),
@@ -245,6 +250,7 @@ impl Server {
                             effects: HashMap::new(),
                             absorption: 0.0,
                             fire_ticks: 0,
+                            bow_since: None,
                             xp_level: 0,
                             xp_points: 0,
                             dead: false,
