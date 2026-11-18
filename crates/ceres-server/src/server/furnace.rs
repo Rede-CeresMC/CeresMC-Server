@@ -179,8 +179,33 @@ impl Server {
         }
     }
 
+    /// Every few seconds: furnaces that were burning when their chunk was saved (server restart,
+    /// chunk loaded again) start working again.
+    fn resume_furnaces(&mut self) {
+        for world in 0..self.worlds.worlds.len() {
+            let burning = self.worlds.worlds[world].find_block_entities(|t| {
+                matches!(t.get("id").and_then(|v| v.as_str()), Some("Furnace" | "BlastFurnace" | "Smoker"))
+                    && (tag_u16(t, "BurnTime") > 0 || tag_u16(t, "CookTime") > 0)
+            });
+            for pos in burning {
+                if self.furnaces.contains_key(&(world, pos)) {
+                    continue;
+                }
+                let block = self.worlds.worlds[world].get_block(pos, &self.gd);
+                if let Some((ui, _, _)) = containers::container_kind(self.gd.block_name(block)) {
+                    if is_furnace_ui(ui) {
+                        self.wake_furnace(world, pos, ui);
+                    }
+                }
+            }
+        }
+    }
+
     /// One tick of every working furnace.
     pub(crate) fn tick_furnaces(&mut self) {
+        if self.ticks % 100 == 0 {
+            self.resume_furnaces();
+        }
         let keys: Vec<(usize, [i32; 3])> = self.furnaces.keys().copied().collect();
         for (world, pos) in keys {
             // the block may have been broken or replaced

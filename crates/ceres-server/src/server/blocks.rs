@@ -164,7 +164,8 @@ impl Server {
                     farming::crop_drops(&crop_name, g.unwrap_or(0)).into_iter().map(|(n, c)| (n.to_string(), c)).collect(),
                 )
             } else {
-                loot::block_loot(&crop_name, fortune, silk_touch)
+                let shears = self.gd.items_by_id.get(&held).is_some_and(|i| i.name == "minecraft:shears");
+                loot::block_loot(&crop_name, fortune, silk_touch, shears)
             };
             if let loot::Loot::Items(items) = loot {
                 for (name, count) in items {

@@ -202,6 +202,11 @@ impl World {
         [sx, sy, sz]
     }
 
+    /// Positions of the block entities in the loaded chunks that match `pred`.
+    pub fn find_block_entities(&self, pred: impl Fn(&ceres_codec::nbt::Tag) -> bool) -> Vec<[i32; 3]> {
+        self.columns.values().flat_map(|c| c.block_entities.iter()).filter(|(_, t)| pred(t)).map(|(p, _)| *p).collect()
+    }
+
     /// Positions of the block entities with this id in the loaded chunks.
     pub fn block_entities_with_id(&self, id: &str) -> Vec<[i32; 3]> {
         self.columns

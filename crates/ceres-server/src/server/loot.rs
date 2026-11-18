@@ -103,8 +103,23 @@ fn fortune_count(base: u32, level: u8, ore: bool) -> u32 {
     }
 }
 
+/// Blocks shears collect whole (leaves, cobwebs, grass, vines...).
+fn shears_keep(name: &str) -> bool {
+    let n = name.strip_prefix("minecraft:").unwrap_or(name);
+    n.ends_with("_leaves")
+        || n.ends_with("leaves_flowered")
+        || matches!(
+            n,
+            "web" | "cobweb" | "short_grass" | "tall_grass" | "fern" | "large_fern" | "tallgrass" | "vine" | "dead_bush"
+                | "seagrass" | "glow_lichen" | "hanging_roots" | "nether_sprouts" | "twisting_vines" | "weeping_vines"
+        )
+}
+
 /// What breaking `name` with an item enchanted with these levels drops.
-pub(crate) fn block_loot(name: &str, fortune: u8, silk_touch: bool) -> Loot {
+pub(crate) fn block_loot(name: &str, fortune: u8, silk_touch: bool, shears: bool) -> Loot {
+    if shears && shears_keep(name) {
+        return Loot::Itself;
+    }
     let Some(table) = table(name) else { return Loot::Itself };
     if silk_touch {
         return Loot::Itself;
