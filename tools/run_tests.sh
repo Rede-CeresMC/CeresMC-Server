@@ -61,6 +61,7 @@ python -I tools/effects_test.py || status=1
 python -I tools/furnace_test.py || status=1
 python -I tools/twopart_test.py || status=1
 python -I tools/doublechest_test.py || status=1
+python -I tools/falling_test.py || status=1
 python -I tools/gameplay_test.py || status=1
 
 stop_server

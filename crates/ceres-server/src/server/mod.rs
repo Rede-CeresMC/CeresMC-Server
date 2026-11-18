@@ -8,6 +8,7 @@ mod containers;
 mod doublechest;
 mod durability;
 mod effects;
+mod falling;
 mod food;
 mod furnace;
 mod twopart;
@@ -110,6 +111,10 @@ pub struct Server {
     owner: HashMap<SessionId, usize>,
     players: HashMap<SessionId, Player>,
     items: Vec<items::ItemEntity>,
+    /// falling sand, gravel...
+    falling: Vec<falling::FallingBlock>,
+    /// positions whose block may have lost its support
+    gravity_queue: Vec<(usize, [i32; 3])>,
     moderation: moderation::Moderation,
     next_entity_id: i64,
     ticks: u64,
@@ -143,6 +148,8 @@ impl Server {
             owner: HashMap::new(),
             players: HashMap::new(),
             items: Vec::new(),
+            falling: Vec::new(),
+            gravity_queue: Vec::new(),
             moderation: moderation::Moderation::load(),
             next_entity_id: 1,
             ticks: 0,

@@ -78,6 +78,7 @@ impl Server {
         self.tick_players_survival();
         self.tick_furnaces();
         self.tick_items();
+        self.tick_falling();
 
         let sids: Vec<SessionId> = self.players.keys().copied().collect();
         for sid in sids {

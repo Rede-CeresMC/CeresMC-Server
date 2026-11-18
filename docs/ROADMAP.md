@@ -121,6 +121,8 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [~] Comida ✔ (tabela vanilla, tempo de comer conferido no servidor, tigela/garrafa de volta) · poções e leite
 - [ ] Experiência: orbes, níveis, gasto em encantar/bigorna
 
+- [x] Blocos com gravidade: areia, cascalho, pó de concreto, bigorna (entidade caindo, vira bloco ao pousar ou item se o lugar estiver ocupado)
+
 ### Itens
 
 - [x] Durabilidade de ferramentas e armas (NBT `Damage`, Inquebrável, quebra com som)

@@ -251,6 +251,44 @@ pub fn add_player(
     })
 }
 
+pub const ADD_ACTOR: u32 = 0x0d;
+
+/// AddActor for a falling block (entity type minecraft:falling_block, block in VARIANT).
+pub fn add_falling_block(entity_id: i64, pos: [f32; 3], block: i32) -> Vec<u8> {
+    packet(ADD_ACTOR, |w| {
+        w.varlong(entity_id);
+        w.uvarlong(entity_id as u64);
+        w.string("minecraft:falling_block");
+        for v in pos {
+            w.f32_le(v);
+        }
+        for _ in 0..3 {
+            w.f32_le(0.0); // motion
+        }
+        for _ in 0..4 {
+            w.f32_le(0.0); // pitch, yaw, head yaw, body yaw
+        }
+        w.uvarint(0); // attributes
+        w.uvarint(3); // metadata: key, type, type again, value
+        w.uvarint(2); // VARIANT: the block
+        w.uvarint(2);
+        w.u8(2);
+        w.varint(block);
+        w.uvarint(53); // bounding box width
+        w.uvarint(3);
+        w.u8(3);
+        w.f32_le(0.98);
+        w.uvarint(54); // bounding box height
+        w.uvarint(3);
+        w.u8(3);
+        w.f32_le(0.98);
+        w.uvarint(0); // synced int properties
+        w.uvarint(0); // synced float properties
+        w.uvarint(0); // links
+        w.bool(false); // passenger of block
+    })
+}
+
 pub fn remove_actor(entity_id: i64) -> Vec<u8> {
     packet(mp::REMOVE_ACTOR, |w| w.varlong(entity_id))
 }

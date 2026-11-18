@@ -199,13 +199,16 @@ impl Server {
         c.changed = false;
         let (world, pos, pair, items) = (c.world, c.pos, c.pair, c.items.clone());
         let block = self.worlds.worlds[world].get_block(pos, &self.gd);
-        let Some((_, tile_id, _)) = container_kind(self.gd.block_name(block)) else { return };
+        let Some((ui, tile_id, _)) = container_kind(self.gd.block_name(block)) else { return };
+        // the view must still match what is stored (27 per chest half), or nothing is written
+        let expected = if pair.is_some() { 2 * CONTAINER_SLOTS } else { slot_count(ui) };
+        if items.len() != expected {
+            return;
+        }
         // a double chest keeps 27 items in each half
         let parts: Vec<([i32; 3], &[ItemDesc])> = match pair {
-            Some(second) if items.len() == 2 * CONTAINER_SLOTS => {
-                vec![(pos, &items[..CONTAINER_SLOTS]), (second, &items[CONTAINER_SLOTS..])]
-            }
-            _ => vec![(pos, &items[..])],
+            Some(second) => vec![(pos, &items[..CONTAINER_SLOTS]), (second, &items[CONTAINER_SLOTS..])],
+            None => vec![(pos, &items[..])],
         };
         for (half, half_items) in parts {
             let mut tile = self.worlds.worlds[world].get_block_entity(half, &self.gd).unwrap_or_else(|| {
@@ -226,7 +229,11 @@ impl Server {
             .players
             .iter()
             .filter(|(o, q)| {
-                **o != sid && q.inventory.container.as_ref().is_some_and(|c| c.world == world && c.pos == pos)
+                **o != sid
+                    && q.inventory
+                        .container
+                        .as_ref()
+                        .is_some_and(|c| c.world == world && c.pos == pos && c.pair == pair && c.items.len() == items.len())
             })
             .map(|(o, _)| *o)
             .collect();
@@ -240,6 +247,23 @@ impl Server {
             c.items = fresh.clone();
             let window = c.window;
             q.out.push(protocol::inventory_content(window as u32, &fresh));
+        }
+    }
+
+    /// Closes (after saving) every window open on any of these blocks.
+    pub(crate) fn close_containers_at(&mut self, world: usize, positions: &[[i32; 3]]) {
+        let viewers: Vec<SessionId> = self
+            .players
+            .iter()
+            .filter(|(_, q)| {
+                q.inventory.container.as_ref().is_some_and(|c| {
+                    c.world == world && positions.iter().any(|p| c.pos == *p || c.pair == Some(*p))
+                })
+            })
+            .map(|(s, _)| *s)
+            .collect();
+        for s in viewers {
+            self.close_container(s, true);
         }
     }
 

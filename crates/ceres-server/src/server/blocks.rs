@@ -92,6 +92,7 @@ impl Server {
         }
         let pk = protocol::update_block(pos, id);
         self.broadcast(&pk, |_, p| p.world == world);
+        self.queue_gravity(world, pos);
         true
     }
 

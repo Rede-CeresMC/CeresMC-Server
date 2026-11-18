@@ -71,6 +71,8 @@ impl Server {
             if self.chest_pair(world, other).is_some() {
                 continue; // already a double chest
             }
+            // windows showing the old single chest would no longer match what is stored
+            self.close_containers_at(world, &[pos, other]);
             self.write_pair(world, other, Some(pos), true);
             self.write_pair(world, pos, Some(other), false);
             return;
@@ -80,6 +82,7 @@ impl Server {
     /// A chest half is being broken: the other half becomes a single chest again.
     pub(crate) fn unpair_chest(&mut self, world: usize, pos: [i32; 3]) {
         if let Some(other) = self.chest_pair(world, pos) {
+            self.close_containers_at(world, &[pos, other]);
             self.write_pair(world, other, None, false);
         }
     }
