@@ -4,6 +4,14 @@ use super::*;
 
 // ------------------------------------------------------------------ WebRTC
 
+/// Connections still being set up (offer received, data channel not open yet), per address.
+static PENDING: std::sync::LazyLock<Mutex<HashMap<std::net::IpAddr, usize>>> =
+    std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
+const MAX_PENDING: usize = 64;
+const MAX_PENDING_PER_ADDRESS: usize = 8;
+/// a connection not up after this long is dropped, freeing its port
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(30);
+
 pub(crate) struct Handler {
     pub(crate) sid: SessionId,
     pub(crate) peer: SocketAddr,
@@ -12,6 +20,8 @@ pub(crate) struct Handler {
     pub(crate) gathered: mpsc::UnboundedSender<()>,
     pub(crate) opened: AtomicBool,
     pub(crate) closed: AtomicBool,
+    /// still counted in PENDING
+    pub(crate) pending: AtomicBool,
     /// client key the offer was signed with
     pub(crate) identity: Option<String>,
 }
@@ -20,7 +30,21 @@ impl Handler {
     pub(crate) fn emit(&self, e: NetEvent) {
         let _ = self.ev_tx.lock().unwrap().send(e);
     }
+    /// The connection left the "being set up" state (opened or closed).
+    pub(crate) fn settle(&self) {
+        if self.pending.swap(false, Ordering::SeqCst) {
+            let mut map = PENDING.lock().unwrap();
+            if let Some(n) = map.get_mut(&self.peer.ip()) {
+                *n = n.saturating_sub(1);
+                if *n == 0 {
+                    map.remove(&self.peer.ip());
+                }
+            }
+        }
+    }
+
     pub(crate) fn close(&self, reason: &str) {
+        self.settle();
         if self.closed.swap(true, Ordering::SeqCst) {
             return;
         }
@@ -87,6 +111,7 @@ impl PeerConnectionEventHandler for H {
                 if let Some(s) = h.sessions.lock().unwrap().get_mut(&h.sid) {
                     s.reliable = Some(dc.clone());
                 }
+                h.settle();
                 if !h.opened.swap(true, Ordering::SeqCst) {
                     crate::log(&format!("[NetherNet] {} opened a session ({})", h.peer, h.sid));
                     h.emit(NetEvent::Connected(h.sid, h.peer, h.identity.clone()));
@@ -139,7 +164,7 @@ pub(crate) fn peer_max_message_size(sdp: &str) -> usize {
 
 /// The public IP to offer: the configured one, or the address the player typed to join (the
 /// Host header) when it is a public one. Players outside the local network can only reach that.
-async fn public_ip(host_header: &str) -> Option<std::net::IpAddr> {
+fn public_ip(host_header: &str) -> Option<std::net::IpAddr> {
     let configured = PUBLIC_IP.lock().unwrap().clone();
     let wanted = if configured.is_empty() { host_header.to_string() } else { configured };
     let host = match wanted.rsplit_once(':') {
@@ -149,10 +174,8 @@ async fn public_ip(host_header: &str) -> Option<std::net::IpAddr> {
     if host.is_empty() {
         return None;
     }
-    let ip = match host.parse::<std::net::IpAddr>() {
-        Ok(ip) => ip,
-        Err(_) => tokio::net::lookup_host((host.as_str(), 0)).await.ok()?.map(|a| a.ip()).find(|ip| ip.is_ipv4())?,
-    };
+    // only a literal IP: a host name in the header is not resolved (set nethernet-public-ip instead)
+    let ip = host.parse::<std::net::IpAddr>().ok()?;
     let public = match ip {
         std::net::IpAddr::V4(v4) => !(v4.is_private() || v4.is_loopback() || v4.is_link_local() || v4.is_unspecified()),
         std::net::IpAddr::V6(_) => false,
@@ -182,6 +205,14 @@ pub(crate) async fn negotiate(
         return Err("the offer carries no identity (nethernet-require-identity=off allows it)".into());
     }
     let (gather_tx, mut gather_rx) = mpsc::unbounded_channel();
+    {
+        let mut map = PENDING.lock().unwrap();
+        let mine = map.get(&peer.ip()).copied().unwrap_or(0);
+        if mine >= MAX_PENDING_PER_ADDRESS || map.values().sum::<usize>() >= MAX_PENDING {
+            return Err(format!("too many connections being set up ({} pending)", map.values().sum::<usize>()));
+        }
+        *map.entry(peer.ip()).or_default() += 1;
+    }
     let handler = Arc::new(Handler {
         sid,
         peer,
@@ -190,9 +221,20 @@ pub(crate) async fn negotiate(
         gathered: gather_tx,
         opened: AtomicBool::new(false),
         closed: AtomicBool::new(false),
+        pending: AtomicBool::new(true),
         identity,
     });
-    let public = public_ip(host_header).await;
+    // a connection that never comes up must not keep its port
+    {
+        let h = handler.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(HANDSHAKE_TIMEOUT).await;
+            if !h.opened.load(Ordering::SeqCst) {
+                h.close("handshake timed out");
+            }
+        });
+    }
+    let public = public_ip(host_header);
     // one port of the range per player; a port still held by someone else is skipped
     let (mut port, span) = next_udp_port();
     let mut attempts = 0;
@@ -218,10 +260,12 @@ pub(crate) async fn negotiate(
             Ok(pc) => break pc,
             Err(e) => {
                 attempts += 1;
-                if attempts >= span.min(200) {
-                    return Err(format!("peer connection: no free UDP port in the NetherNet range ({e})"));
+                if port == 0 {
+                    handler.close("no UDP port");
+                    return Err(format!("peer connection: {e}"));
                 }
-                port = next_udp_port().0;
+                // the range is full: any free port (works on the local network, not through a router)
+                port = if attempts >= span.min(200) { 0 } else { next_udp_port().0 };
             }
         }
     };
