@@ -47,7 +47,7 @@ impl Server {
 
     pub(crate) fn break_block(&mut self, sid: SessionId, pos: [i32; 3]) {
         let Some(p) = self.players.get(&sid) else { return };
-        let (world, adventure) = (p.world, self.cfg.gamemode == 2 || self.cfg.gamemode == 6);
+        let (world, adventure) = (p.world, p.gamemode == 2 || p.gamemode == 6);
         if adventure || !Self::in_reach(p, pos) {
             self.resync(sid, pos);
             return;
@@ -65,7 +65,7 @@ impl Server {
         let Some(p) = self.players.get(&sid) else { return };
         let world = p.world;
         let Some(target) = side(clicked, face) else { return };
-        let adventure = self.cfg.gamemode == 2 || self.cfg.gamemode == 6;
+        let adventure = p.gamemode == 2 || p.gamemode == 6;
         let free = self.worlds.worlds[world].get_block(target, &self.gd) == self.gd.air_id;
         // TODO: collision with entities, replaceable blocks (grass, water), block orientation
         if adventure || block == 0 || !free || !Self::in_reach(p, target) || !self.gd.state_nbt.contains_key(&block) {

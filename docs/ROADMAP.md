@@ -32,7 +32,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] Chat e mensagens de entrar/sair
 - [x] Atributos padrão (vida, fome, velocidade...)
 - [x] Abilities: voo no criativo
-- [ ] 🔴 Gamemode por jogador (hoje é um só para o servidor)
+- [x] 🔴 Gamemode por jogador (hoje é um só para o servidor)
 - [ ] 🟠 Animações: braço balançando (Animate), agachar, correr, nadar (SetActorData por jogador)
 - [ ] 🟠 Item na mão visível para os outros (MobEquipment)
 - [ ] 🟠 Armadura visível para os outros (MobArmorEquipment)
@@ -70,14 +70,15 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 ### Comandos
 
-- [ ] 🔴 Ler CommandRequest e responder (CommandOutput / mensagem)
-- [ ] 🔴 AvailableCommands: lista e autocompletar ao digitar `/`
-- [ ] 🔴 `/gamemode`, `/tp`, `/give`, `/list`, `/say`, `/help`
-- [ ] 🔴 `/world` (trocar de mundo) e `/worlds` (listar)
-- [ ] 🟠 `/time`, `/weather`, `/kill`, `/clear`, `/effect`, `/setworldspawn`, `/spawnpoint`
-- [ ] 🟠 `/op`, `/deop`, `/kick`, `/ban`, `/pardon`, `/whitelist`, `/stop`, `/save-all`
+- [x] 🔴 Ler CommandRequest e responder (CommandOutput / mensagem)
+- [x] 🔴 AvailableCommands: lista e autocompletar ao digitar `/`
+- [x] `/gamemode`, `/tp`, `/list`, `/say`, `/help`
+- [ ] 🔴 `/give` (depende de itens reais no inventário)
+- [x] 🔴 `/world` (trocar de mundo) e `/worlds` (listar)
+- [~] 🟠 `/time` ✔, `/weather`, `/kill`, `/clear`, `/effect`, `/setworldspawn`, `/spawnpoint`
+- [~] 🟠 `/op`, `/deop`, `/stop`, `/save-all` ✔ · `/kick`, `/ban`, `/pardon`, `/whitelist`
 - [ ] 🟠 Seletores: `@p`, `@a`, `@s`, `@r`, `@e` com argumentos
-- [ ] 🟢 Comandos pelo console do servidor (stdin)
+- [x] 🟢 Comandos pelo console do servidor (stdin)
 
 ### Segurança e conexão
 
@@ -94,7 +95,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 ### Mundo
 
 - [x] Quebrar/colocar persistentes
-- [ ] 🔴 Salvar ao desligar (Ctrl+C / `/stop`) sem perder nada
+- [x] 🔴 Salvar ao desligar (Ctrl+C / `/stop`) sem perder nada
 - [ ] 🟠 Baús, placas, fornalhas etc. (block entities da chave 0x31) enviados nos chunks
 - [ ] 🟠 Entidades salvas nos chunks (0x32) preservadas ao salvar
 - [ ] 🟠 Dia e noite (SetTime, `doDaylightCycle`)

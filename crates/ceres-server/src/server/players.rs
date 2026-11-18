@@ -19,9 +19,9 @@ impl Server {
     pub(crate) fn abilities_of(&self, p: &Player) -> Abilities {
         Abilities {
             entity_id: p.entity_id,
-            operator: false,
-            creative: self.cfg.gamemode == 1,
-            spectator: self.cfg.gamemode == 6,
+            operator: p.op,
+            creative: p.gamemode == 1,
+            spectator: p.gamemode == 6,
             flying: false,
         }
     }
@@ -29,7 +29,7 @@ impl Server {
     fn add_player_packet(&self, p: &Player) -> Option<Vec<u8>> {
         let info = p.info.as_ref()?;
         let feet = [p.pos[0], p.pos[1] - EYE_HEIGHT, p.pos[2]];
-        Some(protocol::add_player(info, feet, p.rot[0], p.rot[1], p.rot[2], self.cfg.gamemode))
+        Some(protocol::add_player(info, feet, p.rot[0], p.rot[1], p.rot[2], p.gamemode))
     }
 
     /// Sent during StartGame: abilities plus the player list (everyone online and ourselves).
@@ -73,6 +73,23 @@ impl Server {
 
         let msg = protocol::system_message(&format!("§e{} entrou no jogo", info.name));
         self.broadcast(&msg, |_, _| true);
+    }
+
+    /// AddPlayer between `sid` and everyone already in its world (used when changing worlds).
+    pub(crate) fn show_players_in_world(&mut self, sid: SessionId) {
+        let Some(me) = self.players.get(&sid) else { return };
+        let world = me.world;
+        let add_me = self.add_player_packet(me);
+        let others: Vec<Vec<u8>> = self
+            .players
+            .iter()
+            .filter(|(other, p)| **other != sid && p.state == State::Spawned && p.world == world)
+            .filter_map(|(_, p)| self.add_player_packet(p))
+            .collect();
+        if let Some(add_me) = add_me {
+            self.broadcast(&add_me, |other, p| other != sid && p.world == world);
+        }
+        self.players.get_mut(&sid).unwrap().out.extend(others);
     }
 
     /// The session is gone: remove it from everyone's list and world.

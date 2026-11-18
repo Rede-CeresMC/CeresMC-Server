@@ -20,6 +20,7 @@ else cp target/release/ceres "$RUN/ceres-test"; EXE=./ceres-test; fi
 cp -r data "$RUN/data"
 if [ -d worlds ]; then cp -r worlds "$RUN/worlds"; fi
 rm -f "$RUN"/worlds/*/db/LOCK
+echo "BotOp" > "$RUN/ops.txt"
 cat > "$RUN/server.properties" <<EOF
 motd=CeresMC Test
 server-port=$PORT
@@ -38,6 +39,7 @@ status=0
 python -I tools/smoke_client.py || status=1
 python -I tools/blocks_test.py || status=1
 python -I tools/inventory_test.py || status=1
+python -I tools/commands_test.py || status=1
 
 stop_server
 (cd "$RUN" && exec "$EXE" > server2.out 2>&1) &

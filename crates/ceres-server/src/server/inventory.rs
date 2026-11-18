@@ -120,8 +120,8 @@ impl Inventory {
 impl Server {
     pub(crate) fn on_item_stack_request(&mut self, sid: SessionId, r: &mut R) -> Res<()> {
         let requests = protocol::read_item_stack_requests(r)?;
-        let creative = self.cfg.gamemode == 1;
         let Some(p) = self.players.get_mut(&sid) else { return Ok(()) };
+        let creative = p.gamemode == 1;
         for req in requests {
             let result = p.inventory.apply(&req, creative);
             if result.is_none() && ceres_net::debug_enabled() {

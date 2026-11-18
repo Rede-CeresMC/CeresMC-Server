@@ -49,6 +49,7 @@ impl Server {
                     .map(str::to_string)
                     .unwrap_or_else(|| format!("Player{sid}"));
                 // TODO: verify the auth chain (xbox-auth) and enable encryption
+                p.op = self.ops.contains(&name.to_ascii_lowercase());
                 p.name = name;
                 p.entity_id = self.next_entity_id;
                 self.next_entity_id += 1;
@@ -94,6 +95,10 @@ impl Server {
             (State::PreSpawn | State::Spawned, protocol::ITEM_STACK_REQUEST) => {
                 self.on_item_stack_request(sid, &mut r)?
             }
+            (State::Spawned, protocol::COMMAND_REQUEST) => {
+                let line = protocol::read_command_request(&mut r)?;
+                self.run_command(commands::Sender::Player(sid), &line);
+            }
             (State::Spawned, protocol::INTERACT) => {
                 let action = r.u8()?;
                 let target = r.uvarlong()? as i64;
@@ -137,7 +142,7 @@ impl Server {
         p.out.push(self.gd.voxel_shapes.clone());
         p.out.push(protocol::start_game(&protocol::StartGame {
             entity_id: p.entity_id,
-            gamemode: self.cfg.gamemode,
+            gamemode: p.gamemode,
             position: p.pos,
             pitch: 0.0,
             yaw: 0.0,
@@ -160,6 +165,7 @@ impl Server {
         p.out.push(protocol::empty_inventory(120, 4)); // armor
         p.state = State::PreSpawn;
         self.send_pre_spawn_players(sid);
+        self.send_available_commands(sid);
         let p = self.players.get_mut(&sid).unwrap();
         p.radius = self.cfg.view_distance.min(8);
         self.update_view(sid);

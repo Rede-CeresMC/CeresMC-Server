@@ -18,3 +18,8 @@ Thumbs.db
 # python
 __pycache__/
 *.pyc
+
+# server admin files
+/ops.txt
+/banned-*.txt
+/white-list.txt

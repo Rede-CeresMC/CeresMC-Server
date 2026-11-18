@@ -47,7 +47,9 @@ fn main() {
         }
         Err(e) => eprintln!("[Net] NetherNet disabled: failed to bind {addr}/tcp: {e}"),
     }
-    println!("Done ({:.3}s)!", started.elapsed().as_secs_f64());
+    ctrlc::set_handler(|| server::SHUTDOWN.store(true, std::sync::atomic::Ordering::SeqCst))
+        .unwrap_or_else(|e| eprintln!("[Server] Ctrl+C handler not installed: {e}"));
+    println!("Done ({:.3}s)! Type \"help\" for commands.", started.elapsed().as_secs_f64());
 
     server::Server::new(cfg, gd, worlds, transports).run();
 }

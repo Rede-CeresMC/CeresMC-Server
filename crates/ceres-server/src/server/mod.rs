@@ -2,6 +2,7 @@
 
 mod blocks;
 mod chunks;
+mod commands;
 mod handler;
 mod inventory;
 mod players;
@@ -41,6 +42,9 @@ pub(crate) struct Player {
     /// set at login; what other clients need to draw this player
     info: Option<PlayerInfo>,
     inventory: inventory::Inventory,
+    /// protocol game mode: 0 survival, 1 creative, 2 adventure, 6 spectator
+    gamemode: i32,
+    op: bool,
     radius: i32,
     center: Option<(i32, i32)>,
     sent: HashSet<(i32, i32)>,
@@ -60,6 +64,9 @@ pub struct Server {
     players: HashMap<SessionId, Player>,
     next_entity_id: i64,
     ticks: u64,
+    /// lowercase names from ops.txt
+    ops: HashSet<String>,
+    console: std::sync::mpsc::Receiver<String>,
     software: String,
 }
 
@@ -76,6 +83,8 @@ impl Server {
             players: HashMap::new(),
             next_entity_id: 1,
             ticks: 0,
+            ops: load_ops(),
+            console: spawn_console(),
             software: format!("Ceres-RS {}", env!("CARGO_PKG_VERSION")),
         }
     }
@@ -93,6 +102,12 @@ impl Server {
                     }
                 }
                 self.pending_events(&mut events);
+            }
+            if SHUTDOWN.load(std::sync::atomic::Ordering::SeqCst) {
+                self.shutdown("O servidor foi desligado");
+            }
+            while let Ok(line) = self.console.try_recv() {
+                self.run_command(commands::Sender::Console, &line);
             }
             let now = Instant::now();
             if now >= next_tick {
@@ -128,6 +143,8 @@ impl Server {
                             rot: [0.0; 3],
                             info: None,
                             inventory: Default::default(),
+                            gamemode: self.cfg.gamemode,
+                            op: false,
                             radius: 0,
                             center: None,
                             sent: HashSet::new(),
@@ -185,5 +202,74 @@ impl Server {
             self.handle_packet(sid, &pk)?;
         }
         Ok(())
+    }
+}
+
+/// Set by Ctrl+C; the main loop saves and exits.
+pub static SHUTDOWN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+const OPS_FILE: &str = "ops.txt";
+
+fn load_ops() -> HashSet<String> {
+    std::fs::read_to_string(OPS_FILE)
+        .unwrap_or_default()
+        .lines()
+        .map(|l| l.trim().to_ascii_lowercase())
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect()
+}
+
+/// Lines typed on the server console, read on their own thread.
+fn spawn_console() -> std::sync::mpsc::Receiver<String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("console".into())
+        .spawn(move || {
+            let stdin = std::io::stdin();
+            let mut line = String::new();
+            while stdin.read_line(&mut line).map(|n| n > 0).unwrap_or(false) {
+                if tx.send(line.trim().to_string()).is_err() {
+                    break;
+                }
+                line.clear();
+            }
+        })
+        .ok();
+    rx
+}
+
+impl Server {
+    pub(crate) fn save_ops(&self) {
+        let mut names: Vec<&String> = self.ops.iter().collect();
+        names.sort();
+        let text: String = names
+            .iter()
+            .map(|n| {
+                format!(
+                    "{n}
+"
+                )
+            })
+            .collect();
+        if let Err(e) = std::fs::write(OPS_FILE, text) {
+            eprintln!("[Server] could not write {OPS_FILE}: {e}");
+        }
+    }
+
+    /// Saves every world, disconnects everyone and exits.
+    pub(crate) fn shutdown(&mut self, reason: &str) -> ! {
+        println!("[Server] stopping: saving worlds...");
+        self.save_worlds();
+        let sids: Vec<SessionId> = self.players.keys().copied().collect();
+        for sid in sids {
+            self.kick(sid, reason);
+        }
+        self.flush_players();
+        for t in self.transports.iter_mut() {
+            t.flush(&mut Vec::new());
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        println!("[Server] stopped");
+        std::process::exit(0);
     }
 }
