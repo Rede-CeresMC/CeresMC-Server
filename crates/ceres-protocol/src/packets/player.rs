@@ -50,6 +50,8 @@ pub struct ActorState {
     pub air_lost: i16,
     /// bed the player sleeps in
     pub sleeping: Option<[i32; 3]>,
+    /// raising a shield
+    pub blocking: bool,
 }
 
 /// Ticks of air a full bubble bar holds.
@@ -82,6 +84,9 @@ impl ActorState {
         }
         if self.crawling {
             f2 |= 1 << (114 - 64);
+        }
+        if self.blocking {
+            f2 |= 1 << (72 - 64);
         }
         (f1, f2)
     }

@@ -278,6 +278,10 @@ impl Server {
             Kind::Arrow => {
                 if let Some(victim) = target {
                     let mut dmg = (speed * 2.0).ceil();
+                    let origin = [at[0] - pr.motion[0], at[1], at[2] - pr.motion[2]];
+                    if self.shield_blocks(victim, origin, dmg, false) {
+                        return;
+                    }
                     if pr.power > 0 {
                         dmg *= 1.0 + 0.25 * (pr.power as f32 + 1.0);
                     }

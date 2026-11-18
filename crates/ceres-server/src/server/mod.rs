@@ -5,6 +5,7 @@ mod chunks;
 mod combat;
 mod commands;
 mod containers;
+mod defense;
 mod doublechest;
 mod durability;
 mod effects;
@@ -110,6 +111,8 @@ pub(crate) struct Player {
     punching: Option<([i32; 3], u8)>,
     /// walks through blocks and may fly, in any game mode (/noclip, plugins)
     noclip: bool,
+    /// ticks the shield stays disabled (hit by an axe)
+    shield_cooldown: u32,
     /// last window id handed out (1..=99) for block containers
     window_counter: u8,
     radius: i32,
@@ -280,6 +283,7 @@ impl Server {
                             breaking: None,
                             punching: None,
                             noclip: false,
+                            shield_cooldown: 0,
                             window_counter: 0,
                             radius: 0,
                             center: None,

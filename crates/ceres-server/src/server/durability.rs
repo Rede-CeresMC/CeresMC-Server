@@ -127,6 +127,11 @@ fn unbreakable(item: &ItemDesc) -> bool {
 }
 
 /// Wears `item` by `amount` (Unbreaking may skip each point). Returns true if it broke.
+/// Wears any item with durability (shields...). Returns true if it broke.
+pub(crate) fn wear_item(item: &mut ItemDesc, amount: u32, gd: &GameData) -> bool {
+    wear(item, amount, gd)
+}
+
 fn wear(item: &mut ItemDesc, amount: u32, gd: &GameData) -> bool {
     let Some(max) = gd.items_by_id.get(&item.id).and_then(|i| max_durability(&i.name)) else { return false };
     if item.is_empty() || unbreakable(item) {

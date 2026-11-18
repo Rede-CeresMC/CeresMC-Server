@@ -141,6 +141,9 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] Livros, mapas, bússola, relógio
 - [ ] Fogos de artifício, elytra
 
+- [x] Totem da imortalidade (1 de vida, regeneração II, absorção II, resistência ao fogo, animação; não salva do vazio)
+- [x] Escudo: agachado e de frente bloqueia golpes e flechas, gasta durabilidade, machado derruba o escudo por 5 s
+
 ### Blocos com interface
 
 - [x] Baú ✔, barril ✔, shulker box ✔ (abrir, mover itens, vários jogadores no mesmo baú, salvar no formato vanilla, derrubar ao quebrar), baú duplo ✔ (pairx/pairz vanilla, 54 slots, cada metade guarda os seus itens)

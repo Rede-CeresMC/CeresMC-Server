@@ -40,6 +40,8 @@ BotTarget
 BotSleep
 BotPotion
 BotNoclip
+BotGuard
+BotFoe
 " > "$RUN/ops.txt"
 cat > "$RUN/server.properties" <<EOF
 motd=CeresMC Test
@@ -80,6 +82,7 @@ python -I tools/sleep_test.py || status=1
 python -I tools/hopper_test.py || status=1
 python -I tools/potions_test.py || status=1
 python -I tools/noclip_test.py || status=1
+python -I tools/defense_test.py || status=1
 python -I tools/gameplay_test.py || status=1
 
 stop_server

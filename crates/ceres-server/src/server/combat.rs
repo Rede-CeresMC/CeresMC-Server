@@ -130,6 +130,12 @@ impl Server {
             dmg -= taken;
         }
         p.hurt_cooldown = 10; // 0.5s invulnerability frames
+        let lethal = p.health - dmg <= 0.0;
+        // a totem acts before the health ever reaches 0 (the client shows death at 0)
+        if lethal && self.try_totem(sid) {
+            return true;
+        }
+        let Some(p) = self.players.get_mut(&sid) else { return false };
         p.health = (p.health - dmg).max(0.0);
         if (p.gamemode == 0 || p.gamemode == 2) && !bypass_armor {
             p.exhaustion = (p.exhaustion + food::exhaustion::HURT).min(40.0);
@@ -284,7 +290,12 @@ impl Server {
         let push = 0.4 + 0.5 * knockback_level;
         let kb = [dx / len * push, 0.36, dz / len * push];
         let msg = format!("§c{} foi morto por {}", vic.name, att.name);
+        let attacker_pos = att.pos;
+        let axe = self.gd.tool_info(held.id).is_some_and(|t| t.tool == ceres_world::Tool::Axe);
         self.swing_arm(attacker_sid);
+        if self.shield_blocks(victim_sid, attacker_pos, dmg, axe) {
+            return;
+        }
         if self.damage_player(victim_sid, dmg, &msg, false, Some(kb)) {
             self.wear_held_item(attacker_sid, true);
             self.exhaust(attacker_sid, food::exhaustion::ATTACK);
@@ -302,6 +313,7 @@ impl Server {
                 p.hurt_cooldown -= 1;
             }
             self.tick_food(sid);
+            self.tick_shield(sid);
             if self.players.get(&sid).is_some_and(|p| p.gamemode != 1 && p.gamemode != 6) {
                 self.tick_effects(sid);
                 self.tick_environment(sid);
