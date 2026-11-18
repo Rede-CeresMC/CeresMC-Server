@@ -113,12 +113,12 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 - [~] Dano: queda ✔, vazio ✔ · fogo, lava, afogamento, sufocar, fome
 - [x] Morte e respawn (tela de morte, spawnpoint pessoal, keepInventory)
-- [~] Regeneração natural ✔ · fome, saturação, exaustão
+- [x] Regeneração natural ✔ · fome, saturação, exaustão ✔ (correr, pular, lutar, apanhar, minerar; morrer de fome conforme a dificuldade)
 - [x] Combate PvP: dano por item, knockback, crítico, cooldown
 - [x] Armadura: proteção ✔ · durabilidade ✔ (gasta ao levar dano, quebra)
 - [ ] Efeitos de poção (MobEffect), duração e amplificador
 - [ ] Encantamentos: efeitos em dano, quebra, proteção, durabilidade
-- [ ] Comida e itens consumíveis (comer, beber, demora de uso)
+- [~] Comida ✔ (tabela vanilla, tempo de comer conferido no servidor, tigela/garrafa de volta) · poções e leite
 - [ ] Experiência: orbes, níveis, gasto em encantar/bigorna
 
 ### Itens

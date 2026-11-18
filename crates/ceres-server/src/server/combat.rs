@@ -94,8 +94,12 @@ impl Server {
         let p = self.players.get_mut(&sid).unwrap();
         p.hurt_cooldown = 10; // 0.5s invulnerability frames
         p.health = (p.health - dmg).max(0.0);
+        if (p.gamemode == 0 || p.gamemode == 2) && !bypass_armor {
+            p.exhaustion = (p.exhaustion + food::exhaustion::HURT).min(40.0);
+        }
         let (world, eid, health) = (p.world, p.entity_id, p.health);
-        p.out.push(protocol::update_attributes_health(eid, health));
+        let pk = p.vitals_packet();
+        p.out.push(pk);
 
         self.broadcast(&protocol::actor_event(eid, actor_event::HURT_ANIMATION, 0), |_, q| q.world == world);
         if let Some(kb) = knockback {
@@ -125,7 +129,9 @@ impl Server {
         p.health = 0.0;
         p.fall_start_y = None;
         let (world, eid, pos) = (p.world, p.entity_id, p.pos);
-        p.out.push(protocol::update_attributes_health(eid, 0.0));
+        p.eating = None;
+        let pk = p.vitals_packet();
+        p.out.push(pk);
 
         let dropped = if self.cfg.keep_inventory { Vec::new() } else { p.inventory.drain_all() };
         if !self.cfg.keep_inventory {
@@ -166,11 +172,13 @@ impl Server {
         if let Some(p) = self.players.get_mut(&sid) {
             p.dead = false;
             p.health = 20.0;
+            p.reset_food();
             p.hurt_cooldown = 20;
             p.fall_start_y = None;
             p.actor_state = Default::default();
             let eid = p.entity_id;
-            p.out.push(protocol::update_attributes_health(eid, 20.0));
+            let pk = p.vitals_packet();
+            p.out.push(pk);
             let dest_eyes = [dest_feet[0], dest_feet[1] + EYE_HEIGHT, dest_feet[2]];
             p.out.push(protocol::respawn(dest_eyes, respawn_state::READY_TO_SPAWN, eid));
         }
@@ -221,6 +229,7 @@ impl Server {
         self.swing_arm(attacker_sid);
         if self.damage_player(victim_sid, dmg, &msg, false, Some(kb)) {
             self.wear_held_item(attacker_sid, true);
+            self.exhaust(attacker_sid, food::exhaustion::ATTACK);
         }
     }
 
@@ -234,10 +243,10 @@ impl Server {
             if p.hurt_cooldown > 0 {
                 p.hurt_cooldown -= 1;
             }
-            // Natural health regeneration every 4 seconds
-            if self.ticks % 80 == 0 && p.health > 0.0 && p.health < 20.0 {
-                p.health = (p.health + 1.0).min(20.0);
-                p.out.push(protocol::update_attributes_health(p.entity_id, p.health));
+            self.tick_food(sid);
+            let Some(p) = self.players.get_mut(&sid) else { continue };
+            if p.dead {
+                continue;
             }
 
             let feet_y = p.pos[1] - EYE_HEIGHT;

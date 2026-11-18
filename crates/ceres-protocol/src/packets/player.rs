@@ -294,14 +294,19 @@ const F32_MAX: f32 = f32::MAX;
 /// Default player attributes (values from PocketMine's AttributeFactory). Without
 /// minecraft:movement the client walks at speed 0 and can only fly.
 pub fn update_attributes_health(entity_id: i64, health: f32) -> Vec<u8> {
+    update_attributes_vitals(entity_id, health, 20.0, 5.0, 0.0)
+}
+
+/// Every player attribute, with the real health, hunger, saturation and exhaustion.
+pub fn update_attributes_vitals(entity_id: i64, health: f32, hunger: f32, saturation: f32, exhaustion: f32) -> Vec<u8> {
     let attrs: [(&str, f32, f32, f32, f32); 12] = [
         ("minecraft:absorption", 0.0, F32_MAX, 0.0, 0.0),
-        ("minecraft:player.saturation", 0.0, 20.0, 20.0, 20.0),
-        ("minecraft:player.exhaustion", 0.0, 5.0, 0.0, 0.0),
+        ("minecraft:player.saturation", 0.0, 20.0, saturation.clamp(0.0, 20.0), 5.0),
+        ("minecraft:player.exhaustion", 0.0, 5.0, exhaustion.clamp(0.0, 5.0), 0.0),
         ("minecraft:knockback_resistance", 0.0, 1.0, 0.0, 0.0),
         ("minecraft:health", 0.0, 20.0, health.clamp(0.0, 20.0), 20.0),
         ("minecraft:movement", 0.0, F32_MAX, 0.1, 0.1),
-        ("minecraft:player.hunger", 0.0, 20.0, 20.0, 20.0),
+        ("minecraft:player.hunger", 0.0, 20.0, hunger.clamp(0.0, 20.0), 20.0),
         ("minecraft:player.level", 0.0, 24791.0, 0.0, 0.0),
         ("minecraft:player.experience", 0.0, 1.0, 0.0, 0.0),
         ("minecraft:underwater_movement", 0.0, F32_MAX, 0.02, 0.02),

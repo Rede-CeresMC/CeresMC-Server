@@ -138,6 +138,7 @@ impl Server {
         if self.gd.break_info(old).is_some_and(|b| b.hardness > 0.0) {
             self.wear_held_item(sid, false);
         }
+        self.exhaust(sid, food::exhaustion::MINE);
         if gm == 0 && self.gd.can_harvest(old, held) {
             if let Some(ce) = self.gd.block_to_item.get(&old).cloned() {
                 let count = if self.gd.block_name(old).contains("_double_slab") { 2 } else { 1 };
@@ -423,6 +424,7 @@ impl Server {
                 }
             }
             use_item_action::CLICK_BLOCK => self.place_block(sid, u),
+            use_item_action::CLICK_AIR => self.on_click_air(sid),
             _ => {}
         }
     }

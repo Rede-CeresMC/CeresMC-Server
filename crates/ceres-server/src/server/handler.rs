@@ -194,6 +194,7 @@ impl Server {
                 if let Some(tx) = protocol::read_inventory_transaction(&mut r)? {
                     match tx {
                         InvTransaction::UseItem(u) => self.on_use_item(sid, u),
+                        InvTransaction::Release => self.on_release_item(sid),
                         InvTransaction::Drop { slot, count, expected } => {
                             let drop_opt = self.players.get_mut(&sid).and_then(|p| {
                                 let cur = p.inventory.main.get(slot as usize)?;
@@ -274,7 +275,8 @@ impl Server {
         p.out.push(self.gd.biome_definitions.clone());
         p.out.push(self.gd.creative_content.clone());
         p.out.push(self.gd.crafting_data.clone());
-        p.out.push(protocol::update_attributes_health(p.entity_id, p.health));
+        let pk = p.vitals_packet();
+        p.out.push(pk);
         p.out.push(protocol::set_actor_data_state(p.entity_id, &nametag, &p.actor_state));
         p.state = State::PreSpawn;
         self.sync_full_inventory(sid);

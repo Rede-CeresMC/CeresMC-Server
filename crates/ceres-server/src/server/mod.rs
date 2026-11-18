@@ -6,6 +6,7 @@ mod combat;
 mod commands;
 mod containers;
 mod durability;
+mod food;
 mod handler;
 mod inventory;
 mod items;
@@ -52,6 +53,15 @@ pub(crate) struct Player {
     flying: bool,
     last_swing_tick: u64,
     health: f32,
+    hunger: f32,
+    saturation: f32,
+    exhaustion: f32,
+    /// ticks since the last regeneration / starvation step
+    food_timer: u32,
+    /// tick the player started eating
+    eating: Option<u64>,
+    /// ate; waiting for the client's own end-of-use click
+    awaiting_release: bool,
     dead: bool,
     hurt_cooldown: u8,
     fall_start_y: Option<f32>,
@@ -193,6 +203,12 @@ impl Server {
                             flying: false,
                             last_swing_tick: 0,
                             health: 20.0,
+                            hunger: 20.0,
+                            saturation: 5.0,
+                            exhaustion: 0.0,
+                            food_timer: 0,
+                            eating: None,
+                            awaiting_release: false,
                             dead: false,
                             hurt_cooldown: 0,
                             fall_start_y: None,

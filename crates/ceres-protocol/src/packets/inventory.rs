@@ -216,6 +216,8 @@ pub enum InvTransaction {
     UseItem(UseItem),
     Drop { slot: u8, count: u16, expected: ItemDesc },
     UseOnEntity { target_eid: i64, action: u32, hotbar_slot: i32 },
+    /// let go of the use button (bow, eating)
+    Release,
     Mismatch,
 }
 
@@ -328,6 +330,7 @@ pub fn read_inventory_transaction(r: &mut R) -> Res<Option<InvTransaction>> {
             let _click_pos = read_vec3(r)?;
             Ok(Some(InvTransaction::UseOnEntity { target_eid, action, hotbar_slot }))
         }
+        4 => Ok(Some(InvTransaction::Release)),
         _ => Ok(None),
     }
 }

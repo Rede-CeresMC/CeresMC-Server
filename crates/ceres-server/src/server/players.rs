@@ -204,6 +204,12 @@ impl Server {
             p.teleport_to = None;
         }
         let moved = p.pos != pos || p.rot != [pitch, yaw, head_yaw];
+        if p.actor_state.sprinting && (p.gamemode == 0 || p.gamemode == 2) {
+            let d = ((pos[0] - p.pos[0]).powi(2) + (pos[2] - p.pos[2]).powi(2)).sqrt();
+            if d < 2.0 {
+                p.exhaustion = (p.exhaustion + d * food::exhaustion::SPRINT_PER_BLOCK).min(40.0);
+            }
+        }
         p.pos = pos;
         p.rot = [pitch, yaw, head_yaw];
         let (world, eid, spawned) = (p.world, p.entity_id, p.state == State::Spawned);
@@ -243,6 +249,10 @@ impl Server {
         }
         if tail.has_flag(input_flag::MISSED_SWING) {
             self.swing_arm(sid);
+        }
+        if tail.has_flag(input_flag::START_JUMPING) {
+            let sprinting = self.players.get(&sid).is_some_and(|p| p.actor_state.sprinting);
+            self.exhaust(sid, if sprinting { food::exhaustion::SPRINT_JUMP } else { food::exhaustion::JUMP });
         }
         let Some(p) = self.players.get_mut(&sid) else { return };
         let old = p.actor_state;

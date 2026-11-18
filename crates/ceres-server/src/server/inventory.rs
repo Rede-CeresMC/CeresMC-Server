@@ -629,6 +629,15 @@ impl Server {
             if let Some(h) = tag.get("Health").and_then(|t| t.as_f32()) {
                 p.health = h.clamp(1.0, 20.0);
             }
+            if let Some(v) = tag.get("Hunger").and_then(|t| t.as_f32()) {
+                p.hunger = v.clamp(0.0, 20.0);
+            }
+            if let Some(v) = tag.get("Saturation").and_then(|t| t.as_f32()) {
+                p.saturation = v.clamp(0.0, p.hunger);
+            }
+            if let Some(v) = tag.get("Exhaustion").and_then(|t| t.as_f32()) {
+                p.exhaustion = v.clamp(0.0, 40.0);
+            }
             p.spawn_point = spawn_point;
         }
     }
@@ -641,6 +650,9 @@ impl Server {
         let _ = std::fs::create_dir_all(PLAYERS_DIR);
         let mut tag = p.inventory.to_nbt();
         tag.set("Health", Tag::Float(p.health));
+        tag.set("Hunger", Tag::Float(p.hunger));
+        tag.set("Saturation", Tag::Float(p.saturation));
+        tag.set("Exhaustion", Tag::Float(p.exhaustion));
         if let Some((wi, sp)) = p.spawn_point {
             if let Some(w) = self.worlds.worlds.get(wi) {
                 tag.set("SpawnWorld", Tag::String(w.folder.clone()));
@@ -753,6 +765,9 @@ impl Server {
             return Ok(());
         }
         let Some(p) = self.players.get_mut(&sid) else { return Ok(()) };
+        if p.inventory.held_slot != hotbar_slot {
+            p.eating = None;
+        }
         p.inventory.held_slot = hotbar_slot;
         p.inventory.dirty = true;
         let (world, eid) = (p.world, p.entity_id);
