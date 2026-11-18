@@ -25,7 +25,12 @@ fn main() {
     );
 
     let gd = GameData::load(&root.join("data")).unwrap_or_else(|e| fail("Failed to load vanilla data", e));
-    println!("[Data] {} block states, {} block definitions", gd.block_ids.len(), gd.block_definition_count);
+    println!(
+        "[Data] {} block states, {} block definitions, {} creative items",
+        gd.block_ids.len(),
+        gd.block_definition_count,
+        gd.creative_item_count
+    );
 
     let worlds = WorldManager::load_all(&root.join("worlds"), &cfg.level_name)
         .unwrap_or_else(|e| fail("Failed to load worlds", e));

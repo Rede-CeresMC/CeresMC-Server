@@ -309,6 +309,7 @@ dependencies = [
 name = "ceres-world"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "ceres-codec",
  "ceres-protocol",
  "flate2",

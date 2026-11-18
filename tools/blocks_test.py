@@ -33,6 +33,10 @@ else:
     a.join(); b.join()
     a.move(*SPAWN); b.move(*SPAWN)
     a.pump(0.5); b.pump(0.5)
+    # the world keeps what earlier runs did: clear the test positions first
+    for pos in [PLACED, (259, 70, 258)]:
+        a.break_block(pos)
+    a.pump(1.0); b.pump(1.0)
     a.place_block(PLACE_ON, 1, STONE)
     b.pump(1.5, lambda: (PLACED, STONE) in update_blocks(b))
     check((PLACED, STONE) in update_blocks(b), f"BotB sees the stone BotA placed at {PLACED}")

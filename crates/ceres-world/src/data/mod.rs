@@ -10,9 +10,11 @@ use std::path::Path;
 use std::rc::Rc;
 
 mod biomes;
+mod creative;
 mod voxel_shapes;
 
 use biomes::*;
+use creative::*;
 use voxel_shapes::*;
 
 pub struct GameData {
@@ -29,6 +31,8 @@ pub struct GameData {
     pub biome_definitions: Vec<u8>,
     pub voxel_shapes: Vec<u8>,
     pub jigsaw_structures: Vec<u8>,
+    pub creative_content: Vec<u8>,
+    pub creative_item_count: usize,
 }
 
 fn load_gz_nbt(path: &Path) -> Res<Tag> {
@@ -101,6 +105,11 @@ impl GameData {
             }
         });
 
+        // ---- creative inventory
+        let item_ids: HashMap<String, i32> =
+            list.iter().filter_map(|it| Some((it["name"].as_str()?.to_string(), it["id"].as_i64()? as i32))).collect();
+        let (creative_content, creative_item_count) = encode_creative(&dir.join("creative_items.json"), &item_ids)?;
+
         // ---- actor identifiers
         let actors = load_gz_nbt(&dir.join("entity_identifiers.nbt"))?;
         let actor_identifiers = packet(id::AVAILABLE_ACTOR_IDENTIFIERS, |w| w.bytes(&nbt::to_network(&actors)));
@@ -133,6 +142,8 @@ impl GameData {
             biome_definitions,
             voxel_shapes,
             jigsaw_structures,
+            creative_content,
+            creative_item_count,
         })
     }
 

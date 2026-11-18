@@ -11,7 +11,8 @@
 - [x] Lista de jogadores com skin, ver outros jogadores se movendo, chat
 - [x] Voo no criativo (UpdateAbilities)
 - [x] Quebrar e colocar blocos, salvando no LevelDB (orientação de blocos, colisão e blocos substituíveis pendentes)
-- [ ] Inventário, menu criativo, ItemStackRequest
+- [x] Menu criativo (CreativeContent) e pedidos de item aceitos como o cliente prevê
+- [ ] Inventário de verdade no servidor (sobrevivência, baús, salvar inventário)
 - [ ] Comandos: `/tp`, `/gamemode`, `/give`, `/world`
 - [ ] Verificação Xbox / token de identidade
 - [ ] Criptografia no RakNet

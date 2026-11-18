@@ -91,6 +91,14 @@ impl Server {
             }
             (State::PreSpawn | State::Spawned, id::PLAYER_AUTH_INPUT) => self.on_input(sid, &mut r)?,
             (State::Spawned, protocol::mp::TEXT) => self.on_text(sid, &mut r)?,
+            (State::PreSpawn | State::Spawned, protocol::ITEM_STACK_REQUEST) => {
+                // TODO: real inventories. For now every request is accepted as the client predicted it,
+                // which is what creative mode needs to take items from the creative menu.
+                if r.uvarint()? > 0 {
+                    let request_id = r.varint()?;
+                    p.out.push(protocol::item_stack_response_ok(request_id));
+                }
+            }
             (State::Spawned, protocol::INVENTORY_TRANSACTION) => {
                 if let Some(u) = protocol::read_inventory_transaction(&mut r)? {
                     self.on_use_item(sid, u);
@@ -138,6 +146,7 @@ impl Server {
         p.out.push(self.gd.item_registry.clone());
         p.out.push(self.gd.actor_identifiers.clone());
         p.out.push(self.gd.biome_definitions.clone());
+        p.out.push(self.gd.creative_content.clone());
         p.state = State::PreSpawn;
         self.send_pre_spawn_players(sid);
         let p = self.players.get_mut(&sid).unwrap();

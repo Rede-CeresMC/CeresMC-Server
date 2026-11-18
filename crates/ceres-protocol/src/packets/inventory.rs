@@ -163,3 +163,16 @@ pub fn read_auth_input_tail(r: &mut R) -> Res<AuthInputTail> {
     }
     Ok(tail)
 }
+
+pub const ITEM_STACK_REQUEST: u32 = 0x93;
+pub const ITEM_STACK_RESPONSE: u32 = 0x94;
+
+/// Accepts one item stack request exactly as the client predicted it.
+pub fn item_stack_response_ok(request_id: i32) -> Vec<u8> {
+    crate::packet(ITEM_STACK_RESPONSE, |w| {
+        w.uvarint(1);
+        w.u8(0); // ok
+        w.varint(request_id);
+        w.bool(false); // no container info
+    })
+}

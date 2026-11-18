@@ -12,3 +12,4 @@ ceres-protocol.workspace = true
 flate2.workspace = true
 rusty-leveldb.workspace = true
 serde_json.workspace = true
+base64.workspace = true
