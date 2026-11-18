@@ -20,6 +20,7 @@ mod fireworks;
 mod food;
 mod furnace;
 mod twopart;
+mod grindstone;
 mod handler;
 mod hopper;
 mod inventory;

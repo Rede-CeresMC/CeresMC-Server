@@ -31,6 +31,10 @@ pub(crate) struct Inventory {
     pub(crate) enchant_paid: Option<u32>,
     /// the player's level, for enchanting costs
     pub(crate) player_level: u32,
+    /// grindstone slots, and the experience its last use gives back
+    pub(crate) grind_input: ItemDesc,
+    pub(crate) grind_additional: ItemDesc,
+    pub(crate) grind_xp: Option<u32>,
 }
 
 /// UI id given to an open crafting table: it has no slots of its own (the grid is `craft_grid`).
@@ -76,6 +80,9 @@ impl Default for Inventory {
             enchant_offers: Vec::new(),
             enchant_paid: None,
             player_level: 0,
+            grind_input: ItemDesc::default(),
+            grind_additional: ItemDesc::default(),
+            grind_xp: None,
         }
     }
 }
@@ -91,6 +98,8 @@ enum Loc {
     Cutter,
     EnchantInput,
     EnchantLapis,
+    GrindInput,
+    GrindAdditional,
 }
 
 fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
@@ -119,6 +128,16 @@ fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
             match (s.container, s.slot) {
                 (super::enchanting::UI_ENCHANT_INPUT, super::enchanting::SLOT_ENCHANT_INPUT) => Some(Loc::EnchantInput),
                 (super::enchanting::UI_ENCHANT_LAPIS, super::enchanting::SLOT_ENCHANT_LAPIS) => Some(Loc::EnchantLapis),
+                _ => None,
+            }
+        }
+        super::grindstone::UI_GRIND_INPUT | super::grindstone::UI_GRIND_ADDITIONAL => {
+            if !open.is_some_and(|c| c.ui == super::grindstone::GRINDSTONE_UI) {
+                return None;
+            }
+            match (s.container, s.slot) {
+                (super::grindstone::UI_GRIND_INPUT, super::grindstone::SLOT_GRIND_INPUT) => Some(Loc::GrindInput),
+                (super::grindstone::UI_GRIND_ADDITIONAL, super::grindstone::SLOT_GRIND_ADDITIONAL) => Some(Loc::GrindAdditional),
                 _ => None,
             }
         }
@@ -187,6 +206,8 @@ impl Inventory {
             Loc::Cutter => &self.cutter,
             Loc::EnchantInput => &self.enchant_input,
             Loc::EnchantLapis => &self.enchant_lapis,
+            Loc::GrindInput => &self.grind_input,
+            Loc::GrindAdditional => &self.grind_additional,
         }
     }
 
@@ -205,6 +226,8 @@ impl Inventory {
             Loc::Cutter => self.cutter = item,
             Loc::EnchantInput => self.enchant_input = item,
             Loc::EnchantLapis => self.enchant_lapis = item,
+            Loc::GrindInput => self.grind_input = item,
+            Loc::GrindAdditional => self.grind_additional = item,
             Loc::Container(i) => {
                 if let Some(c) = self.container.as_mut() {
                     c.items[i] = item;
@@ -340,8 +363,11 @@ impl Inventory {
             self.cutter.clone(),
             self.enchant_input.clone(),
             self.enchant_lapis.clone(),
+            self.grind_input.clone(),
+            self.grind_additional.clone(),
         );
         self.enchant_paid = None;
+        self.grind_xp = None;
         let res = self.apply_inner(req, creative, gd);
         self.crafted = None;
         if res.is_none() {
@@ -356,7 +382,10 @@ impl Inventory {
             self.cutter = backup.8;
             self.enchant_input = backup.9;
             self.enchant_lapis = backup.10;
+            self.grind_input = backup.11;
+            self.grind_additional = backup.12;
             self.enchant_paid = None;
+            self.grind_xp = None;
         }
         res
     }
@@ -376,6 +405,8 @@ impl Inventory {
         let mut consumed_from: Vec<Loc> = Vec::new();
         // enchanting table: index of the option bought
         let mut enchant_choice: Option<usize> = None;
+        // grindstone: (expected input, expected additional) and the experience
+        let mut grinding: Option<(ItemDesc, ItemDesc, u32)> = None;
 
         for action in &req.actions {
             match *action {
@@ -420,8 +451,17 @@ impl Inventory {
                     self.crafted = Some(super::enchanting::enchanted(&self.enchant_input, &offer, gd));
                     enchant_choice = Some(i);
                 }
+                StackAction::Grindstone => {
+                    let open_ui = self.container.as_ref().map(|c| c.ui);
+                    if open_ui != Some(super::grindstone::GRINDSTONE_UI) || recipe.is_some() || enchant_choice.is_some() || grinding.is_some() {
+                        return None;
+                    }
+                    let (out, xp) = super::grindstone::grind(&self.grind_input, &self.grind_additional, gd)?;
+                    self.crafted = Some(out);
+                    grinding = Some((self.grind_input.clone(), self.grind_additional.clone(), xp));
+                }
                 StackAction::CraftRecipe { net_id, reps, .. } => {
-                    if enchant_choice.is_some() {
+                    if enchant_choice.is_some() || grinding.is_some() {
                         return None;
                     }
                     let r = gd.recipes.get(&net_id)?;
@@ -441,7 +481,7 @@ impl Inventory {
                     recipe = Some((r, reps as u16));
                 }
                 StackAction::Consume { count, src } => {
-                    if (recipe.is_none() && enchant_choice.is_none()) || count == 0 {
+                    if (recipe.is_none() && enchant_choice.is_none() && grinding.is_none()) || count == 0 {
                         return None;
                     }
                     let loc = locate(&src, self.container.as_ref())?;
@@ -604,6 +644,27 @@ impl Inventory {
             }
         }
 
+        // grindstone: both slots used up exactly (one each), nothing else
+        if let Some((input, additional, xp)) = grinding {
+            if recipe.is_some() || enchant_choice.is_some() {
+                return None;
+            }
+            let mut from_input = 0;
+            let mut from_additional = 0;
+            for (loc, c) in consumed_from.iter().zip(&consumed) {
+                match loc {
+                    Loc::GrindInput => from_input += c.count,
+                    Loc::GrindAdditional => from_additional += c.count,
+                    _ => return None,
+                }
+            }
+            let want = |it: &ItemDesc| if it.is_empty() { 0 } else { 1 };
+            if from_input != want(&input) || from_additional != want(&additional) {
+                return None;
+            }
+            self.grind_xp = Some(xp);
+            consumed.clear();
+        }
         let craft_ok = match (recipe, enchant_choice) {
             // a recipe and an enchantment in one request: refused
             (Some(_), Some(_)) => false,
@@ -651,7 +712,7 @@ impl Inventory {
         if !self.cutter.is_empty() {
             out.push(std::mem::take(&mut self.cutter));
         }
-        for slot in [&mut self.enchant_input, &mut self.enchant_lapis] {
+        for slot in [&mut self.enchant_input, &mut self.enchant_lapis, &mut self.grind_input, &mut self.grind_additional] {
             if !slot.is_empty() {
                 out.push(std::mem::take(slot));
             }
@@ -891,6 +952,10 @@ impl Server {
         p.out.push(protocol::item_stack_response(req.id, ok, &slots));
         let paid = p.inventory.enchant_paid.is_some();
         let input_changed = p.inventory.enchant_input != enchant_before;
+        let ground = self.players.get(&sid).is_some_and(|p| p.inventory.grind_xp.is_some());
+        if ok && ground {
+            self.finish_grinding(sid);
+        }
         if ok && paid {
             self.finish_enchanting(sid);
         } else if ok && input_changed {

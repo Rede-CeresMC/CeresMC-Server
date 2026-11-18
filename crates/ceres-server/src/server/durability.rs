@@ -122,6 +122,49 @@ pub(crate) fn set_enchant(item: &mut ItemDesc, id: i16, level: i16) {
     item.extra = w.0;
 }
 
+/// (enchantment, level) of every enchantment on an item.
+pub(crate) fn enchantments(item: &ItemDesc) -> Vec<(i16, i16)> {
+    let Some((tag, _)) = split_extra(item) else { return Vec::new() };
+    tag.get("ench")
+        .and_then(|l| l.as_list())
+        .map(|l| {
+            l.iter()
+                .filter_map(|e| Some((e.get("id")?.as_i64()? as i16, e.get("lvl")?.as_i64()? as i16)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Removes every enchantment except the listed ones.
+pub(crate) fn keep_only_enchantments(item: &mut ItemDesc, keep: &[i16]) {
+    let Some((mut tag, tail)) = split_extra(item) else { return };
+    let list: Vec<Tag> = match tag.get("ench") {
+        Some(Tag::List(_, l)) => l
+            .iter()
+            .filter(|e| e.get("id").and_then(|v| v.as_i64()).is_some_and(|id| keep.contains(&(id as i16))))
+            .cloned()
+            .collect(),
+        _ => return,
+    };
+    if list.is_empty() {
+        if let Tag::Compound(fields) = &mut tag {
+            fields.retain(|(k, _)| k != "ench");
+        }
+    } else {
+        tag.set("ench", Tag::List(10, list));
+    }
+    let mut w = ceres_codec::binary::W::new();
+    w.u16_le(0xffff);
+    w.u8(1);
+    nbt::write_root(&mut w, "", &tag, Flavor::LittleEndian);
+    w.bytes(&tail);
+    item.extra = w.0;
+}
+
+pub(crate) fn set_damage(item: &mut ItemDesc, damage: u32) {
+    set_item_damage(item, damage);
+}
+
 fn unbreakable(item: &ItemDesc) -> bool {
     split_extra(item).is_some_and(|(t, _)| t.get("Unbreakable").and_then(|v| v.as_i64()).unwrap_or(0) != 0)
 }

@@ -452,6 +452,8 @@ pub enum StackAction {
         reps: u8,
         auto: bool,
     },
+    /// grindstone: the result is decided by the server
+    Grindstone,
     /// informational actions the server does not need to act on (crafting results, mining...)
     Ignored(u32),
     /// any action this server does not understand yet (crafting...)
@@ -530,6 +532,12 @@ fn read_single_stack_request(r: &mut R) -> Res<StackRequest> {
                 StackAction::Ignored(9)
             }
             12 => StackAction::CreativeCreate { item: r.uvarint()?, repetitions: r.u8()? },
+            14 => {
+                r.varint()?; // recipe id
+                r.varint()?; // repair cost
+                r.u8()?; // repetitions
+                StackAction::Grindstone
+            }
             17 => StackAction::Ignored(17),
             18 => {
                 // deprecated "crafting results": the items the previous action produced
@@ -680,6 +688,7 @@ pub const WINDOW_TYPE_ENCHANTMENT: u8 = 3;
 pub const WINDOW_TYPE_BREWING_STAND: u8 = 4;
 pub const WINDOW_TYPE_HOPPER: u8 = 8;
 pub const WINDOW_TYPE_STONECUTTER: u8 = 29;
+pub const WINDOW_TYPE_GRINDSTONE: u8 = 26;
 pub const WINDOW_TYPE_BLAST_FURNACE: u8 = 27;
 pub const WINDOW_TYPE_SMOKER: u8 = 28;
 pub const CONTAINER_SET_DATA: u32 = 0x33;

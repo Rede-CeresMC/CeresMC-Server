@@ -125,6 +125,31 @@ if opts:
     check(not request(c, [(10, svarint(net) + bytes([1])), take(1, slot(60, 50), slot(HOTBAR, 3))]),
           "the same option cannot be bought again without an item")
 
+# grindstone: takes the enchantments off and gives experience back
+GRIND = block_id("minecraft:grindstone")
+GPOS = (POS[0] + 2, POS[1], POS[2])
+command(c, "/gamemode creative")
+c.break_block(GPOS)
+c.place_block((GPOS[0], 69, GPOS[2]), 1, STONE)
+c.pump(0.3)
+c.place_block((GPOS[0], 69, GPOS[2]), 1, GRIND)
+c.pump(0.6)
+command(c, "/gamemode survival")
+command(c, "/clear")
+give(c, "iron_sword 1")
+command(c, "/enchant @s sharpness 3")
+n = len(c.received)
+c.place_block(GPOS, 1, 0)
+c.pump(3.0, lambda: any(p == 0x2e for p, _ in c.received[n:]))
+opens = [d for p, d in c.received[n:] if p == 0x2e]
+check(opens and opens[-1][1] == 26, "clicking a grindstone opens it")
+check(request(c, [take(1, slot(HOTBAR, 0), slot(50, 16))]), "the enchanted sword goes into the grindstone")
+n = len(c.received)
+check(request(c, [(14, svarint(0) + svarint(0) + bytes([1])), (5, bytes([1]) + slot(50, 16)), take(1, slot(60, 50), slot(HOTBAR, 6))]),
+      "grinding is accepted")
+c.pump(1.0)
+check(any(p == 0x0d and b"xp_orb" in d for p, d in c.received[n:]), "grinding gives experience back")
+
 c.close()
 print("PASS" if ok else "FAILED")
 sys.exit(0 if ok else 1)
