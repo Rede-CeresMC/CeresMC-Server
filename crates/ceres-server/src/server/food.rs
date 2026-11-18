@@ -124,7 +124,7 @@ impl Server {
 
     /// A click in the air with the held item (InventoryTransaction UseItem CLICK_AIR).
     pub(crate) fn on_click_air(&mut self, sid: SessionId) {
-        if self.throw_held(sid) || self.start_bow(sid) {
+        if self.throw_held(sid) || self.start_bow(sid) || self.equip_held_armor(sid) {
             return;
         }
         let ticks = self.ticks;

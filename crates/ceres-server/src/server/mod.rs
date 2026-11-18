@@ -1,5 +1,6 @@
 //! Game layer: player sessions, login flow, entities, combat, moderation and chunk streaming.
 
+mod armor;
 mod blocks;
 mod chunks;
 mod combat;
@@ -113,6 +114,8 @@ pub(crate) struct Player {
     noclip: bool,
     /// ticks the shield stays disabled (hit by an axe)
     shield_cooldown: u32,
+    /// ticks until a raised shield makes a sound and wears again
+    shield_block_cooldown: u8,
     /// last window id handed out (1..=99) for block containers
     window_counter: u8,
     radius: i32,
@@ -284,6 +287,7 @@ impl Server {
                             punching: None,
                             noclip: false,
                             shield_cooldown: 0,
+                            shield_block_cooldown: 0,
                             window_counter: 0,
                             radius: 0,
                             center: None,

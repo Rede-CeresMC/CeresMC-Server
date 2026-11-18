@@ -69,6 +69,7 @@ impl Server {
         let changed = p.actor_state.blocking != blocking;
         let p = self.players.get_mut(&sid).unwrap();
         p.shield_cooldown = p.shield_cooldown.saturating_sub(1);
+        p.shield_block_cooldown = p.shield_block_cooldown.saturating_sub(1);
         if changed {
             p.actor_state.blocking = blocking;
             self.sync_actor_state(sid);
@@ -89,13 +90,14 @@ impl Server {
         if look[0] * to[0] + look[1] * to[1] <= 0.0 {
             return false;
         }
-        // hits within the invulnerability frames are absorbed silently (no sound, no wear)
-        if p.hurt_cooldown > 0 {
+        // a shield blocks at most one hit per half second with sound and wear; the hits in
+        // between are absorbed silently (its own timer: other damage is not affected)
+        if p.shield_block_cooldown > 0 {
             return true;
         }
         let (world, pos) = (p.world, p.pos);
         if let Some(p) = self.players.get_mut(&victim) {
-            p.hurt_cooldown = 10;
+            p.shield_block_cooldown = 10;
         }
         self.broadcast(&protocol::level_sound_event("item.shield.block", pos, -1), |_, q| q.world == world);
         // vanilla: 1 + damage durability for hits of 3 or more

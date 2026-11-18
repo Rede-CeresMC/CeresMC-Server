@@ -286,6 +286,13 @@ impl Server {
         if self.use_bucket(sid, clicked, side(clicked, face)) {
             return;
         }
+        // armor used on a block is put on, like in the air
+        if self.equip_held_armor(sid) {
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
         // tools on blocks (hoe, shovel, axe, flint and steel), seeds and bone meal
         if self.use_item_on_block(sid, clicked, face) {
             if let Some(t) = side(clicked, face) {

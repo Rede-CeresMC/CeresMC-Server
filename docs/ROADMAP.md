@@ -146,6 +146,8 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 - [x] Sons vanilla enviados pelo servidor: abrir/fechar baú, barril e shulker; encher/esvaziar balde; enxada/pá/machado (`item.use.on`); comer (partículas e mastigar para quem está perto) e arroto; golpe forte; portas e alçapões; escudo; totem; poções
 
+- [x] Vestir armadura pela mão (clique no ar ou em bloco; troca com a peça vestida; élitro, casco de tartaruga, abóbora e cabeças), com o som de equipar do material
+
 ### Blocos com interface
 
 - [x] Baú ✔, barril ✔, shulker box ✔ (abrir, mover itens, vários jogadores no mesmo baú, salvar no formato vanilla, derrubar ao quebrar), baú duplo ✔ (pairx/pairz vanilla, 54 slots, cada metade guarda os seus itens)

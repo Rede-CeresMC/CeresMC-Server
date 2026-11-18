@@ -97,6 +97,27 @@ attack(foe, guard_eid)
 guard.pump(1.0); foe.pump(0.2)
 check(any(p == 0x28 for p, _ in guard.received[n:]), "without the shield raised the hit lands")
 
+# armor: using a helmet from the hand puts it on
+def click_air(c):
+    item = struct.pack("<hH", 0, 0) + uvarint(0) + bytes(1) + uvarint(0) + uvarint(0)
+    data = svarint(1) + bytes([1]) + svarint(0) * 3 + bytes([255]) + svarint(0) + bytes(1) + item
+    data += struct.pack("<fff", *c.pos) + struct.pack("<fff", 0, 0, 0) + uvarint(0) + bytes([1, 0])
+    c.send(uvarint(0x1e) + svarint(0) + bytes(1) + uvarint(2) + uvarint(0) + data)
+command(guard, "/clear")
+give(guard, "iron_helmet 1")
+n = len(guard.received)
+click_air(guard)
+guard.pump(1.0)
+worn = None
+for pid, d in guard.received[n:]:
+    if pid == 0x31:
+        w, p = read_uvarint(d, 0)
+        if w == 120:
+            k, p = read_uvarint(d, p)
+            worn = struct.unpack("<hH", d[p:p + 4])
+check(worn is not None and worn[1] == 1, f"using an iron helmet puts it on ({worn})")
+check(any(pid == 0x7b and b"armor.equip_iron" in d for pid, d in guard.received[n:]), "the iron equip sound plays")
+
 guard.close(); foe.close()
 print("PASS" if ok else "FAILED")
 sys.exit(0 if ok else 1)
