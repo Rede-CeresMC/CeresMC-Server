@@ -146,6 +146,7 @@ impl Server {
     pub(crate) fn teleport(&mut self, sid: SessionId, feet: [f32; 3]) {
         let Some(p) = self.players.get_mut(&sid) else { return };
         p.pos = [feet[0], feet[1] + EYE_HEIGHT, feet[2]];
+        p.teleport_to = Some(p.pos);
         let (eid, pos, rot, world) = (p.entity_id, p.pos, p.rot, p.world);
         let pk = protocol::move_player(eid, pos, rot[0], rot[1], rot[2], 2, false);
         p.out.push(pk.clone());

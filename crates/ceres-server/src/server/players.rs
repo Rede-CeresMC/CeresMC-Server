@@ -116,6 +116,13 @@ impl Server {
             return Ok(());
         }
         let Some(p) = self.players.get_mut(&sid) else { return Ok(()) };
+        if let Some(t) = p.teleport_to {
+            let d2: f32 = (0..3).map(|i| (pos[i] - t[i]).powi(2)).sum();
+            if d2 > 1.0 {
+                return Ok(()); // still moving from before the teleport
+            }
+            p.teleport_to = None;
+        }
         let moved = p.pos != pos || p.rot != [pitch, yaw, head_yaw];
         p.pos = pos;
         p.rot = [pitch, yaw, head_yaw];

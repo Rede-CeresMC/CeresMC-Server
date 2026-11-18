@@ -45,6 +45,8 @@ pub(crate) struct Player {
     /// protocol game mode: 0 survival, 1 creative, 2 adventure, 6 spectator
     gamemode: i32,
     op: bool,
+    /// set by a teleport: movement far from here is stale and ignored until the client catches up
+    teleport_to: Option<[f32; 3]>,
     radius: i32,
     center: Option<(i32, i32)>,
     sent: HashSet<(i32, i32)>,
@@ -145,6 +147,7 @@ impl Server {
                             inventory: Default::default(),
                             gamemode: self.cfg.gamemode,
                             op: false,
+                            teleport_to: None,
                             radius: 0,
                             center: None,
                             sent: HashSet::new(),

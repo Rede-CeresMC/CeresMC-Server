@@ -199,7 +199,12 @@ pub fn move_player(
         w.u8(mode);
         w.bool(on_ground);
         w.uvarlong(0); // riding
-        w.bool(false); // teleport data
+        // teleports carry a cause and the item that caused them (both 0, like Altay)
+        w.bool(mode == 2);
+        if mode == 2 {
+            w.i32_le(0);
+            w.i32_le(0);
+        }
         w.uvarlong(0); // tick
     })
 }

@@ -38,6 +38,9 @@ if moves:
     x, y, z = struct.unpack("<fff", moves[-1][q:q + 12])
 check(moves and abs(x - 10) < 0.01 and abs(y - 81.62) < 0.01, "/tp 10 80 10 moves the operator")
 check(any(p == 0x79 for p, _ in op.received), "teleport sends a chunk publisher update")
+if moves:
+    tail = moves[-1][q + 12 + 12 + 1:]  # after position, pitch/yaw/head yaw, mode
+    check(moves[-1][q + 24] == 2 and tail[1] == 0 and tail[2] == 1, "teleport MovePlayer carries teleport data")
 
 command(op, "/list")
 check(wait_text(op, "BotUser"), "/list shows the other player")
