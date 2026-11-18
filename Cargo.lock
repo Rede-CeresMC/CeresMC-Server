@@ -301,6 +301,7 @@ dependencies = [
  "ceres-net",
  "ceres-protocol",
  "ceres-world",
+ "rand 0.10.4",
  "serde_json",
 ]
 

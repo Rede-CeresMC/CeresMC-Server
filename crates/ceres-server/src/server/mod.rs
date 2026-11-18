@@ -2,12 +2,14 @@
 
 mod chunks;
 mod handler;
+mod players;
+mod skin;
 
 use crate::config::Config;
 
 use ceres_codec::binary::{R, Res};
 use ceres_net::transport::{NetEvent, SessionId, Transport};
-use ceres_protocol::{self as protocol, id, play_status};
+use ceres_protocol::{self as protocol, PlayerInfo, id, play_status};
 use ceres_world::GameData;
 use ceres_world::WorldManager;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -15,7 +17,7 @@ use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
-enum State {
+pub(crate) enum State {
     AwaitNetworkSettings,
     AwaitLogin,
     ResourcePacks,
@@ -23,14 +25,19 @@ enum State {
     Spawned,
 }
 
-struct Player {
+pub(crate) struct Player {
     addr: SocketAddr,
     state: State,
     compression: bool,
     name: String,
     entity_id: i64,
     world: usize,
+    /// eye position
     pos: [f32; 3],
+    /// pitch, yaw, head yaw
+    rot: [f32; 3],
+    /// set at login; what other clients need to draw this player
+    info: Option<PlayerInfo>,
     radius: i32,
     center: Option<(i32, i32)>,
     sent: HashSet<(i32, i32)>,
@@ -113,6 +120,8 @@ impl Server {
                             entity_id: 0,
                             world: self.worlds.default,
                             pos: [0.0; 3],
+                            rot: [0.0; 3],
+                            info: None,
                             radius: 0,
                             center: None,
                             sent: HashSet::new(),
@@ -134,6 +143,7 @@ impl Server {
                         if !p.name.is_empty() {
                             println!("[Game] {} left ({reason})", p.name);
                         }
+                        self.on_left(&p);
                     }
                     self.owner.remove(&sid);
                     self.update_status();

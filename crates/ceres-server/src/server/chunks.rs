@@ -103,7 +103,8 @@ impl Server {
                 t.close(sid);
             }
             if let Some(p) = self.players.remove(&sid) {
-                println!("[Game] closed {} ({})", p.addr, p.close.unwrap_or_default());
+                println!("[Game] closed {} ({})", p.addr, p.close.clone().unwrap_or_default());
+                self.on_left(&p);
             }
             self.owner.remove(&sid);
         }

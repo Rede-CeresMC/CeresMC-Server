@@ -19,6 +19,7 @@ Servidor de **Minecraft: Bedrock Edition** escrito em **Rust**, da Rede CeresMC.
 - Login completo até o spawn, pelos dois transportes.
 - Lê mundos vanilla (LevelDB) e envia os chunks; o chunk já comprimido fica em cache e é compartilhado entre jogadores.
 - Vários mundos carregados a partir de `worlds/`.
+- Multiplayer básico: lista de jogadores com skin, ver os outros andando, chat, voo no criativo.
 
 ## Compilar e rodar
 
@@ -34,7 +35,7 @@ mkdir worlds            # coloque aqui pastas de mundo com level.dat + db/
 O servidor procura `data/`, `worlds/` e `server.properties` na pasta onde é executado.
 `CERES_DEBUG=1` liga logs detalhados de rede.
 
-Teste rápido sem abrir o jogo (precisa do servidor rodando):
+Teste rápido sem abrir o jogo (precisa do servidor rodando): dois bots entram, se veem, andam e conversam.
 
 ```sh
 python tools/smoke_client.py

@@ -42,14 +42,25 @@ impl Server {
                 let _auth_json = blob.take(auth_len)?;
                 let cd_len = blob.u32_le()? as usize;
                 let client_data = blob.take(cd_len)?;
-                let name = jwt_payload(client_data)
-                    .and_then(|v| v["ThirdPartyName"].as_str().map(str::to_string))
+                let cd = jwt_payload(client_data).unwrap_or_default();
+                let name = cd["ThirdPartyName"]
+                    .as_str()
                     .filter(|s| !s.is_empty())
+                    .map(str::to_string)
                     .unwrap_or_else(|| format!("Player{sid}"));
                 // TODO: verify the auth chain (xbox-auth) and enable encryption
                 p.name = name;
                 p.entity_id = self.next_entity_id;
                 self.next_entity_id += 1;
+                p.info = Some(PlayerInfo {
+                    uuid: skin::wire(skin::random_uuid()),
+                    entity_id: p.entity_id,
+                    name: p.name.clone(),
+                    xuid: String::new(),
+                    device_id: cd["DeviceId"].as_str().unwrap_or("").to_string(),
+                    build_platform: cd["DeviceOS"].as_i64().unwrap_or(0) as i32,
+                    skin: std::rc::Rc::new(skin::encode(&cd)),
+                });
                 println!("[Game] {} is logging in from {}", p.name, p.addr);
                 p.out.push(protocol::play_status(play_status::LOGIN_SUCCESS));
                 p.out.push(protocol::resource_packs_info());
@@ -75,17 +86,11 @@ impl Server {
             (State::PreSpawn, id::SET_LOCAL_PLAYER_AS_INITIALIZED) => {
                 p.state = State::Spawned;
                 println!("[Game] {} spawned in \"{}\"", p.name, self.worlds.worlds[p.world].folder);
+                self.on_spawned(sid);
                 self.update_status();
             }
-            (State::PreSpawn | State::Spawned, id::PLAYER_AUTH_INPUT) => {
-                let _pitch = r.f32_le()?;
-                let _yaw = r.f32_le()?;
-                let pos = [r.f32_le()?, r.f32_le()?, r.f32_le()?];
-                if pos.iter().all(|v| v.is_finite()) {
-                    p.pos = pos;
-                    self.update_view(sid);
-                }
-            }
+            (State::PreSpawn | State::Spawned, id::PLAYER_AUTH_INPUT) => self.on_input(sid, &mut r)?,
+            (State::Spawned, protocol::mp::TEXT) => self.on_text(sid, &mut r)?,
             (_, id::CLIENT_CACHE_STATUS) => {}
             _ => {}
         }
@@ -120,6 +125,8 @@ impl Server {
         p.out.push(self.gd.actor_identifiers.clone());
         p.out.push(self.gd.biome_definitions.clone());
         p.state = State::PreSpawn;
+        self.send_pre_spawn_players(sid);
+        let p = self.players.get_mut(&sid).unwrap();
         p.radius = self.cfg.view_distance.min(8);
         self.update_view(sid);
     }

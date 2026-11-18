@@ -8,8 +8,8 @@
 - [x] Multiworld (carregamento)
 
 ## Fase 1: jogável (em andamento)
-- [ ] Lista de jogadores com skin, ver outros jogadores se movendo, chat
-- [ ] Voo no criativo (UpdateAbilities)
+- [x] Lista de jogadores com skin, ver outros jogadores se movendo, chat
+- [x] Voo no criativo (UpdateAbilities)
 - [ ] Quebrar e colocar blocos, salvando no LevelDB
 - [ ] Inventário, menu criativo, ItemStackRequest
 - [ ] Comandos: `/tp`, `/gamemode`, `/give`, `/world`
