@@ -242,6 +242,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] 🔴 Menus de baú sem baú visível: inventário de uma entidade invisível só para o jogador (27 slots) ou baú duplo enterrado só para ele (54 slots); nada aparece em terceira pessoa; cliques viram ações e ninguém tira os itens
 - [ ] 🔴 Menu continua aberto ao teleportar ou andar: a entidade invisível acompanha o jogador (no teleporte, junto com ele); no baú enterrado, reabre no destino com o mesmo conteúdo; menus falsos ficam fora da regra de alcance do servidor (testar no cliente real)
 - [ ] Scoreboards, bossbar, títulos, actionbar, toasts
+- [ ] 🟠 Controle de movimento por jogador para plugins: desligar nado e engatinhar (`set_can_swim`, `set_can_crawl`). Recusar START_SWIMMING/START_CRAWLING e manter o jogador em pé para todos; testar a flag `SWIMMER` (20) para o cliente nem começar o nado; engatinhar em vão de 1 bloco depende da validação de movimento (testar no cliente real)
 - [ ] Armazenamento por plugin (arquivo e banco de dados)
 - [ ] Permissões por plugin e por jogador
 - [ ] Documentação e plugins de exemplo
