@@ -206,14 +206,14 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 ### Mobs
 
-- [ ] Spawn natural por bioma, luz e limite de mobs
+- [ ] Spawn natural por bioma, luz e limite de mobs (feito: animais na grama de dia, zumbis à noite a céu aberto, limite por jogador, despawn longe; falta luz/cavernas e biomas)
 - [ ] Pathfinding (A* em grade) e objetivos de IA (goals)
-- [ ] Passivos: vaca, porco, ovelha, galinha (criar, tosquiar, ordenhar)
-- [ ] Hostis: zumbi, esqueleto, creeper, aranha, enderman
+- [ ] Passivos: vaca, porco, ovelha, galinha (feito: andar, fugir, sons, drops, tosquiar, ordenhar, ovos, lã volta comendo grama; falta criar/reproduzir e filhotes)
+- [ ] Hostis: zumbi, esqueleto, creeper, aranha, enderman (feito: zumbi persegue, bate, queima no sol, some no pacífico)
 - [ ] Neutros: lobo, abelha, golem de ferro
 - [ ] Aldeões: profissões, trocas, aldeias
 - [ ] Mobs do Nether e do End, chefes (Wither, Ender Dragon)
-- [ ] Drops e loot tables de mobs
+- [ ] Drops e loot tables de mobs (feito para os mobs que existem, com XP)
 - [ ] Montaria e veículos: cavalo, barco, carrinho de mina
 
 ---
@@ -240,8 +240,8 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] Uma thread de tick por mundo
 - [ ] Pool de threads para carregar, comprimir e salvar chunks
 - [ ] Barramento de eventos (PlayerJoin, BlockBreak, Chat, Damage...)
-- [ ] Eventos canceláveis e prioridades
-- [ ] Agendador de tarefas (atraso, repetição, assíncrono)
+- [ ] Eventos canceláveis e prioridades (feito para plugins: chat, quebrar/colocar bloco, dano e ataque; faltam prioridades e mais eventos)
+- [x] Agendador de tarefas para plugins (atraso e repetição; param quando o plugin desliga). Assíncrono fica para depois
 - [ ] Configuração em YAML/TOML (além do `server.properties`)
 
 ### API de plugins
@@ -252,10 +252,10 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [ ] 🔴 Desligar um plugin limpa tudo o que ele registrou: comandos, eventos, tarefas agendadas, menus e formulários abertos (sem resto e sem crash). Feito para comandos, eventos e menus; falta para tarefas e formulários (quando existirem)
 - [ ] 🟢 Opcional, depois: scripts em JavaScript (QuickJS) sobre a mesma API, para coisas rápidas sem compilar
 - [ ] API: jogadores, mundos, blocos, itens, entidades, comandos, eventos, mensagens
-- [ ] Formulários (ModalForm, CustomForm, SimpleForm) e DDUI
-- [x] 🔴 Menus de baú sem baú visível (feito com baú enterrado só para o jogador, 27 e 54 slots; a versão com entidade invisível fica para testar depois); nada aparece em terceira pessoa; cliques viram ações e ninguém tira os itens
-- [ ] 🔴 Menu continua aberto ao teleportar ou andar (feito para o teleporte: reabre no destino com o mesmo conteúdo; falta andar/empurrão e testar no cliente real): a entidade invisível acompanha o jogador (no teleporte, junto com ele); no baú enterrado, reabre no destino com o mesmo conteúdo; menus falsos ficam fora da regra de alcance do servidor (testar no cliente real)
-- [ ] Scoreboards, bossbar, títulos, actionbar, toasts
+- [x] Formulários (ModalForm, CustomForm, SimpleForm) para plugins, com a resposta conferida pelo servidor; DDUI fica para depois
+- [x] 🔴 Menus de baú sem baú visível: inventário de uma entidade invisível só para o jogador (27 slots; 54 não: testado no cliente com carrinho, npc, armor_stand, minecart, zombie e chest_boat, todos mostram 27 ou não abrem; mais itens = páginas); nada aparece em terceira pessoa; cliques viram ações e ninguém tira os itens
+- [x] 🔴 Menu continua aberto ao teleportar, andar ou voar: a entidade invisível segue o jogador a cada tick (testar no cliente real)
+- [x] Scoreboard lateral, bossbar, títulos e actionbar para plugins (toasts pelo comando /toast)
 - [x] 🔴 NoClip sem ser espectador ✔ (`/noclip`): atravessa blocos e voa em qualquer modo de jogo, blocos podem ser colocados onde o jogador está, sem dano de sufocamento; vira `player.set_noclip()` na API de plugins
 - [ ] ⚪ (deixado de fora a pedido) Controle de nado/engatinhar por jogador. Pesquisado e testado no cliente real: não existe pacote para proibir; a pose e a altura da câmera são do cliente (colisão calculada nele). Recusar a pose só muda o que os outros veem (a câmera do jogador ainda deita). Para engatinhar, o que funciona é devolver o jogador à última posição em pé enquanto o cliente disser que está engatinhando (precisa acompanhar a pose real do cliente separada da do servidor). Pacote de comportamento não chega mais ao cliente (2225: ResourcePacksInfo só lista pacotes de textura); pacote de textura só troca a animação, não a câmera. Nado só começa correndo debaixo d'água: só daria impedindo a corrida (fome baixa/cegueira), visível demais.
 - [ ] Armazenamento por plugin (arquivo e banco de dados)

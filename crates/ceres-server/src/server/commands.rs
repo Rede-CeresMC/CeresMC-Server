@@ -117,6 +117,11 @@ impl Server {
             cmd("clear", "Limpa o inventário", vec![vec![Param::opt("jogador", T::Target)]]),
             cmd("kill", "Mata um jogador", vec![vec![Param::opt("jogador", T::Target)]]),
             cmd(
+                "summon",
+                "Cria um mob",
+                vec![vec![Param::new("mob", T::Enum("Mob".into())), Param::opt("posicao", T::Position)]],
+            ),
+            cmd(
                 "noclip",
                 "Atravessar blocos e voar sem sair do modo de jogo",
                 vec![vec![Param::opt("estado", T::String), Param::opt("jogador", T::Target)]],
@@ -245,6 +250,7 @@ impl Server {
         ];
         let mut enums = enums;
         enums.push(("PluginOp".to_string(), ["enable", "disable"].map(String::from).to_vec()));
+        enums.push(("Mob".to_string(), ["cow", "pig", "sheep", "chicken", "zombie"].map(String::from).to_vec()));
         (commands, enums)
     }
 
@@ -665,6 +671,7 @@ impl Server {
                 }
                 self.reply(sender, &format!("§aEfeito {} {} aplicado.", effects::effect_name(id), level + 1));
             }
+            "summon" => self.cmd_summon(sender, &args),
             "kill" => {
                 let targets = self.resolve_targets(sender, args.first().copied());
                 for target in targets {

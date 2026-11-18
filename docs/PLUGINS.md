@@ -15,7 +15,7 @@ Os plugins do CeresMC são escritos em **Rust** e compilados para **WebAssembly*
 
 2. Copie o exemplo `plugins-exemplo/MenuExemplo` para `plugins/MenuExemplo`.
 3. Ligue o servidor. Ele compila o plugin sozinho e mostra `[Plugins] MenuExemplo v1.0.0 enabled`.
-4. No jogo, use `/menu` ou `/menugrande`.
+4. No jogo, use `/menu` ou `/menupaginas`.
 
 Depois de mudar o código, use `/reload`. O servidor recompila em segundo plano e troca os plugins quando termina.
 
@@ -106,6 +106,22 @@ ceres_plugin::plugin!(MeuPlugin);
 | `on_command(player, comando, args)` | um jogador usou um comando do plugin |
 | `on_menu_click(player, menu, slot)` | clique num slot de um menu do plugin |
 | `on_menu_close(player, menu)` | o menu fechou (pelo jogador ou pelo servidor) |
+| `on_form(player, form, resposta)` | o jogador respondeu ou fechou um formulário do plugin |
+| `on_task(tarefa)` | uma tarefa agendada chegou na hora |
+
+### Eventos canceláveis
+
+Retornam `bool`: `true` deixa acontecer e `false` cancela. Se qualquer plugin cancelar, a ação não acontece.
+
+| Método | O que dá para cancelar |
+|---|---|
+| `on_chat(player, mensagem)` | a mensagem no chat |
+| `on_block_break(player, bloco)` | quebrar o bloco (ele volta para o jogador) |
+| `on_block_place(player, bloco)` | colocar o bloco |
+| `on_damage(player, dano)` | o dano (queda, fogo, golpe...) |
+| `on_attack(atacante, alvo)` | um jogador bater em outro |
+
+`Block` tem `name` (`"minecraft:stone"`), `world`, `x`, `y` e `z`.
 
 ### O que o plugin pode fazer
 
@@ -116,21 +132,43 @@ ceres_plugin::plugin!(MeuPlugin);
   - `run_console_command(linha)`: roda um comando como o console.
   - `online_players()`: lista os jogadores online.
 - **Jogador (`Player`):**
-  - `send_message`, `send_title`;
+  - `send_message`, `send_title`, `send_actionbar`;
   - `teleport(x, y, z)`, `teleport_by(dx, dy, dz)`;
   - `give(item)`;
-  - `open_menu(menu)`, `set_menu_item(slot, item)`, `close_menu()`.
+  - `open_menu(menu)`, `set_menu_item(slot, item)`, `close_menu()`;
+  - `send_form(id, form)`;
+  - `set_scoreboard(título, &[linhas])` e `clear_scoreboard()`: placar na lateral, até 15 linhas, de cima para baixo;
+  - `set_bossbar(título, progresso 0.0 a 1.0, cor)` e `clear_bossbar()`.
 - **Itens (`Item`):** `Item::new("minecraft:...")` com `.count(n)`, `.meta(n)`, `.name("§a...")` e `.lore(&[...])`.
+- **Tarefas** (20 ticks = 1 segundo):
+  - `schedule(atraso)`: roda uma vez;
+  - `schedule_repeating(atraso, período)`: repete;
+  - `cancel_task(id)`: para.
+
+  Cada uma chama `on_task(id)`. Quando o plugin é desligado, as tarefas dele param.
+
+### Formulários
+
+```rust
+// botões: a resposta é FormResponse::Button(índice)
+player.send_form("loja", &Form::simple("Loja", "Escolha").button("Espadas").button_image("Pocoes", "textures/items/potion_bottle_heal"));
+// sim/não: FormResponse::Modal(true = primeiro botão)
+player.send_form("confirmar", &Form::modal("Sair", "Tem certeza?", "Sim", "Não"));
+// campos: FormResponse::Custom(valores, um por campo na ordem)
+player.send_form("perfil", &Form::custom("Perfil").input("Nome", "seu nome", "").toggle("Privado", false).slider("Idade", 10.0, 99.0, 1.0, 18.0).dropdown("Cor", &["Azul", "Verde"], 0));
+```
+
+O servidor confere a resposta antes de entregar. Um botão que não existe, um número de campos errado ou o formulário fechado viram `FormResponse::Closed`. Cada formulário só pode ser respondido uma vez.
 
 As ações pedidas pelo plugin são feitas pelo servidor logo depois do evento que o plugin está tratando.
 
 ## Menus de baú (InvMenu)
 
-`Menu::new(id, título, MenuSize::Chest)` cria um menu de 27 slots. `MenuSize::DoubleChest` cria um de 54.
+`Menu::new(id, título, MenuSize::Chest)` cria um menu de 27 slots. Por enquanto não há menus de 54: o Minecraft mostra 27 slots para todas as entidades testadas. Para mais itens, use páginas, trocando os slots com `set_menu_item`. A janela continua aberta. O `/menupaginas` do exemplo mostra como.
 
-- **Ninguém mais vê o baú.** O servidor mostra um baú só para aquele jogador, dois blocos abaixo dos pés, dentro do chão. Quando o menu fecha, o bloco verdadeiro volta.
+- **Não existe baú no mundo.** O menu é o inventário de uma entidade invisível, sem modelo, colisão ou nome. Só aquele jogador recebe essa entidade, e ela acompanha o jogador a cada tick. Por isso o menu não fecha por distância, nem voando de élitro.
 - **Os itens não saem.** Todo clique é recusado e vira `on_menu_click`. Nada é tirado nem colocado.
-- **O menu acompanha o teleporte.** Se o jogador for teleportado com o menu aberto, ele reabre no destino com o mesmo conteúdo.
+- **O menu acompanha o teleporte.** A entidade pula junto com o jogador e a janela continua aberta.
 - **O menu fecha sozinho** quando o jogador morre, troca de mundo, sai ou quando o plugin é desligado. Nesses casos o plugin recebe `on_menu_close`.
 
 ## Limites de segurança

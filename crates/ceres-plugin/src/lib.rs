@@ -55,6 +55,29 @@ impl Player {
         call(json!({"op": "teleport", "player": self.name, "x": x, "y": y, "z": z}));
     }
 
+    /// Text above the hotbar.
+    pub fn send_actionbar(&self, text: &str) {
+        call(json!({"op": "actionbar", "player": self.name, "text": text}));
+    }
+
+    /// Sidebar scoreboard: a title and lines from top to bottom (up to 15). Call again to change it.
+    pub fn set_scoreboard(&self, title: &str, lines: &[&str]) {
+        call(json!({"op": "scoreboard", "player": self.name, "title": title, "lines": lines}));
+    }
+
+    pub fn clear_scoreboard(&self) {
+        call(json!({"op": "scoreboard", "player": self.name, "clear": true}));
+    }
+
+    /// Bar at the top of the screen: `progress` from 0.0 to 1.0. Call again to change it.
+    pub fn set_bossbar(&self, title: &str, progress: f32, color: BossBarColor) {
+        call(json!({"op": "bossbar", "player": self.name, "title": title, "progress": progress, "color": color as u8}));
+    }
+
+    pub fn clear_bossbar(&self) {
+        call(json!({"op": "bossbar", "player": self.name, "clear": true}));
+    }
+
     /// Moves the player by an offset from where it is now.
     pub fn teleport_by(&self, dx: f64, dy: f64, dz: f64) {
         call(json!({"op": "teleport", "player": self.name, "x": dx, "y": dy, "z": dz, "relative": true}));
@@ -83,27 +106,40 @@ impl Player {
         call(json!({"op": "menu_set", "player": self.name, "slot": slot, "item": item}));
     }
 
+    /// Shows a form (window with buttons or fields). The answer comes in [`Plugin::on_form`].
+    pub fn send_form(&self, id: &str, form: &Form) {
+        call(json!({"op": "form", "player": self.name, "id": id, "form": form.0}));
+    }
+
     /// Closes this player's menu, if it has one.
     pub fn close_menu(&self) {
         call(json!({"op": "menu_close", "player": self.name}));
     }
 }
 
-/// Chest menu size.
+/// Bossbar colour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BossBarColor {
+    Pink = 0,
+    Blue = 1,
+    Red = 2,
+    Green = 3,
+    Yellow = 4,
+    Purple = 5,
+    White = 6,
+}
+
+/// Chest menu size. Only 27 slots for now: the menu is an invisible entity's inventory and the
+/// client shows 27 slots for every entity tried. For more items, use pages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuSize {
     /// 27 slots (3 rows)
     Chest,
-    /// 54 slots (6 rows)
-    DoubleChest,
 }
 
 impl MenuSize {
     pub fn slots(self) -> u32 {
-        match self {
-            MenuSize::Chest => 27,
-            MenuSize::DoubleChest => 54,
-        }
+        27
     }
 }
 
@@ -185,6 +221,97 @@ impl Item {
     }
 }
 
+/// A form: a window with buttons ([`Form::simple`]), yes/no ([`Form::modal`]) or fields
+/// ([`Form::custom`]).
+#[derive(Debug, Clone)]
+pub struct Form(Value);
+
+impl Form {
+    /// Text and a list of buttons; the answer is [`FormResponse::Button`].
+    pub fn simple(title: &str, content: &str) -> Self {
+        Form(json!({"type": "form", "title": title, "content": content, "buttons": []}))
+    }
+
+    /// Text and two buttons; the answer is [`FormResponse::Modal`] (true = first button).
+    pub fn modal(title: &str, content: &str, yes: &str, no: &str) -> Self {
+        Form(json!({"type": "modal", "title": title, "content": content, "button1": yes, "button2": no}))
+    }
+
+    /// Fields (text boxes, switches, sliders, lists); the answer is [`FormResponse::Custom`],
+    /// one value per field in order.
+    pub fn custom(title: &str) -> Self {
+        Form(json!({"type": "custom_form", "title": title, "content": []}))
+    }
+
+    pub fn button(mut self, text: &str) -> Self {
+        self.push("buttons", json!({"text": text}));
+        self
+    }
+
+    /// Button with an image: a texture path ("textures/items/diamond") or an https URL.
+    pub fn button_image(mut self, text: &str, image: &str) -> Self {
+        let kind = if image.starts_with("http") { "url" } else { "path" };
+        self.push("buttons", json!({"text": text, "image": {"type": kind, "data": image}}));
+        self
+    }
+
+    pub fn label(mut self, text: &str) -> Self {
+        self.push("content", json!({"type": "label", "text": text}));
+        self
+    }
+
+    pub fn input(mut self, text: &str, placeholder: &str, default: &str) -> Self {
+        self.push("content", json!({"type": "input", "text": text, "placeholder": placeholder, "default": default}));
+        self
+    }
+
+    pub fn toggle(mut self, text: &str, default: bool) -> Self {
+        self.push("content", json!({"type": "toggle", "text": text, "default": default}));
+        self
+    }
+
+    pub fn slider(mut self, text: &str, min: f64, max: f64, step: f64, default: f64) -> Self {
+        self.push("content", json!({"type": "slider", "text": text, "min": min, "max": max, "step": step, "default": default}));
+        self
+    }
+
+    pub fn dropdown(mut self, text: &str, options: &[&str], default: usize) -> Self {
+        self.push("content", json!({"type": "dropdown", "text": text, "options": options, "default": default}));
+        self
+    }
+
+    fn push(&mut self, key: &str, v: Value) {
+        if let Some(a) = self.0[key].as_array_mut() {
+            a.push(v);
+        }
+    }
+}
+
+/// The player's answer to a form.
+#[derive(Debug, Clone, PartialEq)]
+pub enum FormResponse {
+    /// closed without answering
+    Closed,
+    /// simple form: index of the button
+    Button(u32),
+    /// modal form: true = first button
+    Modal(bool),
+    /// custom form: one value per field (input: string, toggle: bool, slider: number,
+    /// dropdown: index, label: null)
+    Custom(Vec<Value>),
+}
+
+/// A block in a world.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Block {
+    /// e.g. "minecraft:stone"
+    pub name: String,
+    pub world: String,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
 /// What a plugin reacts to. Every method has an empty default.
 #[allow(unused_variables)]
 pub trait Plugin {
@@ -202,6 +329,45 @@ pub trait Plugin {
     fn on_menu_click(&mut self, player: &Player, menu: &str, slot: u32) {}
     /// A menu of this plugin was closed (by the player or by the server).
     fn on_menu_close(&mut self, player: &Player, menu: &str) {}
+    /// A player sends a chat message. Return false to cancel it.
+    fn on_chat(&mut self, player: &Player, message: &str) -> bool {
+        true
+    }
+    /// A player breaks a block. Return false to cancel it (the block stays).
+    fn on_block_break(&mut self, player: &Player, block: &Block) -> bool {
+        true
+    }
+    /// A player places a block. Return false to cancel it.
+    fn on_block_place(&mut self, player: &Player, block: &Block) -> bool {
+        true
+    }
+    /// A player is about to take damage. Return false to cancel it.
+    fn on_damage(&mut self, player: &Player, amount: f32) -> bool {
+        true
+    }
+    /// A player hits another player. Return false to cancel the hit.
+    fn on_attack(&mut self, attacker: &Player, target: &Player) -> bool {
+        true
+    }
+    /// A player answered (or closed) a form this plugin sent.
+    fn on_form(&mut self, player: &Player, form: &str, response: FormResponse) {}
+    /// A task from [`schedule`] / [`schedule_repeating`] is due.
+    fn on_task(&mut self, task: u32) {}
+}
+
+/// Runs [`Plugin::on_task`] once after `delay_ticks` (20 ticks = 1 second). Returns the task id.
+pub fn schedule(delay_ticks: u32) -> u32 {
+    call(json!({"op": "schedule", "delay": delay_ticks}))["task"].as_u64().unwrap_or(0) as u32
+}
+
+/// Runs [`Plugin::on_task`] every `period_ticks`, the first time after `delay_ticks`.
+pub fn schedule_repeating(delay_ticks: u32, period_ticks: u32) -> u32 {
+    call(json!({"op": "schedule", "delay": delay_ticks, "period": period_ticks.max(1)}))["task"].as_u64().unwrap_or(0) as u32
+}
+
+/// Stops a scheduled task.
+pub fn cancel_task(task: u32) {
+    call(json!({"op": "cancel_task", "task": task}));
 }
 
 /// A command players can use (shown in the command list with autocompletion).
@@ -285,6 +451,37 @@ pub fn dispatch(plugin: &mut dyn Plugin, event: &[u8]) {
         }
         "menu_click" => plugin.on_menu_click(&player(), e["menu"].as_str().unwrap_or_default(), e["slot"].as_u64().unwrap_or(0) as u32),
         "menu_close" => plugin.on_menu_close(&player(), e["menu"].as_str().unwrap_or_default()),
+        "task" => plugin.on_task(e["task"].as_u64().unwrap_or(0) as u32),
+        "chat" | "block_break" | "block_place" | "damage" | "attack" => {
+            let block = || Block {
+                name: e["block"].as_str().unwrap_or_default().to_string(),
+                world: e["world"].as_str().unwrap_or_default().to_string(),
+                x: e["x"].as_i64().unwrap_or(0) as i32,
+                y: e["y"].as_i64().unwrap_or(0) as i32,
+                z: e["z"].as_i64().unwrap_or(0) as i32,
+            };
+            let allowed = match e["event"].as_str().unwrap_or_default() {
+                "chat" => plugin.on_chat(&player(), e["message"].as_str().unwrap_or_default()),
+                "block_break" => plugin.on_block_break(&player(), &block()),
+                "block_place" => plugin.on_block_place(&player(), &block()),
+                "damage" => plugin.on_damage(&player(), e["amount"].as_f64().unwrap_or(0.0) as f32),
+                _ => plugin.on_attack(&player(), &Player::new(e["target"].as_str().unwrap_or_default())),
+            };
+            if !allowed {
+                call(json!({"op": "cancel"}));
+            }
+        }
+        "form" => {
+            let r = &e["response"];
+            let response = match (e["kind"].as_str().unwrap_or_default(), r) {
+                (_, Value::Null) => FormResponse::Closed,
+                ("form", Value::Number(n)) => FormResponse::Button(n.as_u64().unwrap_or(0) as u32),
+                ("modal", Value::Bool(b)) => FormResponse::Modal(*b),
+                ("custom_form", Value::Array(a)) => FormResponse::Custom(a.clone()),
+                _ => FormResponse::Closed,
+            };
+            plugin.on_form(&player(), e["form"].as_str().unwrap_or_default(), response)
+        }
         _ => {}
     }
 }

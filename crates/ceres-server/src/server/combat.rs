@@ -101,6 +101,11 @@ impl Server {
         if p.state != State::Spawned || p.dead || p.hurt_cooldown > 0 {
             return false;
         }
+        let name = p.name.clone();
+        if !self.plugins_allow(serde_json::json!({"event": "damage", "player": name, "amount": raw_damage})) {
+            return false;
+        }
+        let Some(p) = self.players.get(&sid) else { return false };
         // peaceful only removes monsters and hunger: players still hurt each other (vanilla)
         if !bypass_armor && (p.gamemode == 1 || p.gamemode == 6) {
             return false;
@@ -256,10 +261,32 @@ impl Server {
         Ok(())
     }
 
+    /// Damage of a melee hit by this player: weapon, Strength/Weakness, Sharpness, critical.
+    pub(crate) fn melee_damage(&self, sid: SessionId) -> f32 {
+        let Some(att) = self.players.get(&sid) else { return 0.0 };
+        let held = att.inventory.held_item();
+        let mut dmg = if held.is_empty() {
+            1.0
+        } else {
+            self.gd.items_by_id.get(&held.id).map(|i| item_attack_damage(&i.name)).unwrap_or(1.0)
+        };
+        dmg = (dmg + att.attack_bonus()).max(0.0);
+        dmg += 1.25 * blocks::enchant_level(held, ENCHANT_SHARPNESS) as f32;
+        if att.fall_start_y.is_some_and(|fy| fy - (att.pos[1] - EYE_HEIGHT) > 0.2) && !att.flying {
+            dmg *= 1.5; // critical hit
+        }
+        dmg
+    }
+
     pub(crate) fn on_attack_entity(&mut self, attacker_sid: SessionId, target_eid: i64) {
         // why an attack on a player did not count goes to server.log (to find PvP problems)
         let attacker_name = self.players.get(&attacker_sid).map(|p| p.name.clone()).unwrap_or_default();
         let refuse = |why: &str| crate::logfile::log(&format!("[Combat] attack by {attacker_name} on entity {target_eid} ignored: {why}"));
+        if self.mobs.iter().any(|m| m.entity_id == target_eid) {
+            let dmg = self.melee_damage(attacker_sid);
+            self.attack_mob(attacker_sid, target_eid, dmg);
+            return;
+        }
         if !self.cfg.pvp {
             return refuse("pvp is off");
         }
@@ -286,6 +313,11 @@ impl Server {
         if d2 > 36.0 {
             return refuse(&format!("out of reach ({:.1} blocks)", d2.sqrt())); // melee reach: 6 blocks
         }
+        let ev = serde_json::json!({"event": "attack", "player": att.name, "target": vic.name});
+        if !self.plugins_allow(ev) {
+            return;
+        }
+        let (Some(att), Some(vic)) = (self.players.get(&attacker_sid), self.players.get(&victim_sid)) else { return };
         let held = att.inventory.held_item();
         let mut dmg = if held.is_empty() {
             1.0

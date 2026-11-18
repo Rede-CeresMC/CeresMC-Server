@@ -25,7 +25,7 @@ impl Server {
         }
     }
 
-    fn give_back(&mut self, sid: SessionId, name: &str, meta: u32) {
+    pub(crate) fn give_back(&mut self, sid: SessionId, name: &str, meta: u32) {
         let Some(p) = self.players.get(&sid) else { return };
         if p.gamemode == 1 {
             return; // creative keeps its item

@@ -51,3 +51,47 @@ pub(crate) fn encode_biomes(data: Option<&[u8]>, w: &mut W) {
         write_single_biome(w, BIOME_PLAINS);
     }
 }
+
+/// The biome id at a block inside a column's raw Data3D value (plains when there is none).
+pub(crate) fn biome_in(data: Option<&[u8]>, x: i32, y: i32, z: i32) -> i32 {
+    let Some(d) = data.filter(|d| d.len() > 512) else { return BIOME_PLAINS };
+    let want = ((y - MIN_Y) >> 4).max(0) as usize;
+    let mut r = R::new(&d[512..]);
+    let mut prev = BIOME_PLAINS;
+    let mut index = 0usize;
+    while !r.eof() && index <= want {
+        let Ok(header) = r.u8() else { break };
+        let bits = header >> 1;
+        if bits == 127 {
+            if index == want {
+                return prev;
+            }
+            index += 1;
+            continue;
+        }
+        let Ok(len) = words_len(bits) else { break };
+        let Ok(words) = r.take(len) else { break };
+        let size = if bits == 0 { 1 } else { r.i32_le().unwrap_or(0).max(0) as usize };
+        let mut palette = Vec::with_capacity(size.min(4096));
+        for _ in 0..size.min(4096) {
+            palette.push(r.i32_le().unwrap_or(BIOME_PLAINS));
+        }
+        let value = if bits == 0 {
+            palette.first().copied().unwrap_or(BIOME_PLAINS)
+        } else {
+            let i = (((x & 15) << 8) | ((z & 15) << 4) | (y & 15)) as usize;
+            let per_word = 32 / bits as usize;
+            let w = i / per_word;
+            let shift = (i % per_word) * bits as usize;
+            let word = words.get(w * 4..w * 4 + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]])).unwrap_or(0);
+            let p = ((word >> shift) & ((1u32 << bits) - 1)) as usize;
+            palette.get(p).copied().unwrap_or(BIOME_PLAINS)
+        };
+        if index == want {
+            return value;
+        }
+        prev = value;
+        index += 1;
+    }
+    prev
+}

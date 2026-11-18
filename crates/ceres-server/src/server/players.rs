@@ -144,6 +144,7 @@ impl Server {
         me.out.extend(others);
 
         self.send_world_items(sid);
+        self.send_world_mobs(sid);
         self.send_world_orbs(sid);
         self.send_weather_to(sid);
 
@@ -171,6 +172,7 @@ impl Server {
         }
         self.players.get_mut(&sid).unwrap().out.extend(others);
         self.send_world_items(sid);
+        self.send_world_mobs(sid);
         self.send_world_orbs(sid);
         self.send_weather_to(sid);
     }
@@ -370,6 +372,9 @@ impl Server {
             return Ok(());
         }
         let Some((name, op)) = self.players.get(&sid).map(|p| (p.name.clone(), p.op)) else { return Ok(()) };
+        if !self.plugins_allow(serde_json::json!({"event": "chat", "player": name, "message": msg})) {
+            return Ok(());
+        }
         println!("<{name}> {msg}");
         let display = if op { format!("§c[OP] §f{name}") } else { name };
         self.broadcast(&protocol::chat(&display, &msg), |_, _| true);

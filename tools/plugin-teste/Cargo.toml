@@ -1,0 +1,15 @@
+[package]
+name = "plugin-teste"
+version = "1.0.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ceres-plugin = { path = "../../crates/ceres-plugin" }
+
+[workspace]
+
+[profile.release]
+opt-level = "s"

@@ -337,6 +337,167 @@ pub fn add_falling_block(entity_id: i64, pos: [f32; 3], block: i32) -> Vec<u8> {
     })
 }
 
+/// AddActor for a mob: health attribute, gravity and collision, its size, and optionally a
+/// colour (sheep wool) and the baby flag.
+#[allow(clippy::too_many_arguments)]
+pub fn add_mob(
+    entity_id: i64,
+    kind: &str,
+    pos: [f32; 3],
+    yaw: f32,
+    health: f32,
+    max_health: f32,
+    size: [f32; 2],
+    color: Option<u8>,
+    flags: i64,
+) -> Vec<u8> {
+    packet(ADD_ACTOR, |w| {
+        w.varlong(entity_id);
+        w.uvarlong(entity_id as u64);
+        w.string(kind);
+        for v in pos {
+            w.f32_le(v);
+        }
+        for _ in 0..3 {
+            w.f32_le(0.0); // motion
+        }
+        w.f32_le(0.0); // pitch
+        w.f32_le(yaw);
+        w.f32_le(yaw); // head yaw
+        w.f32_le(yaw); // body yaw
+        w.uvarint(1); // attributes
+        w.string("minecraft:health");
+        w.f32_le(0.0);
+        w.f32_le(health);
+        w.f32_le(max_health);
+        w.uvarint(if color.is_some() { 4 } else { 3 });
+        w.uvarint(0); // FLAGS
+        w.uvarint(7);
+        w.u8(7);
+        w.varlong(flags);
+        w.uvarint(53); // BOUNDING_BOX_WIDTH
+        w.uvarint(3);
+        w.u8(3);
+        w.f32_le(size[0]);
+        w.uvarint(54); // BOUNDING_BOX_HEIGHT
+        w.uvarint(3);
+        w.u8(3);
+        w.f32_le(size[1]);
+        if let Some(c) = color {
+            w.uvarint(3); // COLOR (byte)
+            w.uvarint(0);
+            w.u8(0);
+            w.u8(c);
+        }
+        w.uvarint(0); // synced int properties
+        w.uvarint(0); // synced float properties
+        w.uvarint(0); // links
+        w.bool(false);
+    })
+}
+
+/// SetActorData with only the flags (and the wool colour of a sheep).
+pub fn set_mob_flags(entity_id: i64, flags: i64, color: Option<u8>) -> Vec<u8> {
+    packet(SET_ACTOR_DATA, |w| {
+        w.uvarlong(entity_id as u64);
+        w.uvarint(if color.is_some() { 2 } else { 1 });
+        w.uvarint(0);
+        w.uvarint(7);
+        w.u8(7);
+        w.varlong(flags);
+        if let Some(c) = color {
+            w.uvarint(3);
+            w.uvarint(0);
+            w.u8(0);
+            w.u8(c);
+        }
+        w.uvarint(0); // synced int properties
+        w.uvarint(0); // synced float properties
+        w.uvarlong(0); // tick
+    })
+}
+
+/// MoveActorAbsolute with the body and head turned (degrees).
+pub fn move_mob(entity_id: i64, pos: [f32; 3], yaw: f32, on_ground: bool) -> Vec<u8> {
+    packet(mp::MOVE_ACTOR_ABSOLUTE, |w| {
+        w.uvarlong(entity_id as u64);
+        w.u8(on_ground as u8);
+        for v in pos {
+            w.f32_le(v);
+        }
+        let angle = ((yaw.rem_euclid(360.0) / 360.0) * 256.0) as u8;
+        w.u8(0); // pitch
+        w.u8(angle); // yaw
+        w.u8(angle); // head yaw
+    })
+}
+
+/// AddActor for an invisible container entity (plugin menus): no model, no collision, no
+/// gravity, no nametag; its inventory size comes from CONTAINER_BASE_SIZE.
+pub fn add_menu_entity(entity_id: i64, kind: &str, pos: [f32; 3], title: &str, slots: i32) -> Vec<u8> {
+    packet(ADD_ACTOR, |w| {
+        w.varlong(entity_id);
+        w.uvarlong(entity_id as u64);
+        w.string(kind);
+        for v in pos {
+            w.f32_le(v);
+        }
+        for _ in 0..7 {
+            w.f32_le(0.0); // motion, pitch, yaw, head yaw, body yaw
+        }
+        w.uvarint(0); // attributes
+        w.uvarint(8); // metadata: key, type, type again, value
+        w.uvarint(0); // FLAGS: only INVISIBLE (no gravity, no collision, nametag hidden)
+        w.uvarint(7);
+        w.u8(7);
+        w.varlong(1 << 5);
+        w.uvarint(4); // NAMETAG: the window title
+        w.uvarint(4);
+        w.u8(4);
+        w.string(title);
+        w.uvarint(38); // SCALE
+        w.uvarint(3);
+        w.u8(3);
+        w.f32_le(0.0);
+        w.uvarint(53); // BOUNDING_BOX_WIDTH
+        w.uvarint(3);
+        w.u8(3);
+        w.f32_le(0.0);
+        w.uvarint(54); // BOUNDING_BOX_HEIGHT
+        w.uvarint(3);
+        w.u8(3);
+        w.f32_le(0.0);
+        w.uvarint(44); // CONTAINER_TYPE: plain container
+        w.uvarint(0);
+        w.u8(0);
+        w.u8(0);
+        w.uvarint(45); // CONTAINER_BASE_SIZE
+        w.uvarint(2);
+        w.u8(2);
+        w.varint(slots);
+        w.uvarint(46); // CONTAINER_EXTRA_SLOTS_PER_STRENGTH
+        w.uvarint(2);
+        w.u8(2);
+        w.varint(0);
+        w.uvarint(0); // synced int properties
+        w.uvarint(0); // synced float properties
+        w.uvarint(0); // links
+        w.bool(false);
+    })
+}
+
+/// ContainerOpen of an entity's inventory.
+pub fn open_entity_container(window_id: u8, window_type: u8, pos: [i32; 3], entity_id: i64) -> Vec<u8> {
+    crate::packet(crate::packets::inventory::CONTAINER_OPEN, |w| {
+        w.u8(window_id);
+        w.u8(window_type);
+        w.varint(pos[0]);
+        w.varint(pos[1]);
+        w.varint(pos[2]);
+        w.varlong(entity_id);
+    })
+}
+
 /// AddActor for a projectile (snowball, egg, ender pearl, arrow) with its shooter.
 pub fn add_projectile(entity_id: i64, kind: &str, pos: [f32; 3], motion: [f32; 3], owner: i64, potion: Option<i16>) -> Vec<u8> {
     packet(ADD_ACTOR, |w| {
@@ -789,5 +950,154 @@ pub fn move_actor_absolute(entity_id: i64, pos: [f32; 3], on_ground: bool, telep
         w.u8(0); // pitch
         w.u8(0); // yaw
         w.u8(0); // head yaw
+    })
+}
+
+/// One entity metadata value (key, value) for [`add_entity`] and [`set_actor_metadata`].
+#[derive(Clone, Debug, PartialEq)]
+pub enum Meta {
+    Byte(u32, u8),
+    Short(u32, i16),
+    Int(u32, i32),
+    Float(u32, f32),
+    Str(u32, String),
+    Long(u32, i64),
+    Vec3(u32, [f32; 3]),
+}
+
+/// Metadata keys used for mobs.
+pub mod meta_key {
+    pub const FLAGS: u32 = 0;
+    pub const VARIANT: u32 = 2;
+    pub const COLOR: u32 = 3;
+    pub const NAMETAG: u32 = 4;
+    pub const OWNER_EID: u32 = 5;
+    pub const TARGET_EID: u32 = 6;
+    pub const AIR: u32 = 7;
+    pub const SCALE: u32 = 38;
+    pub const MAX_AIR: u32 = 42;
+    pub const MARK_VARIANT: u32 = 43;
+    pub const BOUNDING_BOX_WIDTH: u32 = 53;
+    pub const BOUNDING_BOX_HEIGHT: u32 = 54;
+    pub const FUSE_LENGTH: u32 = 55;
+    pub const ALWAYS_SHOW_NAMETAG: u32 = 81;
+    pub const FLAGS2: u32 = 92;
+}
+
+fn write_meta(w: &mut W, meta: &[Meta]) {
+    w.uvarint(meta.len() as u32);
+    for m in meta {
+        // key, type, type again, value
+        match m {
+            Meta::Byte(k, v) => {
+                w.uvarint(*k);
+                w.uvarint(0);
+                w.u8(0);
+                w.u8(*v);
+            }
+            Meta::Short(k, v) => {
+                w.uvarint(*k);
+                w.uvarint(1);
+                w.u8(1);
+                w.i16_le(*v);
+            }
+            Meta::Int(k, v) => {
+                w.uvarint(*k);
+                w.uvarint(2);
+                w.u8(2);
+                w.varint(*v);
+            }
+            Meta::Float(k, v) => {
+                w.uvarint(*k);
+                w.uvarint(3);
+                w.u8(3);
+                w.f32_le(*v);
+            }
+            Meta::Str(k, v) => {
+                w.uvarint(*k);
+                w.uvarint(4);
+                w.u8(4);
+                w.string(v);
+            }
+            Meta::Long(k, v) => {
+                w.uvarint(*k);
+                w.uvarint(7);
+                w.u8(7);
+                w.varlong(*v);
+            }
+            Meta::Vec3(k, v) => {
+                w.uvarint(*k);
+                w.uvarint(8);
+                w.u8(8);
+                for f in v {
+                    w.f32_le(*f);
+                }
+            }
+        }
+    }
+}
+
+/// AddActor for any entity: attributes as (name, min, value, max) and the metadata given.
+#[allow(clippy::too_many_arguments)]
+pub fn add_entity(
+    entity_id: i64,
+    kind: &str,
+    pos: [f32; 3],
+    motion: [f32; 3],
+    pitch: f32,
+    yaw: f32,
+    head_yaw: f32,
+    attributes: &[(&str, f32, f32, f32)],
+    meta: &[Meta],
+) -> Vec<u8> {
+    packet(ADD_ACTOR, |w| {
+        w.varlong(entity_id);
+        w.uvarlong(entity_id as u64);
+        w.string(kind);
+        for v in pos.into_iter().chain(motion) {
+            w.f32_le(v);
+        }
+        w.f32_le(pitch);
+        w.f32_le(yaw);
+        w.f32_le(head_yaw);
+        w.f32_le(yaw); // body yaw
+        w.uvarint(attributes.len() as u32);
+        for (name, min, value, max) in attributes {
+            w.string(name);
+            w.f32_le(*min);
+            w.f32_le(*value);
+            w.f32_le(*max);
+        }
+        write_meta(w, meta);
+        w.uvarint(0); // synced int properties
+        w.uvarint(0); // synced float properties
+        w.uvarint(0); // links
+        w.bool(false);
+    })
+}
+
+/// SetActorData with the metadata given.
+pub fn set_actor_metadata(entity_id: i64, meta: &[Meta]) -> Vec<u8> {
+    packet(SET_ACTOR_DATA, |w| {
+        w.uvarlong(entity_id as u64);
+        write_meta(w, meta);
+        w.uvarint(0); // synced int properties
+        w.uvarint(0); // synced float properties
+        w.uvarlong(0); // tick
+    })
+}
+
+/// MoveActorAbsolute with pitch, body yaw and head yaw (degrees).
+pub fn move_entity(entity_id: i64, pos: [f32; 3], pitch: f32, yaw: f32, head_yaw: f32, on_ground: bool) -> Vec<u8> {
+    packet(mp::MOVE_ACTOR_ABSOLUTE, |w| {
+        w.uvarlong(entity_id as u64);
+        w.u8(on_ground as u8);
+        for v in pos {
+            w.f32_le(v);
+        }
+        let angle = |a: f32| ((a.rem_euclid(360.0) / 360.0) * 256.0) as u8;
+        w.u8(angle(pitch));
+        w.u8(angle(yaw));
+        w.u8(angle(head_yaw));
     })
 }

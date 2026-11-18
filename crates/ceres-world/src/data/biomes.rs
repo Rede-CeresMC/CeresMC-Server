@@ -61,3 +61,37 @@ pub(crate) fn encode_biomes(root: &Tag) -> Res<Vec<u8>> {
         }
     }))
 }
+
+/// What mob spawning and behaviour filters need to know about a biome.
+#[derive(Clone, Debug, Default)]
+pub struct BiomeInfo {
+    pub name: String,
+    pub tags: Vec<String>,
+    pub temperature: f32,
+    pub rain: bool,
+}
+
+/// Biome id -> name, tags and temperature, from biome_definitions.nbt.
+pub(crate) fn biome_infos(root: &Tag) -> HashMap<i32, BiomeInfo> {
+    let mut out = HashMap::new();
+    let strings: Vec<&str> =
+        root.get("biomeStringList").and_then(|t| t.as_list()).unwrap_or(&[]).iter().map(|t| t.as_str().unwrap_or("")).collect();
+    let lookup = |i: i64| strings.get((i & 0xffff) as usize).copied().unwrap_or("").to_string();
+    for e in root.get("biomeData").and_then(|t| t.as_list()).unwrap_or(&[]) {
+        let Some(d) = e.get("data") else { continue };
+        let id = d.get("id").and_then(|t| t.as_i64()).unwrap_or(0) as i32;
+        let name = lookup(e.get("index").and_then(|t| t.as_i64()).unwrap_or(0));
+        let tags = d
+            .get("tags")
+            .and_then(|t| t.get("tags"))
+            .and_then(|t| t.as_list())
+            .unwrap_or(&[])
+            .iter()
+            .map(|t| lookup(t.as_i64().unwrap_or(0)))
+            .collect();
+        let temperature = d.get("temperature").and_then(|t| t.as_f32()).unwrap_or(0.8);
+        let rain = d.get("rain").and_then(|t| t.as_i64()).unwrap_or(0) != 0;
+        out.insert(id, BiomeInfo { name, tags, temperature, rain });
+    }
+    out
+}

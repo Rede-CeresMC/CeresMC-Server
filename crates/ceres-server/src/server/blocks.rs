@@ -115,6 +115,11 @@ impl Server {
             self.resync(sid, pos);
             return;
         }
+        let ev = self.block_event_json("block_break", sid, world, pos, old);
+        if !self.plugins_allow(ev) {
+            self.resync(sid, pos);
+            return;
+        }
         let mut contents = if containers::container_kind(self.gd.block_name(old)).is_some() {
             self.take_container_items(world, pos)
         } else {
@@ -421,6 +426,18 @@ impl Server {
             return;
         };
 
+        let ev = self.block_event_json("block_place", sid, world, target, final_block);
+        if !self.plugins_allow(ev) {
+            self.resync(sid, target);
+            self.resync(sid, clicked);
+            if let Some(slot) = survival_slot {
+                if let Some(p) = self.players.get_mut(&sid) {
+                    let item = p.inventory.main[slot as usize].clone();
+                    p.out.push(protocol::inventory_slot(window::INVENTORY as u32, slot as u32, &item));
+                }
+            }
+            return;
+        }
         // doors, tall plants and beds take two blocks
         let item_meta = if gm == 1 {
             u.item.meta
@@ -449,6 +466,17 @@ impl Server {
             return;
         }
         self.finish_placement(sid, world, target, final_block, survival_slot);
+    }
+
+    /// JSON of a block event for plugins.
+    pub(crate) fn block_event_json(&self, event: &str, sid: SessionId, world: usize, pos: [i32; 3], block: i32) -> serde_json::Value {
+        serde_json::json!({
+            "event": event,
+            "player": self.players.get(&sid).map(|p| p.name.clone()).unwrap_or_default(),
+            "block": self.gd.block_name(block),
+            "world": self.worlds.worlds[world].folder,
+            "x": pos[0], "y": pos[1], "z": pos[2],
+        })
     }
 
     fn finish_placement(
@@ -668,6 +696,7 @@ impl Server {
     /// Writes changed chunks (and level.dat) of every world to disk, plus player states.
     pub(crate) fn save_worlds(&mut self) {
         self.save_all_players();
+        self.save_mobs();
         for w in self.worlds.worlds.iter_mut() {
             match w.save(&self.gd) {
                 Ok(0) => {}

@@ -275,6 +275,13 @@ impl World {
         batch
     }
 
+    /// The biome id at a block position (plains for chunks without biome data).
+    pub fn biome_at(&mut self, pos: [i32; 3], gd: &GameData) -> i32 {
+        let y = pos[1].clamp(MIN_Y, MAX_Y);
+        let col = self.column(pos[0] >> 4, pos[2] >> 4, gd);
+        chunk::biome_in(col.biomes.as_deref(), pos[0], y, pos[2])
+    }
+
     pub fn get_block(&mut self, pos: [i32; 3], gd: &GameData) -> i32 {
         if !(MIN_Y..=MAX_Y).contains(&pos[1]) {
             return gd.air_id;

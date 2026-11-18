@@ -30,9 +30,29 @@ pub(crate) struct PluginSource {
     pub wasm: Vec<u8>,
 }
 
+/// A form a plugin sent, waiting for the answer.
+pub(crate) struct PendingForm {
+    pub plugin: String,
+    pub id: String,
+    /// "form", "modal" or "custom_form"
+    pub kind: String,
+    /// buttons (simple) or fields (custom)
+    pub entries: usize,
+}
+
+/// A scheduled task: (id, due tick, repeat period)
+pub(crate) struct Task {
+    pub id: u32,
+    pub due: u64,
+    pub period: Option<u64>,
+}
+
 struct HostState {
     /// requests to carry out after the event
     actions: Vec<Value>,
+    tasks: Vec<Task>,
+    next_task: u32,
+    now: u64,
     answer: Vec<u8>,
     players: Vec<String>,
     commands: Vec<(String, String)>,
@@ -84,6 +104,9 @@ impl LoadedPlugin {
             answer: Vec::new(),
             players: Vec::new(),
             commands: Vec::new(),
+            tasks: Vec::new(),
+            next_task: 1,
+            now: 0,
             limits: StoreLimitsBuilder::new().memory_size(MEMORY_LIMIT).build(),
         };
         let mut store = Store::new(&engine, state);
@@ -109,6 +132,23 @@ impl LoadedPlugin {
                             state.commands.retain(|(c, _)| *c != name);
                             state.commands.push((name, desc));
                         }
+                        json!({"ok": true})
+                    }
+                    "schedule" => {
+                        if state.tasks.len() >= 1000 {
+                            json!({"error": "too many tasks"})
+                        } else {
+                            let id = state.next_task;
+                            state.next_task += 1;
+                            let delay = request["delay"].as_u64().unwrap_or(0).min(20 * 60 * 60 * 24);
+                            let period = request["period"].as_u64().map(|p| p.clamp(1, 20 * 60 * 60 * 24));
+                            state.tasks.push(Task { id, due: state.now + delay.max(1), period });
+                            json!({"task": id})
+                        }
+                    }
+                    "cancel_task" => {
+                        let id = request["task"].as_u64().unwrap_or(0) as u32;
+                        state.tasks.retain(|t| t.id != id);
                         json!({"ok": true})
                     }
                     "" => json!({"error": "no op"}),
@@ -140,9 +180,10 @@ impl LoadedPlugin {
     }
 
     /// Delivers one event; returns the requests the plugin made (or why it failed).
-    fn deliver(&mut self, event: &Value, players: &[String]) -> Result<Vec<Value>, String> {
+    fn deliver(&mut self, event: &Value, players: &[String], now: u64) -> Result<Vec<Value>, String> {
         let bytes = event.to_string().into_bytes();
         let state = self.store.data_mut();
+        state.now = now;
         state.players = players.to_vec();
         state.actions.clear();
         self.store.set_fuel(FUEL_PER_EVENT).map_err(|e| e.to_string())?;
@@ -324,9 +365,13 @@ impl Server {
         if let Some(p) = self.plugins.list.get_mut(idx) {
             p.enabled = false;
             p.commands.clear();
+            p.store.data_mut().tasks.clear();
         }
         for sid in with_menu {
             self.close_menu(sid, true, false);
+        }
+        for q in self.players.values_mut() {
+            q.forms.retain(|_, f| f.plugin != name);
         }
         println!("[Plugins] {name} disabled");
     }
@@ -334,8 +379,12 @@ impl Server {
     /// Queues an event for a plugin and delivers everything queued.
     pub(crate) fn plugin_event(&mut self, idx: usize, event: Value) {
         self.plugins.queue.push_back((idx, event));
+        self.drain_plugin_queue();
+    }
+
+    fn drain_plugin_queue(&mut self) {
         if self.plugins.delivering {
-            return; // caused by a plugin request: delivered by the loop below
+            return; // caused by a plugin request: delivered by the outer loop
         }
         self.plugins.delivering = true;
         let mut delivered = 0;
@@ -346,37 +395,64 @@ impl Server {
                 self.plugins.queue.clear();
                 break;
             }
-            let players: Vec<String> =
-                self.players.values().filter(|p| p.state == State::Spawned).map(|p| p.name.clone()).collect();
-            let is_disable = event["event"] == "disable";
-            let Some(p) = self.plugins.list.get_mut(idx) else { continue };
-            if !p.enabled && !is_disable {
-                continue;
+            self.deliver_now(idx, &event);
+        }
+        self.plugins.delivering = false;
+    }
+
+    /// Delivers one event and carries out the plugin's requests. Returns true if it cancelled it.
+    fn deliver_now(&mut self, idx: usize, event: &Value) -> bool {
+        let players: Vec<String> =
+            self.players.values().filter(|p| p.state == State::Spawned).map(|p| p.name.clone()).collect();
+        let is_disable = event["event"] == "disable";
+        let Some(p) = self.plugins.list.get_mut(idx) else { return false };
+        if !p.enabled && !is_disable {
+            return false;
+        }
+        let name = p.name.clone();
+        match p.deliver(event, &players, self.ticks) {
+            Ok(actions) => {
+                let cancelled = actions.iter().any(|a| a["op"] == "cancel");
+                for a in actions.iter().filter(|a| a["op"] != "cancel") {
+                    self.run_plugin_request(&name, a);
+                }
+                cancelled
             }
-            let name = p.name.clone();
-            match p.deliver(&event, &players) {
-                Ok(actions) => {
-                    for a in actions {
-                        self.run_plugin_request(&name, &a);
-                    }
+            Err(e) => {
+                eprintln!("[Plugins] {name} failed during {}: {e}", event["event"]);
+                if !is_disable {
+                    eprintln!("[Plugins] {name} was disabled");
+                    self.plugins.queue.retain(|(i, _)| *i != idx);
+                    self.disable_plugin_after_error(idx);
                 }
-                Err(e) => {
-                    eprintln!("[Plugins] {name} failed during {}: {e}", event["event"]);
-                    if !is_disable {
-                        eprintln!("[Plugins] {name} was disabled");
-                        self.plugins.queue.retain(|(i, _)| *i != idx);
-                        self.disable_plugin_after_error(idx);
-                    }
-                }
+                false
+            }
+        }
+    }
+
+    /// A cancellable event (chat, block break/place, damage, attack): every enabled plugin sees
+    /// it; false if one of them cancelled it. Inside another plugin event nothing is asked.
+    pub(crate) fn plugins_allow(&mut self, event: Value) -> bool {
+        if self.plugins.delivering || !self.plugins.list.iter().any(|p| p.enabled) {
+            return true;
+        }
+        self.plugins.delivering = true;
+        let mut allowed = true;
+        for idx in 0..self.plugins.list.len() {
+            if self.deliver_now(idx, &event) {
+                allowed = false;
             }
         }
         self.plugins.delivering = false;
+        self.drain_plugin_queue();
+        allowed
     }
 
     fn disable_plugin_after_error(&mut self, idx: usize) {
         let Some(p) = self.plugins.list.get_mut(idx) else { return };
         p.enabled = false;
         p.commands.clear();
+        p.store.data_mut().tasks.clear();
         let name = p.name.clone();
         let with_menu: Vec<SessionId> = self
             .players
@@ -447,7 +523,7 @@ impl Server {
             "console_command" => self.run_command(commands::Sender::Console, &text("line")),
             "menu_open" => {
                 if let Some(sid) = target {
-                    let size = if a["size"].as_u64() == Some(54) { 54 } else { 27 };
+                    let size = 27; // entity menus show 27 slots (no entity tried showed 54)
                     let mut items = vec![ItemDesc::default(); size];
                     for it in a["items"].as_array().into_iter().flatten() {
                         let slot = it["slot"].as_u64().unwrap_or(u64::MAX) as usize;
@@ -469,6 +545,53 @@ impl Server {
                     }
                 }
             }
+            "actionbar" => {
+                if let Some(p) = target.and_then(|s| self.players.get_mut(&s)) {
+                    p.out.push(protocol::set_title(protocol::title_type::ACTIONBAR, &text("text"), 0, 40, 10));
+                }
+            }
+            "scoreboard" => {
+                if let Some(p) = target.and_then(|s| self.players.get_mut(&s)) {
+                    const OBJ: &str = "ceres_sidebar";
+                    p.out.push(protocol::remove_objective(OBJ));
+                    if a["clear"].as_bool() != Some(true) {
+                        let title: String = text("title").chars().take(64).collect();
+                        p.out.push(protocol::set_display_objective("sidebar", OBJ, &title, true));
+                        let lines: Vec<(i64, i32, String)> = a["lines"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(|l| l.as_str())
+                            .take(15)
+                            .enumerate()
+                            .map(|(i, l)| {
+                                // the same text twice would be one entry: invisible §r codes keep them apart
+                                let text = format!("{}{}", l.chars().take(64).collect::<String>(), "§r".repeat(i));
+                                (i as i64 + 1, i as i32, text)
+                            })
+                            .collect();
+                        p.out.push(protocol::set_score_lines(OBJ, &lines));
+                    }
+                }
+            }
+            "bossbar" => {
+                if let Some(p) = target.and_then(|s| self.players.get_mut(&s)) {
+                    let eid = p.entity_id;
+                    if a["clear"].as_bool() == Some(true) {
+                        p.out.push(protocol::boss_event(eid, 2, "", 0.0, 0));
+                    } else {
+                        let title: String = text("title").chars().take(128).collect();
+                        let progress = a["progress"].as_f64().unwrap_or(1.0) as f32;
+                        let color = (a["color"].as_u64().unwrap_or(0) as u8).min(6);
+                        p.out.push(protocol::boss_event(eid, 0, &title, progress, color));
+                    }
+                }
+            }
+            "form" => {
+                if let Some(sid) = target {
+                    self.send_form(sid, plugin, &text("id"), &a["form"]);
+                }
+            }
             "menu_close" => {
                 if let Some(sid) = target {
                     if self.players.get(&sid).and_then(|p| p.menu.as_ref()).is_some_and(|m| m.plugin == plugin) {
@@ -477,6 +600,47 @@ impl Server {
                 }
             }
             other => eprintln!("[Plugins] {plugin}: unknown request {other:?}"),
+        }
+    }
+
+    fn send_form(&mut self, sid: SessionId, plugin: &str, id: &str, form: &Value) {
+        let kind = form["type"].as_str().unwrap_or_default().to_string();
+        let entries = match kind.as_str() {
+            "form" => form["buttons"].as_array().map_or(0, |a| a.len()),
+            "custom_form" => form["content"].as_array().map_or(0, |a| a.len()),
+            "modal" => 2,
+            _ => return,
+        };
+        let json = form.to_string();
+        if json.len() > 256 * 1024 {
+            return;
+        }
+        let form_id = self.next_form_id;
+        self.next_form_id = self.next_form_id.wrapping_add(1).max(1);
+        let Some(p) = self.players.get_mut(&sid) else { return };
+        if p.forms.len() >= 16 {
+            return; // the client only shows one at a time anyway
+        }
+        p.forms.insert(form_id, PendingForm { plugin: plugin.to_string(), id: id.to_string(), kind, entries });
+        p.out.push(protocol::modal_form_request(form_id, &json));
+    }
+
+    /// The answer to a form: checked against what was sent, then given to the plugin.
+    pub(crate) fn on_form_response(&mut self, sid: SessionId, form_id: u32, data: Option<String>) {
+        let Some(p) = self.players.get_mut(&sid) else { return };
+        let Some(f) = p.forms.remove(&form_id) else { return };
+        let name = p.name.clone();
+        let answer: Value = data.as_deref().and_then(|d| serde_json::from_str(d.trim()).ok()).unwrap_or(Value::Null);
+        let valid = match (f.kind.as_str(), &answer) {
+            (_, Value::Null) => Value::Null,
+            ("form", Value::Number(n)) if n.as_u64().is_some_and(|i| (i as usize) < f.entries) => answer.clone(),
+            ("modal", Value::Bool(_)) => answer.clone(),
+            // some clients add values at the end: keep one per field
+            ("custom_form", Value::Array(a)) if a.len() >= f.entries => Value::Array(a[..f.entries].to_vec()),
+            _ => Value::Null,
+        };
+        if let Some(idx) = self.plugins.index_of(&f.plugin) {
+            self.plugin_event(idx, json!({"event": "form", "player": name, "form": f.id, "kind": f.kind, "response": valid}));
         }
     }
 
@@ -568,6 +732,35 @@ impl Server {
         let ops: Vec<SessionId> = self.players.iter().filter(|(_, p)| p.op).map(|(s, _)| *s).collect();
         for sid in ops {
             self.reply(commands::Sender::Player(sid), &msg);
+        }
+    }
+
+    /// Delivers the tasks that are due.
+    pub(crate) fn tick_plugin_tasks(&mut self) {
+        let now = self.ticks;
+        for idx in 0..self.plugins.list.len() {
+            let p = &mut self.plugins.list[idx];
+            if !p.enabled {
+                continue;
+            }
+            let mut due = Vec::new();
+            let tasks = &mut p.store.data_mut().tasks;
+            tasks.retain_mut(|t| {
+                if t.due > now {
+                    return true;
+                }
+                due.push(t.id);
+                match t.period {
+                    Some(period) => {
+                        t.due = now + period;
+                        true
+                    }
+                    None => false,
+                }
+            });
+            for id in due {
+                self.plugin_event(idx, json!({"event": "task", "task": id}));
+            }
         }
     }
 

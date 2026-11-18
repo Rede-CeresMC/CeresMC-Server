@@ -1,7 +1,9 @@
-//! Chest menus for plugins, with no chest in the world: a chest that only the player sees is put
-//! under their feet (inside the ground), the window is opened on it and the real blocks come back
-//! when it closes. Nobody can take the items: each click is refused and reported to the plugin.
-//! Teleporting moves the menu along (it reopens at the destination with the same contents).
+//! Chest menus for plugins, with no chest anywhere: the window is the inventory of an invisible
+//! entity (no model, no collision, no nametag) that only that player knows about and that follows
+//! the player every tick, so the menu never closes for distance (flying, elytra, teleports) and
+//! nothing appears in the world. It has 27 slots (the client keeps the chest minecart's size: no
+//! entity tried showed 54).
+//! Nobody can take the items: each click is refused and reported to the plugin.
 
 use super::*;
 use ceres_codec::nbt::Tag;
@@ -13,15 +15,14 @@ const EYE_HEIGHT: f32 = 1.62;
 pub(crate) struct FakeMenu {
     pub plugin: String,
     pub id: String,
-    pub title: String,
     pub items: Vec<ItemDesc>,
     pub window: u8,
-    pub world: usize,
-    /// the fake chest (and its second half for 54 slots)
-    pub pos: [i32; 3],
-    pub pair: Option<[i32; 3]>,
-    /// tick the window opens (the client must have the chest first; a double chest pairs later)
+    /// the invisible entity holding the menu, and where the player last saw it
+    pub entity: i64,
+    pub entity_pos: [f32; 3],
+    /// tick the window opens (the client must have the entity first)
     pub open_at: Option<u64>,
+    pub window_type: u8,
 }
 
 impl Server {
@@ -61,66 +62,9 @@ impl Server {
         })
     }
 
-    /// Where the fake chest goes: two blocks under the player's feet (inside the ground).
-    fn menu_spot(&self, sid: SessionId) -> Option<(usize, [i32; 3])> {
+    fn feet_of(&self, sid: SessionId) -> Option<[f32; 3]> {
         let p = self.players.get(&sid)?;
-        let feet = [p.pos[0], p.pos[1] - EYE_HEIGHT, p.pos[2]];
-        let y = (feet[1].floor() as i32 - 2).clamp(ceres_world::MIN_Y, ceres_world::MAX_Y - 1);
-        Some((p.world, [feet[0].floor() as i32, y, feet[2].floor() as i32]))
-    }
-
-    /// Shows the fake chest to the player (and asks for the window a moment later).
-    fn place_menu_chest(&mut self, sid: SessionId) {
-        let Some((world, pos)) = self.menu_spot(sid) else { return };
-        let Some(chest) = self.gd.default_block("minecraft:chest") else { return };
-        let tick = self.ticks;
-        let Some(p) = self.players.get_mut(&sid) else { return };
-        let Some(m) = p.menu.as_mut() else { return };
-        let double = m.items.len() > 27;
-        m.world = world;
-        m.pos = pos;
-        m.pair = double.then_some([pos[0] + 1, pos[1], pos[2]]);
-        // a double chest needs a few ticks to pair on the client
-        m.open_at = Some(tick + if double { 4 } else { 1 });
-        p.window_counter = p.window_counter % 99 + 1;
-        m.window = p.window_counter;
-        let title = m.title.clone();
-        let halves: Vec<([i32; 3], Option<[i32; 3]>)> = match m.pair {
-            Some(pair) => vec![(pos, Some(pair)), (pair, Some(pos))],
-            None => vec![(pos, None)],
-        };
-        for (half, other) in halves {
-            p.out.push(protocol::update_block(half, chest));
-            let mut fields = vec![
-                ("id".to_string(), Tag::String("Chest".into())),
-                ("x".to_string(), Tag::Int(half[0])),
-                ("y".to_string(), Tag::Int(half[1])),
-                ("z".to_string(), Tag::Int(half[2])),
-                ("CustomName".to_string(), Tag::String(title.clone())),
-            ];
-            if let Some(o) = other {
-                fields.push(("pairx".to_string(), Tag::Int(o[0])));
-                fields.push(("pairz".to_string(), Tag::Int(o[2])));
-                fields.push(("pairlead".to_string(), Tag::Byte((half == pos) as i8)));
-            }
-            p.out.push(protocol::block_actor_data(half, &Tag::Compound(fields)));
-        }
-    }
-
-    /// Puts the real blocks (and their block entities) back where the fake chest was.
-    fn remove_menu_chest(&mut self, sid: SessionId, world: usize, pos: [i32; 3], pair: Option<[i32; 3]>) {
-        for half in std::iter::once(pos).chain(pair) {
-            let real = self.worlds.worlds[world].get_block(half, &self.gd);
-            let tile = self.worlds.worlds[world].get_block_entity(half, &self.gd);
-            let Some(p) = self.players.get_mut(&sid) else { return };
-            if p.world != world {
-                continue;
-            }
-            p.out.push(protocol::update_block(half, real));
-            if let Some(tile) = tile {
-                p.out.push(protocol::block_actor_data(half, &tile));
-            }
-        }
+        Some([p.pos[0], p.pos[1] - EYE_HEIGHT, p.pos[2]])
     }
 
     /// Opens a plugin menu for the player (closing what they had open).
@@ -137,18 +81,25 @@ impl Server {
         for it in items.iter_mut().filter(|it| !it.is_empty()) {
             it.stack_id = p.inventory.alloc_id();
         }
+        let entity = self.next_entity_id;
+        self.next_entity_id += 1;
+        let feet = self.feet_of(sid).unwrap_or_default();
+        let tick = self.ticks;
+        let Some(p) = self.players.get_mut(&sid) else { return };
+        p.window_counter = p.window_counter % 99 + 1;
+        let title: String = title.chars().take(64).collect();
+        let window_type = protocol::WINDOW_TYPE_CONTAINER;
+        p.out.push(protocol::add_menu_entity(entity, "minecraft:chest_minecart", feet, &title, items.len() as i32));
         p.menu = Some(FakeMenu {
             plugin: plugin.to_string(),
             id: id.to_string(),
-            title: title.chars().take(64).collect(),
             items,
-            window: 0,
-            world: p.world,
-            pos: [0; 3],
-            pair: None,
-            open_at: None,
+            window: p.window_counter,
+            entity,
+            entity_pos: feet,
+            open_at: Some(tick + 1),
+            window_type,
         });
-        self.place_menu_chest(sid);
     }
 
     /// Changes one slot of the open menu of this plugin.
@@ -173,10 +124,10 @@ impl Server {
         let Some(p) = self.players.get_mut(&sid) else { return };
         let Some(m) = p.menu.take() else { return };
         if by_server && m.open_at.is_none() {
-            p.out.push(protocol::container_close(m.window, protocol::WINDOW_TYPE_CONTAINER, true));
+            p.out.push(protocol::container_close(m.window, m.window_type, true));
         }
         let name = p.name.clone();
-        self.remove_menu_chest(sid, m.world, m.pos, m.pair);
+        p.out.push(protocol::remove_actor(m.entity));
         // the player's own inventory may have been touched by refused clicks
         self.sync_full_inventory(sid);
         if notify {
@@ -186,14 +137,20 @@ impl Server {
         }
     }
 
-    /// Opens the windows whose chest the client has had long enough.
+    /// Opens the windows the client is ready for, and keeps each menu entity on its player.
     pub(crate) fn tick_menus(&mut self) {
         let tick = self.ticks;
         for p in self.players.values_mut() {
+            let feet = [p.pos[0], p.pos[1] - EYE_HEIGHT, p.pos[2]];
+            let block = [feet[0].floor() as i32, feet[1].floor() as i32, feet[2].floor() as i32];
             let Some(m) = p.menu.as_mut() else { continue };
+            if m.entity_pos != feet {
+                m.entity_pos = feet;
+                p.out.push(protocol::move_actor_absolute(m.entity, feet, false, true));
+            }
             if m.open_at.is_some_and(|t| t <= tick) {
                 m.open_at = None;
-                p.out.push(protocol::open_block_container(m.window, protocol::WINDOW_TYPE_CONTAINER, m.pos));
+                p.out.push(protocol::open_entity_container(m.window, m.window_type, block, m.entity));
                 p.out.push(protocol::inventory_content(m.window as u32, &m.items));
             }
         }
@@ -213,7 +170,10 @@ impl Server {
     pub(crate) fn menu_stack_request(&mut self, sid: SessionId, req: &protocol::StackRequest) -> bool {
         let Some(p) = self.players.get(&sid) else { return false };
         let Some(m) = p.menu.as_ref() else { return false };
-        let in_menu = |s: &protocol::SlotRef| s.container == protocol::block_container::CHEST;
+        use protocol::container as c;
+        // the menu's slots are whatever is not the player's own inventory
+        let own = [c::ARMOR, c::COMBINED_HOTBAR_AND_INVENTORY, c::HOTBAR, c::INVENTORY, c::CRAFTING_INPUT, c::OFFHAND, c::CURSOR, c::CREATED_OUTPUT];
+        let in_menu = |s: &protocol::SlotRef| !own.contains(&s.container);
         let mut clicked: Option<u8> = None;
         for a in &req.actions {
             let refs: Vec<&protocol::SlotRef> = match a {
@@ -227,6 +187,7 @@ impl Server {
             }
         }
         let Some(slot) = clicked else { return false };
+        crate::logfile::log(&format!("[Menus] {} clicked slot {slot} of {} ({:?})", p.name, m.id, req.actions));
         let (window, items, plugin, id, name) = (m.window, m.items.clone(), m.plugin.clone(), m.id.clone(), p.name.clone());
         let p = self.players.get_mut(&sid).unwrap();
         p.out.push(protocol::item_stack_response(req.id, false, &[]));
@@ -240,15 +201,12 @@ impl Server {
         true
     }
 
-    /// After a teleport: the menu moves with the player (it reopens at the destination).
+    /// After a teleport: the menu entity jumps along with the player (the window stays open).
     pub(crate) fn follow_menu(&mut self, sid: SessionId) {
+        let Some(feet) = self.feet_of(sid) else { return };
         let Some(p) = self.players.get_mut(&sid) else { return };
-        let Some(m) = p.menu.as_ref() else { return };
-        let (world, pos, pair, window, opened) = (m.world, m.pos, m.pair, m.window, m.open_at.is_none());
-        if opened {
-            p.out.push(protocol::container_close(window, protocol::WINDOW_TYPE_CONTAINER, true));
-        }
-        self.remove_menu_chest(sid, world, pos, pair);
-        self.place_menu_chest(sid);
+        let Some(m) = p.menu.as_mut() else { return };
+        m.entity_pos = feet;
+        p.out.push(protocol::move_actor_absolute(m.entity, feet, false, true));
     }
 }

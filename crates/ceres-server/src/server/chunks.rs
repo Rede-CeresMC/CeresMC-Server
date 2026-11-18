@@ -81,6 +81,8 @@ impl Server {
         self.tick_items();
         self.tick_falling();
         self.tick_xp_orbs();
+        self.tick_mobs();
+        self.natural_spawning();
         self.tick_liquids();
         self.random_ticks();
         self.tick_projectiles();
@@ -90,6 +92,7 @@ impl Server {
         self.tick_punch_effects();
         self.tick_menus();
         self.poll_plugin_reload();
+        self.tick_plugin_tasks();
 
         let sids: Vec<SessionId> = self.players.keys().copied().collect();
         for sid in sids {

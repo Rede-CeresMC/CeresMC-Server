@@ -1,0 +1,3 @@
+name: Teste
+version: 1.0.0
+description: Plugin usado pelos testes (tools/plugin_api_test.py)

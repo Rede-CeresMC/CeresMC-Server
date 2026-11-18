@@ -2,6 +2,7 @@
 
 mod anvil;
 mod menus;
+mod mobs;
 mod plugins;
 mod resource_packs;
 mod armor;
@@ -141,6 +142,8 @@ pub(crate) struct Player {
     pack_chunks_sent: HashSet<(usize, u32)>,
     /// chest menu of a plugin open on this player's screen
     menu: Option<menus::FakeMenu>,
+    /// forms sent by plugins waiting for an answer, by form id
+    forms: HashMap<u32, plugins::PendingForm>,
     out: Vec<Vec<u8>>,
     close: Option<String>,
 }
@@ -161,6 +164,7 @@ pub struct Server {
     /// falling sand, gravel...
     falling: Vec<falling::FallingBlock>,
     xp_orbs: Vec<xp::XpOrb>,
+    mobs: Vec<mobs::Mob>,
     projectiles: Vec<projectiles::Projectile>,
     fireworks: Vec<fireworks::Firework>,
     /// sound handle of the record each jukebox plays, to stop it
@@ -186,6 +190,7 @@ pub struct Server {
     /// resource packs sent to the players (resource_packs/)
     packs: Vec<crate::packs::Pack>,
     plugins: plugins::Plugins,
+    next_form_id: u32,
 }
 
 const TICK: Duration = Duration::from_millis(50);
@@ -210,6 +215,7 @@ impl Server {
             items: Vec::new(),
             falling: Vec::new(),
             xp_orbs: Vec::new(),
+            mobs: Vec::new(),
             projectiles: Vec::new(),
             fireworks: Vec::new(),
             jukebox_sounds: HashMap::new(),
@@ -228,11 +234,13 @@ impl Server {
             software: format!("Ceres-RS {}", env!("CARGO_PKG_VERSION")),
             packs: crate::packs::load_all(),
             plugins: plugins::Plugins::default(),
+            next_form_id: 1,
         }
     }
 
     pub fn run(&mut self) -> ! {
         let mut events = Vec::new();
+        self.load_mobs();
         let (sources, errors) = plugins::build_all();
         self.load_plugins(sources, errors);
         let mut next_tick = Instant::now();
@@ -332,6 +340,7 @@ impl Server {
                             seen_packets: Default::default(),
                             pack_chunks_sent: HashSet::new(),
                             menu: None,
+                            forms: HashMap::new(),
                             out: Vec::new(),
                             close: None,
                         },

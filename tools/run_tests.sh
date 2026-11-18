@@ -40,7 +40,13 @@ CARGO_TARGET_DIR=target/plugin-build cargo build -q --release --target wasm32-un
 mkdir -p "$RUN/plugins/MenuExemplo"
 cp plugins-exemplo/MenuExemplo/plugin.yml "$RUN/plugins/MenuExemplo/"
 cp target/plugin-build/wasm32-unknown-unknown/release/menu_exemplo.wasm "$RUN/plugins/MenuExemplo/plugin.wasm"
+CARGO_TARGET_DIR=target/plugin-build cargo build -q --release --target wasm32-unknown-unknown --manifest-path tools/plugin-teste/Cargo.toml
+mkdir -p "$RUN/plugins/Teste"
+cp tools/plugin-teste/plugin.yml "$RUN/plugins/Teste/"
+cp target/plugin-build/wasm32-unknown-unknown/release/plugin_teste.wasm "$RUN/plugins/Teste/plugin.wasm"
 if [ -d worlds ]; then tar --exclude=LOCK -cf - worlds | tar -C "$RUN" -xf -; fi
+# the mobs of the real server would get in the way of the mob tests
+rm -f "$RUN"/worlds/*/mobs.json
 printf "BotOp
 BotCraft
 BotMiner
@@ -63,6 +69,9 @@ BotMusic
 BotEnchant
 BotCauldron
 BotMenu
+BotApi
+BotMobs
+BotMobs2
 " > "$RUN/ops.txt"
 cat > "$RUN/server.properties" <<EOF
 motd=CeresMC Test
@@ -72,6 +81,8 @@ level-name=world
 allow-unverified-ops=on
 xbox-auth=off
 view-distance=4
+spawn-animals=off
+spawn-monsters=off
 EOF
 
 (cd "$RUN" && exec "$EXE" > server.out 2>&1) &
@@ -111,6 +122,8 @@ python -I tools/cauldron_test.py || status=1
 python -I tools/gameplay_test.py || status=1
 python -I tools/packs_test.py || status=1
 python -I tools/plugins_test.py || status=1
+python -I tools/plugin_api_test.py || status=1
+python -I tools/mobs_test.py || status=1
 
 stop_server
 (cd "$RUN" && exec "$EXE" > server2.out 2>&1) &
@@ -118,6 +131,7 @@ SERVER=$!
 for _ in $(seq 1 100); do grep -q "Done" "$RUN/server2.out" 2>/dev/null && break; sleep 0.1; done
 python -I tools/blocks_test.py check || status=1
 python -I tools/containers_test.py check || status=1
+python -I tools/mobs_test.py check || status=1
 
 # third run: Xbox Live verification on, fake logins must be refused
 stop_server

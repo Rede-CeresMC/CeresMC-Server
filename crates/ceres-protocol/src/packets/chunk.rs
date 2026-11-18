@@ -132,6 +132,23 @@ pub fn level_sound_event(sound: &str, pos: [f32; 3], extra_data: i32) -> Vec<u8>
     })
 }
 
+/// LevelSoundEvent of a mob ("ambient", "hurt", "death"...): the client picks the sound of that
+/// entity type.
+pub fn mob_sound(sound: &str, pos: [f32; 3], entity_type: &str, baby: bool) -> Vec<u8> {
+    packet(LEVEL_SOUND_EVENT, |w| {
+        w.string(sound);
+        for v in pos {
+            w.f32_le(v);
+        }
+        w.varint(-1);
+        w.string(entity_type);
+        w.bool(baby);
+        w.bool(false); // disable relative volume
+        w.i64_le(-1); // actor unique id
+        w.bool(false); // optional fire position
+    })
+}
+
 /// BlockActorDataPacket (0x38): sends or reads block entity NBT (signs, chests, etc.).
 pub fn block_actor_data(pos: [i32; 3], tag: &Tag) -> Vec<u8> {
     let encoded = nbt::to_network(tag);

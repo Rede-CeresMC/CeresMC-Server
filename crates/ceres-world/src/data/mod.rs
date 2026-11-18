@@ -18,6 +18,7 @@ pub use mining::{BreakInfo, Tool, ToolInfo};
 mod voxel_shapes;
 
 use biomes::*;
+pub use biomes::BiomeInfo;
 pub use blocks::BlockStateInfo;
 use creative::*;
 pub use creative::{CreativeEntry, extra_data};
@@ -55,6 +56,8 @@ pub struct GameData {
     pub item_registry: Vec<u8>,
     pub actor_identifiers: Vec<u8>,
     pub biome_definitions: Vec<u8>,
+    /// biome id -> name, tags, temperature
+    pub biomes: HashMap<i32, BiomeInfo>,
     pub voxel_shapes: Vec<u8>,
     pub jigsaw_structures: Vec<u8>,
     pub creative_content: Vec<u8>,
@@ -315,7 +318,9 @@ impl GameData {
         let actor_identifiers = packet(id::AVAILABLE_ACTOR_IDENTIFIERS, |w| w.bytes(&nbt::to_network(&actors)));
 
         // ---- biomes
-        let biome_definitions = encode_biomes(&load_gz_nbt(&dir.join("biome_definitions.nbt"))?)?;
+        let biome_root = load_gz_nbt(&dir.join("biome_definitions.nbt"))?;
+        let biome_definitions = encode_biomes(&biome_root)?;
+        let biomes = biome_infos(&biome_root);
 
         // ---- voxel shapes
         let voxel_shapes = encode_voxel_shapes(&dir.join("voxel_shapes.json"))?;
@@ -352,6 +357,7 @@ impl GameData {
             item_registry,
             actor_identifiers,
             biome_definitions,
+            biomes,
             voxel_shapes,
             jigsaw_structures,
             creative_content,

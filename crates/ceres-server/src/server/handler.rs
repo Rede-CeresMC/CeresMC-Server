@@ -215,6 +215,10 @@ impl Server {
                 }
             }
             (State::Spawned, sleep::PLAYER_ACTION) => self.on_player_action(sid, &mut r)?,
+            (State::Spawned, 0x65) => {
+                let (id, data) = protocol::read_modal_form_response(&mut r)?;
+                self.on_form_response(sid, id, data);
+            }
             (State::Spawned, protocol::CONTAINER_CLOSE) => {
                 let (win, ty) = (r.u8()?, r.u8()?);
                 if self.on_menu_window_closed(sid, win) {
@@ -267,6 +271,9 @@ impl Server {
                             // the 2225 client sends hits on a player as ITEM_INTERACT (ATTACK is kept for
                             // other clients); on itself ITEM_INTERACT is just using the held item
                             let me = self.players.get(&sid).map(|p| p.entity_id);
+                            if action == entity_use_action::INTERACT {
+                                self.interact_mob(sid, target_eid);
+                            }
                             if action == entity_use_action::ATTACK
                                 || (action == entity_use_action::ITEM_INTERACT && Some(target_eid) != me)
                             {

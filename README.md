@@ -24,6 +24,8 @@ Servidor de **Minecraft: Bedrock Edition** escrito em **Rust**, da Rede CeresMC.
 - Inventário real e entidades de item: IDs, meta, NBT, pilha máxima, regras de sobrevivência, armadura e mão secundária, persistência em `players/`, largar itens (`Q` ou arrastar) com física, fusão de pilhas e coleta automática.
 - Vida, dano e PvP: combate corpo a corpo com dano por arma, redução de armadura, crítico, knockback, dano de queda/vazio, regeneração natural, morte e respawn.
 - Comandos com autocompletar e seletores (`@s`, `@p`, `@a`, `@r`): `/help`, `/list`, `/worlds`, `/tps`, `/say`, `/gamemode`, `/tp`, `/give`, `/clear`, `/kill`, `/world`, `/time`, `/weather`, `/difficulty`, `/setworldspawn`, `/spawnpoint`, `/gamerule`, `/title`, `/toast`, `/transfer`, `/kick`, `/ban`, `/pardon`, `/banlist`, `/whitelist`, `/save-all`, `/stop`, `/op`, `/deop`.
+- Mobs: vaca, porco, ovelha, galinha e zumbi, com física, IA simples, dano, drops, XP, tosquiar e ordenhar; aparecem sozinhos perto dos jogadores (`spawn-animals`, `spawn-monsters`) ou com `/summon`.
+- Plugins em Rust compilado para WebAssembly (`plugins/`, `/reload`): comandos, eventos canceláveis, menus de baú, formulários, scoreboard, bossbar e tarefas. Veja [docs/PLUGINS.md](docs/PLUGINS.md).
 - Pacotes de textura (resource packs): coloque `.zip`/`.mcpack` ou pastas com `manifest.json` em `resource_packs/`; os jogadores baixam ao entrar (obrigatório com `force-resource-packs=on`).
 - Ctrl+C ou `/stop` salvam mundos, `level.dat` e jogadores antes de desligar.
 
