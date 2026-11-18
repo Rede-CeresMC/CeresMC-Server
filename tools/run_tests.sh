@@ -25,7 +25,9 @@ elif [ -f target/debug/ceres ] && { [ ! -f target/release/ceres ] || [ target/de
 else cp target/release/ceres "$RUN/ceres-test"; EXE=./ceres-test; fi
 cp -r data "$RUN/data"
 if [ -d worlds ]; then tar --exclude=LOCK -cf - worlds | tar -C "$RUN" -xf -; fi
-echo "BotOp" > "$RUN/ops.txt"
+printf "BotOp
+BotCraft
+" > "$RUN/ops.txt"
 cat > "$RUN/server.properties" <<EOF
 motd=CeresMC Test
 server-port=$PORT
@@ -48,6 +50,7 @@ python -I tools/blocks_test.py || status=1
 python -I tools/inventory_test.py || status=1
 python -I tools/commands_test.py || status=1
 python -I tools/containers_test.py || status=1
+python -I tools/crafting_test.py || status=1
 python -I tools/gameplay_test.py || status=1
 
 stop_server

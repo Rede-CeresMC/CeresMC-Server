@@ -3,7 +3,7 @@
 //! BDS and PocketMine.
 //! TODO: double chests (pairing), hoppers, comparators.
 
-use super::inventory::OpenContainer;
+use super::inventory::{OpenContainer, WORKBENCH_UI};
 use super::*;
 use ceres_codec::binary::W;
 use ceres_codec::nbt::{self, Flavor, Tag};
@@ -13,8 +13,10 @@ use ceres_world::extra_data;
 const CONTAINER_SLOTS: usize = 27;
 
 /// (container UI id, block entity id, plays the lid animation) for a container block name.
+/// The crafting table has no block entity: its grid lives in the player's inventory.
 pub(crate) fn container_kind(name: &str) -> Option<(u8, &'static str, bool)> {
     match name {
+        "minecraft:crafting_table" => Some((WORKBENCH_UI, "", false)),
         "minecraft:chest" | "minecraft:trapped_chest" => Some((block_container::CHEST, "Chest", true)),
         "minecraft:barrel" => Some((block_container::BARREL, "Barrel", false)),
         n if n.ends_with("shulker_box") => Some((block_container::SHULKER_BOX, "ShulkerBox", true)),
@@ -113,16 +115,25 @@ impl Server {
             }
         }
         self.close_container(sid, false);
-        let tile = self.worlds.worlds[world].get_block_entity(pos, &self.gd);
-        let mut items = items_from_tile(tile.as_ref(), &self.gd);
+        let workbench = ui == WORKBENCH_UI;
+        let mut items = if workbench {
+            Vec::new()
+        } else {
+            let tile = self.worlds.worlds[world].get_block_entity(pos, &self.gd);
+            items_from_tile(tile.as_ref(), &self.gd)
+        };
         let Some(p) = self.players.get_mut(&sid) else { return false };
         for it in items.iter_mut().filter(|it| !it.is_empty()) {
             it.stack_id = p.inventory.alloc_id();
         }
         p.window_counter = p.window_counter % 99 + 1;
         let window = p.window_counter;
-        p.out.push(protocol::open_block_container(window, protocol::WINDOW_TYPE_CONTAINER, pos));
-        p.out.push(protocol::inventory_content(window as u32, &items));
+        if workbench {
+            p.out.push(protocol::open_block_container(window, protocol::WINDOW_TYPE_WORKBENCH, pos));
+        } else {
+            p.out.push(protocol::open_block_container(window, protocol::WINDOW_TYPE_CONTAINER, pos));
+            p.out.push(protocol::inventory_content(window as u32, &items));
+        }
         p.inventory.container = Some(OpenContainer { ui, window, world, pos, items, changed: false });
         if lid {
             let viewers = self.container_viewers(world, pos);
@@ -155,7 +166,7 @@ impl Server {
     pub(crate) fn sync_container(&mut self, sid: SessionId) {
         let Some(p) = self.players.get_mut(&sid) else { return };
         let Some(c) = p.inventory.container.as_mut() else { return };
-        if !c.changed {
+        if !c.changed || c.ui == WORKBENCH_UI {
             return;
         }
         c.changed = false;
@@ -192,10 +203,12 @@ impl Server {
     /// Closes the player's open container. `by_server` tells the client to close its window too.
     pub(crate) fn close_container(&mut self, sid: SessionId, by_server: bool) {
         self.sync_container(sid);
+        self.return_craft_grid(sid);
         let Some(p) = self.players.get_mut(&sid) else { return };
         let Some(c) = p.inventory.container.take() else { return };
         if by_server {
-            p.out.push(protocol::container_close(c.window, protocol::WINDOW_TYPE_CONTAINER, true));
+            let ty = if c.ui == WORKBENCH_UI { protocol::WINDOW_TYPE_WORKBENCH } else { protocol::WINDOW_TYPE_CONTAINER };
+            p.out.push(protocol::container_close(c.window, ty, true));
         }
         let block = self.worlds.worlds[c.world].get_block(c.pos, &self.gd);
         if let Some((_, _, true)) = container_kind(self.gd.block_name(block)) {

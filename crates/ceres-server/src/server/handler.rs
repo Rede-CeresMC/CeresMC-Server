@@ -54,6 +54,12 @@ impl Server {
                 let keys = self.auth_keys.read().unwrap().clone();
                 if keys.is_none() && self.cfg.xbox_auth {
                     // Mojang's keys are still downloading (server just started): hold the login
+                    // one held login per session, and a bounded queue overall
+                    self.pending_logins.retain(|(other, _, _)| *other != sid);
+                    if self.pending_logins.len() >= 64 || buf.len() > 2 * 1024 * 1024 {
+                        self.kick(sid, "§cServidor iniciando, tente de novo em instantes.");
+                        return Ok(());
+                    }
                     self.pending_logins.push((sid, buf.to_vec(), Instant::now()));
                     return Ok(());
                 }
@@ -173,6 +179,8 @@ impl Server {
                 p.out.push(protocol::container_close(win, ty, false));
                 if block_window {
                     self.close_container(sid, false);
+                } else {
+                    self.return_craft_grid(sid);
                 }
             }
             (State::Spawned, protocol::INVENTORY_TRANSACTION) => {
@@ -258,6 +266,7 @@ impl Server {
         p.out.push(self.gd.actor_identifiers.clone());
         p.out.push(self.gd.biome_definitions.clone());
         p.out.push(self.gd.creative_content.clone());
+        p.out.push(self.gd.crafting_data.clone());
         p.out.push(protocol::update_attributes_health(p.entity_id, p.health));
         p.out.push(protocol::set_actor_data_state(p.entity_id, &nametag, &p.actor_state));
         p.state = State::PreSpawn;

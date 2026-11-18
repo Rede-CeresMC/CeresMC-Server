@@ -56,6 +56,8 @@ class Client:
         port = port or int(os.environ.get("CERES_PORT", "19132"))
         self.name, self.addr = name, (host, port)
         self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # the join burst (chunks, CraftingData) is larger than the default receive buffer
+        self.s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 8 << 20)
         self.seq = self.msg = self.order = 0
         self.splits = {}
         self.compression = False

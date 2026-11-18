@@ -17,7 +17,15 @@ pub(crate) struct Inventory {
     pub(crate) dirty: bool,
     /// block container (chest, barrel...) the player has open
     pub(crate) container: Option<OpenContainer>,
+    /// crafting grid, slots 28..=40 of the crafting input container (28..=31 is the 2x2 grid)
+    pub(crate) craft_grid: [ItemDesc; 13],
+    /// output of the recipe crafted in the current request that has not been taken yet
+    crafted: Option<ItemDesc>,
 }
+
+/// UI id given to an open crafting table: it has no slots of its own (the grid is `craft_grid`).
+pub(crate) const WORKBENCH_UI: u8 = 0xff;
+const CRAFT_GRID_FIRST: u8 = 28;
 
 #[derive(Clone)]
 pub(crate) struct OpenContainer {
@@ -43,6 +51,8 @@ impl Default for Inventory {
             next_stack_id: 1,
             dirty: false,
             container: None,
+            craft_grid: std::array::from_fn(|_| ItemDesc::default()),
+            crafted: None,
         }
     }
 }
@@ -54,6 +64,7 @@ enum Loc {
     Offhand,
     Cursor,
     Container(usize),
+    Craft(usize),
 }
 
 fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
@@ -69,8 +80,44 @@ fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
         container::ARMOR => (s.slot < 4).then_some(Loc::Armor(s.slot as usize)),
         container::OFFHAND => (s.slot == 0).then_some(Loc::Offhand),
         container::CURSOR => (s.slot == 0).then_some(Loc::Cursor),
+        container::CRAFTING_INPUT => {
+            // the 3x3 grid only exists while a crafting table is open
+            let last = if open.is_some_and(|c| c.ui == WORKBENCH_UI) { 40 } else { 31 };
+            (CRAFT_GRID_FIRST..=last).contains(&s.slot).then_some(Loc::Craft((s.slot - CRAFT_GRID_FIRST) as usize))
+        }
         _ => None,
     }
+}
+
+/// The used-up items must be exactly the recipe's ingredients, `reps` times.
+/// Exact item ingredients are matched before wildcard and tag ones, so a specific ingredient is not
+/// taken by a looser one.
+fn ingredients_match(r: &ceres_world::Recipe, reps: u16, mut pool: Vec<ItemDesc>, gd: &GameData) -> bool {
+    use ceres_world::Ingredient;
+    let rank = |i: &Ingredient| match i {
+        Ingredient::Name { aux: Some(_), .. } => 0,
+        Ingredient::Name { aux: None, .. } => 1,
+        Ingredient::Tag(_) => 2,
+    };
+    let mut wanted: Vec<&(Ingredient, u16)> = r.inputs.iter().collect();
+    wanted.sort_by_key(|(i, _)| rank(i));
+    for (ing, count) in wanted {
+        let mut need = *count as u32 * reps as u32;
+        for it in pool.iter_mut().filter(|it| it.count > 0) {
+            if need == 0 {
+                break;
+            }
+            if gd.ingredient_matches(ing, it) {
+                let take = need.min(it.count as u32);
+                it.count -= take as u16;
+                need -= take;
+            }
+        }
+        if need > 0 {
+            return false;
+        }
+    }
+    pool.iter().all(|it| it.count == 0)
 }
 
 impl Inventory {
@@ -91,6 +138,7 @@ impl Inventory {
             Loc::Offhand => &self.offhand,
             Loc::Cursor => &self.cursor,
             Loc::Container(i) => &self.container.as_ref().expect("open container").items[i],
+            Loc::Craft(i) => &self.craft_grid[i],
         }
     }
 
@@ -105,6 +153,7 @@ impl Inventory {
             Loc::Armor(i) => self.armor[i] = item,
             Loc::Offhand => self.offhand = item,
             Loc::Cursor => self.cursor = item,
+            Loc::Craft(i) => self.craft_grid[i] = item,
             Loc::Container(i) => {
                 if let Some(c) = self.container.as_mut() {
                     c.items[i] = item;
@@ -236,8 +285,10 @@ impl Inventory {
             self.created.clone(),
             self.next_stack_id,
             self.container.clone(),
+            self.craft_grid.clone(),
         );
         let res = self.apply_inner(req, creative, gd);
+        self.crafted = None;
         if res.is_none() {
             self.main = backup.0;
             self.armor = backup.1;
@@ -246,6 +297,7 @@ impl Inventory {
             self.created = backup.4;
             self.next_stack_id = backup.5;
             self.container = backup.6;
+            self.craft_grid = backup.7;
         }
         res
     }
@@ -258,6 +310,9 @@ impl Inventory {
     ) -> Option<(Vec<SlotResult>, Vec<ItemDesc>)> {
         let mut touched: Vec<SlotRef> = Vec::new();
         let mut dropped: Vec<ItemDesc> = Vec::new();
+        // crafting: the recipe of this request and the ingredients the client says it used up
+        let mut recipe: Option<(&ceres_world::Recipe, u16)> = None;
+        let mut consumed: Vec<ItemDesc> = Vec::new();
 
         for action in &req.actions {
             match *action {
@@ -275,18 +330,60 @@ impl Inventory {
                         extra: ce.extra.clone(),
                     });
                 }
+                StackAction::CraftRecipe { net_id, reps, .. } => {
+                    let r = gd.recipes.get(&net_id)?;
+                    let workbench = self.container.as_ref().is_some_and(|c| c.ui == WORKBENCH_UI);
+                    if recipe.is_some() || reps == 0 || r.block != "crafting_table" || (r.big && !workbench) {
+                        return None;
+                    }
+                    let mut out = r.output.clone();
+                    out.count = out.count.checked_mul(reps as u16)?;
+                    out.stack_id = 0;
+                    self.crafted = Some(out);
+                    recipe = Some((r, reps as u16));
+                }
+                StackAction::Consume { count, src } => {
+                    if recipe.is_none() || count == 0 {
+                        return None;
+                    }
+                    let loc = locate(&src, self.container.as_ref())?;
+                    let mut s = self.slot_ref(loc).clone();
+                    if s.is_empty() || s.count < count as u16 {
+                        return None;
+                    }
+                    let mut used = s.clone();
+                    used.count = count as u16;
+                    consumed.push(used);
+                    s.count -= count as u16;
+                    if s.count > 0 {
+                        s.stack_id = self.alloc_id();
+                    }
+                    self.set_loc(loc, s);
+                    touched.push(src);
+                }
                 StackAction::Move { count, src, dst } => {
                     if count == 0 {
                         return None;
                     }
                     let from_creative = src.container == container::CREATED_OUTPUT;
                     let source = if from_creative {
-                        if !creative {
-                            return None;
+                        if let Some(c) = self.crafted.as_mut() {
+                            // crafted output: only as much as the recipe made
+                            if c.count < count as u16 {
+                                return None;
+                            }
+                            c.count -= count as u16;
+                            let mut out = c.clone();
+                            out.count = count as u16;
+                            out
+                        } else {
+                            if !creative {
+                                return None;
+                            }
+                            let mut c = self.created.clone()?;
+                            c.count = 64;
+                            c
                         }
-                        let mut c = self.created.clone()?;
-                        c.count = 64;
-                        c
                     } else {
                         self.slot_ref(locate(&src, self.container.as_ref())?).clone()
                     };
@@ -346,6 +443,16 @@ impl Inventory {
                         return None;
                     }
                     if src.container == container::CREATED_OUTPUT {
+                        if let Some(c) = self.crafted.as_mut() {
+                            if c.count < count as u16 {
+                                return None;
+                            }
+                            c.count -= count as u16;
+                            let mut out = c.clone();
+                            out.count = count as u16;
+                            dropped.push(out);
+                            continue;
+                        }
                         if !creative {
                             return None;
                         }
@@ -391,6 +498,14 @@ impl Inventory {
             }
         }
 
+        let craft_ok = match recipe {
+            Some((r, reps)) => ingredients_match(r, reps, consumed, gd),
+            None => consumed.is_empty(),
+        };
+        if !craft_ok {
+            return None;
+        }
+
         let mut out: Vec<SlotResult> = Vec::new();
         for s in touched {
             if out.iter().any(|o| o.container == s.container && o.slot == s.slot) {
@@ -401,6 +516,11 @@ impl Inventory {
             out.push(SlotResult { container: s.container, slot: s.slot, count: st.count as u8, stack_id: st.stack_id });
         }
         Some((out, dropped))
+    }
+
+    /// Empties the crafting grid; returns its items.
+    pub(crate) fn take_craft_grid(&mut self) -> Vec<ItemDesc> {
+        self.craft_grid.iter_mut().filter(|i| !i.is_empty()).map(std::mem::take).collect()
     }
 
     pub(crate) fn to_nbt(&self) -> Tag {
@@ -537,6 +657,29 @@ impl Server {
             if p.inventory.dirty || p.spawn_point.is_some() {
                 self.save_player_state_of(p);
             }
+        }
+    }
+
+    /// Puts what is left in the crafting grid back into the inventory (or drops it).
+    pub(crate) fn return_craft_grid(&mut self, sid: SessionId) {
+        let Some(p) = self.players.get_mut(&sid) else { return };
+        let items = p.inventory.take_craft_grid();
+        if items.is_empty() {
+            return;
+        }
+        let mut leftovers = Vec::new();
+        for it in items {
+            let mut rest = it.clone();
+            let (_, left) = p.inventory.add_item(it, &self.gd);
+            if left > 0 {
+                rest.count = left;
+                rest.stack_id = 0;
+                leftovers.push(rest);
+            }
+        }
+        self.sync_full_inventory(sid);
+        for it in leftovers {
+            self.drop_from_player(sid, it);
         }
     }
 

@@ -12,12 +12,15 @@ use std::rc::Rc;
 mod biomes;
 mod blocks;
 mod creative;
+mod recipes;
 mod voxel_shapes;
 
 use biomes::*;
 pub use blocks::BlockStateInfo;
 use creative::*;
 pub use creative::{CreativeEntry, extra_data};
+pub use recipes::{Ingredient, Recipe};
+use recipes::*;
 use voxel_shapes::*;
 
 #[derive(Clone, Debug)]
@@ -53,6 +56,11 @@ pub struct GameData {
     pub voxel_shapes: Vec<u8>,
     pub jigsaw_structures: Vec<u8>,
     pub creative_content: Vec<u8>,
+    /// CraftingData packet (every recipe the client may show)
+    pub crafting_data: Vec<u8>,
+    /// recipe network id -> recipe, to check crafts
+    pub recipes: HashMap<i32, Recipe>,
+    pub item_tags: HashMap<String, std::collections::HashSet<String>>,
     pub creative_item_count: usize,
 }
 
@@ -291,6 +299,9 @@ impl GameData {
             }
         }
 
+        // ---- crafting
+        let crafting = load_recipes(dir, &items_by_name)?;
+
         // ---- actor identifiers
         let actors = load_gz_nbt(&dir.join("entity_identifiers.nbt"))?;
         let actor_identifiers = packet(id::AVAILABLE_ACTOR_IDENTIFIERS, |w| w.bytes(&nbt::to_network(&actors)));
@@ -312,6 +323,9 @@ impl GameData {
         let jigsaw_structures = packet(id::JIGSAW_STRUCTURE_DATA, |w| w.bytes(&nbt::to_network(&jigsaw)));
 
         Ok(GameData {
+            crafting_data: crafting.packet,
+            recipes: crafting.recipes,
+            item_tags: crafting.item_tags,
             block_ids,
             block_states,
             default_blocks,

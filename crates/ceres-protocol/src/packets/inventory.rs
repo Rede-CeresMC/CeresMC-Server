@@ -398,6 +398,7 @@ pub mod container {
     pub const COMBINED_HOTBAR_AND_INVENTORY: u8 = 12;
     pub const HOTBAR: u8 = 28;
     pub const INVENTORY: u8 = 29;
+    pub const CRAFTING_INPUT: u8 = 13;
     pub const OFFHAND: u8 = 34;
     pub const CURSOR: u8 = 59;
     pub const CREATED_OUTPUT: u8 = 60;
@@ -436,6 +437,18 @@ pub enum StackAction {
         item: u32,
         repetitions: u8,
     },
+    /// crafting: an ingredient used up by the recipe of this request
+    Consume {
+        count: u8,
+        src: SlotRef,
+    },
+    /// crafting: `reps` times the recipe with this network id; `auto` = recipe book (ingredients taken
+    /// straight from the inventory)
+    CraftRecipe {
+        net_id: i32,
+        reps: u8,
+        auto: bool,
+    },
     /// informational actions the server does not need to act on (crafting results, mining...)
     Ignored(u32),
     /// any action this server does not understand yet (crafting...)
@@ -459,9 +472,9 @@ fn skip_ingredient(r: &mut R) -> Res<()> {
         }
         2 => {
             r.string()?;
-            r.i16_le()?;
+            r.u8()?;
         }
-        3 => {
+        3 | 5 => {
             r.string()?;
         }
         _ => {}
@@ -493,7 +506,16 @@ fn read_single_stack_request(r: &mut R) -> Res<StackRequest> {
                 r.bool()?; // randomly
                 StackAction::Drop { count, src }
             }
-            4 | 5 => StackAction::Remove { count: r.u8()?, src: read_slot(r)? },
+            4 => StackAction::Remove { count: r.u8()?, src: read_slot(r)? },
+            5 => StackAction::Consume { count: r.u8()?, src: read_slot(r)? },
+            10 => StackAction::CraftRecipe { net_id: r.varint()?, reps: r.u8()?, auto: false },
+            11 => {
+                let (net_id, reps) = (r.varint()?, r.u8()?);
+                for _ in 0..r.uvarint()?.min(64) {
+                    skip_ingredient(r)?;
+                }
+                StackAction::CraftRecipe { net_id, reps, auto: true }
+            }
             6 => {
                 r.u8()?; // result slot
                 StackAction::Ignored(6)
@@ -649,6 +671,7 @@ pub mod block_container {
 pub const BLOCK_EVENT: u32 = 0x1a;
 /// WindowTypes::CONTAINER
 pub const WINDOW_TYPE_CONTAINER: u8 = 0;
+pub const WINDOW_TYPE_WORKBENCH: u8 = 1;
 
 /// Opens a block container window (chest, barrel, shulker box) at `pos`.
 pub fn open_block_container(window_id: u8, window_type: u8, pos: [i32; 3]) -> Vec<u8> {

@@ -66,7 +66,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] 🟠 Armadura e mão secundária
 - [x] 🟠 Salvar o inventário do jogador (em NBT por jogador)
 - [x] 🟠 Largar itens no chão (entidades de item com física, fusão e coleta)
-- [ ] 🟢 Craft 2x2 no inventário
+- [x] 🟢 Craft 2x2 no inventário
 
 ### Comandos
 
@@ -132,7 +132,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 ### Blocos com interface
 
 - [~] Baú ✔, barril ✔, shulker box ✔ (abrir, mover itens, vários jogadores no mesmo baú, salvar no formato vanilla, derrubar ao quebrar) · baú duplo
-- [ ] Bancada de trabalho e receitas (CraftingData a partir de recipes.json)
+- [x] Bancada de trabalho e receitas (CraftingData a partir de recipes.json, receita conferida no servidor)
 - [ ] Fornalha, alto-forno, defumador (queima, combustível, XP)
 - [ ] Bigorna, mesa de encantamento, rebolo, tear, cortador de pedra
 - [ ] Mesa de cartografia, mesa de ferraria (smithing, trims)
