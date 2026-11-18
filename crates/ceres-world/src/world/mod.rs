@@ -202,6 +202,11 @@ impl World {
         [sx, sy, sz]
     }
 
+    /// True if the column holding `pos` is in memory (it will not be loaded from disk).
+    pub fn is_loaded(&self, pos: [i32; 3]) -> bool {
+        self.columns.contains_key(&(pos[0] >> 4, pos[2] >> 4))
+    }
+
     pub fn loaded_chunk_count(&self) -> usize {
         self.columns.len()
     }

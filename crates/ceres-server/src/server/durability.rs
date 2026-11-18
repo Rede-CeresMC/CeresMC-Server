@@ -178,6 +178,23 @@ impl Server {
         }
     }
 
+    /// Wears the held item by `amount`, whatever kind of tool it is (flint and steel, hoes...).
+    pub(crate) fn wear_held(&mut self, sid: SessionId, amount: u32) {
+        if !self.wears(sid) {
+            return;
+        }
+        let Some(p) = self.players.get_mut(&sid) else { return };
+        let slot = (p.inventory.held_slot as usize).min(8);
+        let mut item = p.inventory.main[slot].clone();
+        let broke = wear(&mut item, amount, &self.gd);
+        p.inventory.set_main(slot, item);
+        p.out.push(protocol::inventory_slot(window::INVENTORY as u32, slot as u32, &p.inventory.main[slot]));
+        if broke {
+            self.broadcast_equipment(sid);
+            self.play_break_sound(sid);
+        }
+    }
+
     /// Each armor piece loses max(1, damage / 4) when its wearer is hurt through armor.
     pub(crate) fn wear_armor(&mut self, sid: SessionId, raw_damage: f32) {
         if !self.wears(sid) {

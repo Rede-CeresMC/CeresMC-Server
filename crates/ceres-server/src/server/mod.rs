@@ -10,6 +10,7 @@ mod durability;
 mod effects;
 mod environment;
 mod falling;
+mod farming;
 mod food;
 mod furnace;
 mod twopart;

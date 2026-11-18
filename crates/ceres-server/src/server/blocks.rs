@@ -5,7 +5,7 @@ use ceres_codec::nbt::Tag;
 use ceres_protocol::{ItemDesc, UseItem, block_action, level_event, use_item_action, window};
 
 /// Block position next to `pos` on `face` (0 down, 1 up, 2 north, 3 south, 4 west, 5 east).
-fn side(pos: [i32; 3], face: u8) -> Option<[i32; 3]> {
+pub(crate) fn side(pos: [i32; 3], face: u8) -> Option<[i32; 3]> {
     let [x, y, z] = pos;
     Some(match face {
         0 => [x, y - 1, z],
@@ -157,7 +157,16 @@ impl Server {
             if xp > 0 {
                 self.spawn_xp(world, center, xp);
             }
-            if let loot::Loot::Items(items) = loot::block_loot(self.gd.block_name(old), fortune, silk_touch) {
+            let crop_name = self.gd.block_name(old).to_string();
+            let loot = if farming::is_crop(&crop_name) {
+                let g = self.gd.block_states.get(&old).and_then(|s| s.states.get("growth")).and_then(|t| t.as_i64());
+                loot::Loot::Items(
+                    farming::crop_drops(&crop_name, g.unwrap_or(0)).into_iter().map(|(n, c)| (n.to_string(), c)).collect(),
+                )
+            } else {
+                loot::block_loot(&crop_name, fortune, silk_touch)
+            };
+            if let loot::Loot::Items(items) = loot {
                 for (name, count) in items {
                     let Some(info) = self.gd.items_by_name.get(&name) else { continue };
                     let drop = ItemDesc {
@@ -249,6 +258,13 @@ impl Server {
 
         // buckets fill from or empty into the world instead of placing a block
         if self.use_bucket(sid, clicked, side(clicked, face)) {
+            return;
+        }
+        // tools on blocks (hoe, shovel, axe, flint and steel), seeds and bone meal
+        if self.use_item_on_block(sid, clicked, face) {
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
             return;
         }
 

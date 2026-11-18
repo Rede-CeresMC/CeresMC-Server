@@ -127,12 +127,14 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 - [x] Drops vanilla dos blocos: minérios (diamante, carvão, ferro bruto...), pedra → pedregulho, grama → terra, vidro/gelo → nada, folhas, cascalho, grama alta; Toque Suave e Fortuna
 
+- [x] Agricultura: sementes, cenoura, batata e beterraba na terra arada, crescimento por random ticks perto dos jogadores, farinha de osso, colheita conforme o estágio; fogo apaga sozinho
+
 ### Itens
 
 - [x] Durabilidade de ferramentas e armas (NBT `Damage`, Inquebrável, quebra com som)
 - [ ] Arco, besta, tridente, bola de neve, ovo, pérola do fim (projéteis)
 - [~] Baldes de água e lava ✔ (encher, esvaziar, pilha de baldes) · leite (vaca), peixes
-- [ ] Isqueiro, tesoura, enxada, pá (caminhos), machado (descascar)
+- [~] Isqueiro ✔, enxada ✔ (terra arada), pá ✔ (caminho), machado ✔ (descascar) · tesoura
 - [ ] Livros, mapas, bússola, relógio
 - [ ] Fogos de artifício, elytra
 
