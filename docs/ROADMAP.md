@@ -117,7 +117,7 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 - [x] Combate PvP: dano por item, knockback, crítico, cooldown
 - [x] Armadura: proteção ✔ · durabilidade ✔ (gasta ao levar dano, quebra)
 - [x] Efeitos (MobEffect): duração, nível, velocidade/lentidão, pressa/cansaço na mineração, força/fraqueza, resistência, absorção, regeneração, veneno, wither, fome, instantâneos; maçã dourada, baiacu, leite
-- [ ] Encantamentos: efeitos em dano, quebra, proteção, durabilidade
+- [~] Encantamentos ✔: Afiada, Repulsão, Proteção, Peso-Pena, Eficiência, Inquebrável, Toque Suave, Fortuna, `/enchant` · Aspecto Flamejante, Pilhagem, Espinhos, mesa de encantamento
 - [~] Comida ✔ (tabela vanilla, tempo de comer conferido no servidor, tigela/garrafa de volta) · poções e leite
 - [~] Experiência ✔ (níveis vanilla, orbes que voam até o jogador, XP de minérios, perde e solta ao morrer, `/xp`, salvo no jogador) · gasto em encantar/bigorna, XP da fornalha
 

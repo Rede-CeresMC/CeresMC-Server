@@ -34,6 +34,22 @@ fn item_attack_damage(name: &str) -> f32 {
     }
 }
 
+const ENCHANT_PROTECTION: i16 = 0;
+const ENCHANT_FEATHER_FALLING: i16 = 2;
+const ENCHANT_SHARPNESS: i16 = 9;
+const ENCHANT_KNOCKBACK: i16 = 12;
+
+/// Enchantment protection points of the armor worn: sum of level x weight, at most 20.
+fn armor_enchant_points(p: &Player, weights: &[(i16, u32)]) -> u32 {
+    let mut total = 0;
+    for piece in p.inventory.armor.iter().filter(|a| !a.is_empty()) {
+        for (id, weight) in weights {
+            total += blocks::enchant_level(piece, *id) as u32 * weight;
+        }
+    }
+    total.min(20)
+}
+
 fn armor_defense_points(name: &str) -> i32 {
     match name.strip_prefix("minecraft:").unwrap_or(name) {
         "leather_helmet" | "leather_boots" | "golden_boots" | "chainmail_boots" => 1,
@@ -89,7 +105,9 @@ impl Server {
             return false;
         }
         let reduction = if bypass_armor { 0.0 } else { self.armor_reduction(p) };
-        let mut dmg = (raw_damage * (1.0 - reduction) * (1.0 - p.resistance())).max(0.5);
+        // Protection enchantments: 1 point per level, 4% each, at most 20 points
+        let epf = if bypass_armor { 0 } else { armor_enchant_points(p, &[(ENCHANT_PROTECTION, 1)]) };
+        let mut dmg = (raw_damage * (1.0 - reduction) * (1.0 - epf as f32 * 0.04) * (1.0 - p.resistance())).max(0.5);
 
         let p = self.players.get_mut(&sid).unwrap();
         // absorption hearts go first
@@ -240,13 +258,16 @@ impl Server {
             self.gd.items_by_id.get(&held.id).map(|i| item_attack_damage(&i.name)).unwrap_or(1.0)
         };
         dmg = (dmg + att.attack_bonus()).max(0.0);
+        dmg += 1.25 * blocks::enchant_level(held, ENCHANT_SHARPNESS) as f32;
+        let knockback_level = blocks::enchant_level(held, ENCHANT_KNOCKBACK) as f32;
         if att.fall_start_y.is_some_and(|fy| fy - (att.pos[1] - EYE_HEIGHT) > 0.2) && !att.flying {
             dmg *= 1.5; // critical hit
         }
         let dx = vic.pos[0] - att.pos[0];
         let dz = vic.pos[2] - att.pos[2];
         let len = (dx * dx + dz * dz).sqrt().max(0.01);
-        let kb = [dx / len * 0.4, 0.36, dz / len * 0.4];
+        let push = 0.4 + 0.5 * knockback_level;
+        let kb = [dx / len * push, 0.36, dz / len * push];
         let msg = format!("§c{} foi morto por {}", vic.name, att.name);
         self.swing_arm(attacker_sid);
         if self.damage_player(victim_sid, dmg, &msg, false, Some(kb)) {
@@ -305,7 +326,12 @@ impl Server {
                     if let Some(start_y) = fall {
                         let dist = start_y - feet_y;
                         if dist > 3.5 {
-                            let dmg = (dist - 3.0).floor();
+                            let mut dmg = (dist - 3.0).floor();
+                            // Feather Falling (3 per level) and Protection soften falls
+                            if let Some(p) = self.players.get(&sid) {
+                                let epf = armor_enchant_points(p, &[(ENCHANT_PROTECTION, 1), (ENCHANT_FEATHER_FALLING, 3)]);
+                                dmg = (dmg * (1.0 - epf as f32 * 0.04)).floor();
+                            }
                             if dmg >= 1.0 {
                                 let msg = format!("§c{name} caiu de um lugar alto");
                                 // armor does not soften falls

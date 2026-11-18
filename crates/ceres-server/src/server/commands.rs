@@ -58,6 +58,7 @@ impl Server {
             ("TitleAction".to_string(), ["title", "subtitle", "actionbar", "clear"].map(String::from).to_vec()),
             ("WhitelistOp".to_string(), ["on", "off", "add", "remove", "list"].map(String::from).to_vec()),
             ("GameRule".to_string(), ["dodaylightcycle", "keepinventory", "pvp"].map(String::from).to_vec()),
+            ("Enchant".to_string(), durability::ENCHANT_NAMES.iter().map(|n| n.to_string()).collect()),
             ("Effect".to_string(), effects::EFFECT_NAMES.iter().map(|(n, _)| n.to_string()).collect()),
         ];
         let cmd = |name: &str, description: &str, overloads: Vec<Vec<Param>>| CommandSpec {
@@ -98,6 +99,15 @@ impl Server {
             ),
             cmd("clear", "Limpa o inventário", vec![vec![Param::opt("jogador", T::Target)]]),
             cmd("kill", "Mata um jogador", vec![vec![Param::opt("jogador", T::Target)]]),
+            cmd(
+                "enchant",
+                "Encanta o item na mão",
+                vec![vec![
+                    Param::new("jogador", T::Target),
+                    Param::new("encantamento", T::Enum("Enchant".into())),
+                    Param::opt("nivel", T::Int),
+                ]],
+            ),
             cmd(
                 "xp",
                 "Dá experiência (pontos, ou níveis com L no fim: 5L)",
@@ -488,6 +498,37 @@ impl Server {
                         self.reply(sender, &format!("§aInventário de {tname} limpo."));
                     }
                 }
+            }
+            "enchant" => {
+                let usage = "§cUso: /enchant <jogador> <encantamento> [nível 1-32767]";
+                let (Some(target), Some(what)) = (args.first(), args.get(1)) else { return self.reply(sender, usage) };
+                let name = what.strip_prefix("minecraft:").unwrap_or(what).to_ascii_lowercase();
+                let id = durability::ENCHANT_NAMES
+                    .iter()
+                    .position(|n| *n == name)
+                    .or_else(|| name.parse::<usize>().ok().filter(|i| *i < durability::ENCHANT_NAMES.len()));
+                let Some(id) = id else { return self.reply(sender, "§cEncantamento desconhecido.") };
+                let Ok(level) = args.get(2).map_or(Ok(1), |s| s.parse::<i16>()) else { return self.reply(sender, usage) };
+                let level = level.max(1);
+                let targets = self.resolve_targets(sender, Some(target));
+                let mut done = 0;
+                for t in targets {
+                    let Some(p) = self.players.get_mut(&t) else { continue };
+                    let slot = (p.inventory.held_slot as usize).min(8);
+                    let mut item = p.inventory.main[slot].clone();
+                    if item.is_empty() {
+                        continue;
+                    }
+                    durability::set_enchant(&mut item, id as i16, level);
+                    p.inventory.set_main(slot, item);
+                    p.out.push(protocol::inventory_slot(window::INVENTORY as u32, slot as u32, &p.inventory.main[slot]));
+                    self.broadcast_equipment(t);
+                    done += 1;
+                }
+                if done == 0 {
+                    return self.reply(sender, "§cNinguém com item na mão.");
+                }
+                self.reply(sender, &format!("§a{} {level} aplicado.", durability::ENCHANT_NAMES[id]));
             }
             "xp" => {
                 let usage = "§cUso: /xp <quantidade>[L] [jogador]";

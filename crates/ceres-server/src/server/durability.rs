@@ -94,6 +94,34 @@ fn set_item_damage(item: &mut ItemDesc, damage: u32) {
     item.extra = w.0;
 }
 
+/// Enchantment command names, by Bedrock id.
+pub(crate) const ENCHANT_NAMES: [&str; 41] = [
+    "protection", "fire_protection", "feather_falling", "blast_protection", "projectile_protection", "thorns",
+    "respiration", "depth_strider", "aqua_affinity", "sharpness", "smite", "bane_of_arthropods", "knockback",
+    "fire_aspect", "looting", "efficiency", "silk_touch", "unbreaking", "fortune", "power", "punch", "flame",
+    "infinity", "luck_of_the_sea", "lure", "frost_walker", "mending", "binding", "vanishing", "impaling",
+    "riptide", "loyalty", "channeling", "multishot", "piercing", "quick_charge", "soul_speed", "swift_sneak",
+    "wind_burst", "density", "breach",
+];
+
+/// Adds (or changes the level of) an enchantment in the item's `ench` list.
+pub(crate) fn set_enchant(item: &mut ItemDesc, id: i16, level: i16) {
+    let (mut tag, tail) = split_extra(item).unwrap_or_else(|| (Tag::Compound(Vec::new()), vec![0, 0, 0, 0, 0, 0, 0, 0]));
+    let mut list = match tag.get("ench") {
+        Some(Tag::List(_, l)) => l.clone(),
+        _ => Vec::new(),
+    };
+    list.retain(|e| e.get("id").and_then(|v| v.as_i64()) != Some(id as i64));
+    list.push(Tag::Compound(vec![("id".into(), Tag::Short(id)), ("lvl".into(), Tag::Short(level))]));
+    tag.set("ench", Tag::List(10, list));
+    let mut w = ceres_codec::binary::W::new();
+    w.u16_le(0xffff);
+    w.u8(1);
+    nbt::write_root(&mut w, "", &tag, Flavor::LittleEndian);
+    w.bytes(&tail);
+    item.extra = w.0;
+}
+
 fn unbreakable(item: &ItemDesc) -> bool {
     split_extra(item).is_some_and(|(t, _)| t.get("Unbreakable").and_then(|v| v.as_i64()).unwrap_or(0) != 0)
 }

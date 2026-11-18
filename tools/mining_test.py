@@ -75,6 +75,12 @@ def slot_damage(c, since):
     return None
 check(slot_damage(c, n) == 1, f"the pickaxe lost 1 durability (Damage={slot_damage(c, n)})")
 
+n = len(c.received)
+command(c, "/enchant @s efficiency 5")
+c.pump(1.0)
+check(any(p == 0x32 and b"ench" in d for p, d in c.received[n:]), "/enchant puts the enchantment on the held item")
+check(state_after(c, ROW[0], lambda: mine(c, ROW[0], 0.15)) not in (STONE, None), "Efficiency V mines stone almost instantly")
+
 c.close()
 print("PASS" if ok else "FAILED")
 sys.exit(0 if ok else 1)
