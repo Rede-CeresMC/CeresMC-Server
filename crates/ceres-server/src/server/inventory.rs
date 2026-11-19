@@ -202,7 +202,7 @@ fn multi_result(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(ItemDes
     let banner = uuid == "b5c5d105-75a2-4076-af2b-923ea2bf4bf0";
     // the item being copied stays in the grid
     let kept = |it: &ItemDesc| {
-        (book && name(it) == "minecraft:written_book") || (banner && super::durability::item_field(it, "Patterns").is_some())
+        (book && name(it) == "minecraft:written_book") || (banner && super::durability::item_field(it, "Patterns").and_then(|p| p.as_list().map(|l| !l.is_empty())).unwrap_or(false))
     };
     let cells = grid
         .iter()
