@@ -199,11 +199,16 @@ fn multi_result(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(ItemDes
     let (out, _) = multi_result_items(uuid, grid, gd)?;
     let name = |it: &ItemDesc| gd.items_by_id.get(&it.id).map(|i| i.name.as_str()).unwrap_or("");
     let book = uuid == "d1ca6b84-338e-4f2f-9c6b-76cc8b4bd98d";
+    let banner = uuid == "b5c5d105-75a2-4076-af2b-923ea2bf4bf0";
+    // the item being copied stays in the grid
+    let kept = |it: &ItemDesc| {
+        (book && name(it) == "minecraft:written_book") || (banner && super::durability::item_field(it, "Patterns").is_some())
+    };
     let cells = grid
         .iter()
         .enumerate()
         .filter(|(_, it)| !it.is_empty())
-        .filter(|(_, it)| !(book && name(it) == "minecraft:written_book"))
+        .filter(|(_, it)| !kept(it))
         .map(|(i, it)| (i, if book { it.count } else { 1 }, it.clone()))
         .collect();
     Some((out, cells))
@@ -215,6 +220,8 @@ fn multi_result_items(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(I
     const SHIELD_BANNER: &str = "00000000-0000-0000-0000-0000000000c8";
     const DECORATED_POT: &str = "685a742a-c42e-4a4e-88ea-5eb83fc98e5b";
     const FIREWORK_ROCKET: &str = "00000000-0000-0000-0000-000000000002";
+    const BANNER_DUPLICATE: &str = "b5c5d105-75a2-4076-af2b-923ea2bf4bf0";
+    const MAP_CLONING: &str = "85939755-ba10-4d9d-a4cc-efb7a8e943c4";
     use super::durability as dur;
     let name = |it: &ItemDesc| gd.items_by_id.get(&it.id).map(|i| i.name.as_str()).unwrap_or("");
     let items: Vec<&ItemDesc> = grid.iter().filter(|i| !i.is_empty()).collect();
@@ -277,6 +284,40 @@ fn multi_result_items(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(I
             }
             dur::set_item_field(&mut out, "Base", Some(Tag::Int((banner.meta & 0x0f) as i32)));
             Some((out, vec![(shield.id, 1), (banner.id, 1)]))
+        }
+        MAP_CLONING => {
+            // a filled map and empty maps: as many copies plus the original
+            let filled: Vec<&&ItemDesc> = items.iter().filter(|i| name(i) == "minecraft:filled_map").collect();
+            let empty: u16 = items.iter().filter(|i| name(i) == "minecraft:empty_map").map(|i| i.count).sum();
+            let empty_cells = items.iter().filter(|i| name(i) == "minecraft:empty_map").count();
+            if filled.len() != 1 || filled[0].count != 1 || empty == 0 || empty as usize != empty_cells || 1 + empty_cells != items.len() {
+                return None;
+            }
+            let mut out = (*filled[0]).clone();
+            out.count = empty + 1;
+            out.stack_id = 0;
+            Some((out, Vec::new()))
+        }
+        BANNER_DUPLICATE => {
+            // a banner with patterns and a blank one of the same colour: the blank one gets the
+            // patterns (the ominous banner cannot be copied)
+            let [a, b] = items.as_slice() else { return None };
+            if name(a) != "minecraft:banner" || name(b) != "minecraft:banner" || a.meta != b.meta {
+                return None;
+            }
+            let pats = |it: &ItemDesc| dur::item_field(it, "Patterns").and_then(|p| p.as_list().map(|l| l.len())).unwrap_or(0);
+            let (src, blank) = match (pats(a), pats(b)) {
+                (n, 0) if n > 0 => (a, b),
+                (0, n) if n > 0 => (b, a),
+                _ => return None,
+            };
+            if blank.count != 1 || matches!(dur::item_field(src, "Type"), Some(Tag::Int(1))) {
+                return None;
+            }
+            let mut out = (*src).clone();
+            out.count = 1;
+            out.stack_id = 0;
+            Some((out, Vec::new()))
         }
         FIREWORK_ROCKET => {
             let mut paper = 0;

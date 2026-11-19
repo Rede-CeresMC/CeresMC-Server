@@ -104,7 +104,9 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Segurança das receitas multi: o consumo tem de sair exatamente das casas da grade usadas no resultado (antes só o id do item era conferido e dava para consumir itens do inventário e manter os da grade, duplicando)
 - [x] Foguete de fogos (receita multi): 1 papel, 1-3 pólvoras (Flight) e até 7 estrelas (Explosions copiadas do `FireworksItem` de cada estrela) dão 3 foguetes
 - [x] Segurança das receitas multi: além da casa, o item consumido tem de ser o mesmo (tipo e NBT) que estava lá quando o resultado foi calculado (impede trocar por outro item no mesmo pedido)
-- [ ] Outras receitas multi (clonar/ampliar/travar mapa, duplicar e padronar estandarte), mapas em molduras
+- [x] Duplicar estandarte (receita multi): estandarte com padrões + estandarte liso da mesma cor = cópia; o original fica na grade; o estandarte sinistro não copia
+- [x] Clonar mapa (receita multi): mapa preenchido + mapas vazios = cópias + o original (só copia o item; os mapas em si ainda não existem)
+- [ ] Ampliar/travar mapa e padrões de estandarte na bancada (receitas multi restantes), mapas em molduras
 - [x] Mob guiado ou amarrado solta o laço ao morrer
 
 ## Lote 4: consumíveis
