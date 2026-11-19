@@ -332,10 +332,37 @@ impl Server {
         Some(protocol::map_item_data(id, 0, center, 0, &m.pixels))
     }
 
+    /// The players inside a map's area as white markers pointing where they look.
+    fn map_marks_packet(&self, id: i64) -> Option<Vec<u8>> {
+        let m = self.maps.maps.get(&id)?;
+        let center = [m.corner[0] + 64, m.corner[1] + 64];
+        let marks: Vec<(u8, u8, i8, i8)> = self
+            .players
+            .values()
+            .filter(|p| p.state == State::Spawned && !p.dead && p.world == m.world && p.gamemode != 6)
+            .filter_map(|p| {
+                let dx = ((p.pos[0] - center[0] as f32) * 2.0).round();
+                let dz = ((p.pos[2] - center[1] as f32) * 2.0).round();
+                if !(-128.0..=127.0).contains(&dx) || !(-128.0..=127.0).contains(&dz) {
+                    return None;
+                }
+                let rot = ((p.rot[1].rem_euclid(360.0) * 16.0 / 360.0).round() as u8) % 16;
+                Some((0, rot, dx as i8, dz as i8))
+            })
+            .collect();
+        Some(protocol::map_decorations(id, 0, [center[0], 0, center[1]], 0, &marks))
+    }
+
     /// An empty map used: a new filled map of the area around the player.
     pub(crate) fn create_map(&mut self, sid: SessionId) -> bool {
         let Some(p) = self.players.get(&sid) else { return false };
         let (world, gm, pos) = (p.world, p.gamemode, p.pos);
+        // one new map per second per player (each one is drawn in full and saved)
+        let key = (sid, "minecraft:empty_map".to_string());
+        if self.item_cooldowns.get(&key).is_some_and(|t| self.ticks < *t) {
+            return true;
+        }
+        self.item_cooldowns.insert(key, self.ticks + 20);
         // vanilla grid: areas of 128 blocks centred on multiples of 128 (corner at -64)
         let cell = |v: f32| ((v.floor() as i32 + 64).div_euclid(128)) * 128 - 64;
         let corner = [cell(pos[0]), cell(pos[2])];
@@ -367,7 +394,7 @@ impl Server {
         if !self.load_map(id) {
             return;
         }
-        if let Some(pk) = self.map_packet(id) {
+        for pk in [self.map_packet(id), self.map_marks_packet(id)].into_iter().flatten() {
             if let Some(p) = self.players.get_mut(&sid) {
                 p.out.push(pk);
             }
@@ -378,6 +405,19 @@ impl Server {
     pub(crate) fn tick_maps(&mut self) {
         if self.ticks % 20 != 0 {
             return;
+        }
+        // every minute: saved maps that nobody holds leave memory (they load again when asked)
+        if self.ticks % 1200 == 0 && !self.maps.maps.is_empty() {
+            self.save_maps();
+            let held: std::collections::HashSet<i64> = self
+                .players
+                .values()
+                .filter_map(|p| match durability::item_field(p.inventory.held_item(), "map_uuid") {
+                    Some(Tag::Long(id)) => Some(id),
+                    _ => None,
+                })
+                .collect();
+            self.maps.maps.retain(|id, m| m.dirty || held.contains(id));
         }
         let filled = self.gd.find_item("minecraft:filled_map").map(|i| i.id);
         let holders: Vec<(SessionId, usize, [i32; 2], i64)> = self
@@ -404,6 +444,11 @@ impl Server {
                     if let Some(p) = self.players.get_mut(&sid) {
                         p.out.push(pk);
                     }
+                }
+            }
+            if let Some(pk) = self.map_marks_packet(id) {
+                if let Some(p) = self.players.get_mut(&sid) {
+                    p.out.push(pk);
                 }
             }
         }

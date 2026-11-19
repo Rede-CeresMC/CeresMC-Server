@@ -1172,3 +1172,34 @@ pub fn map_item_data(map_id: i64, dimension: u8, origin: [i32; 3], scale: u8, pi
         }
     })
 }
+
+/// ClientboundMapItemData (0x43) with only the markers of a map: (type, rotation 0-15, x, y)
+/// where x and y run from -128 to 127 across the map (2 per block at scale 0).
+pub fn map_decorations(map_id: i64, dimension: u8, origin: [i32; 3], scale: u8, marks: &[(u8, u8, i8, i8)]) -> Vec<u8> {
+    packet(0x43, |w| {
+        w.varlong(map_id);
+        w.u8(dimension);
+        w.bool(false); // locked
+        for v in origin {
+            w.varint(v);
+        }
+        w.bool(false); // maps included in
+        w.bool(true); // scale
+        w.u8(scale);
+        w.bool(true); // tracked objects (none)
+        w.uvarint(0);
+        w.bool(true); // decorations
+        w.uvarint(marks.len() as u32);
+        for (ty, rot, x, y) in marks {
+            w.u8(*ty);
+            w.u8(*rot);
+            w.u8(*x as u8);
+            w.u8(*y as u8);
+            w.string("");
+            w.u32_be(0xffff_ffff);
+        }
+        for _ in 0..5 {
+            w.bool(false); // width, height, offsets, pixels
+        }
+    })
+}

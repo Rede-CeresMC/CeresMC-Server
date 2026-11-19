@@ -194,6 +194,9 @@ if maps:
     archer.send(uvarint(0x44) + uvarint(map_id << 1 if map_id >= 0 else (-map_id << 1) - 1) + struct.pack("<I", 0))
     archer.pump(3.0, lambda: any(p == 0x43 for p, _ in archer.received[n2:]))
     check(any(p == 0x43 for p, _ in archer.received[n2:]), "MapInfoRequest gets the map image")
+    archer.pump(1.0)
+    small = [d for p, d in archer.received[n2:] if p == 0x43 and len(d) < 1000]
+    check(small, "the map also gets the player markers")
     painted = sum(1 for i in range(len(maps[0]) - 4 * 16384, len(maps[0]), 4) if maps[0][i + 3] != 0)
     check(painted > 1000, f"the map shows the ground ({painted} pixels drawn)")
 

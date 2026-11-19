@@ -63,7 +63,9 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [ ] Barcos e carrinhos de mina (não são mobs com vida), passageiros extras, pulo do cavalo
 - [x] Laço (guia): amarra mob com `minecraft:leashable` ao jogador (LeashHolder, metadado 37), puxa a partir de 6 blocos e arrebenta a 10 soltando o laço; usado numa cerca amarra ali os mobs que o jogador guia (entidade `minecraft:leash_knot` compartilhada, salva em mobs.json), usar a cerca de novo os devolve, usar o mob amarrado o solta, quebrar a cerca solta o laço
 - [x] Mapas: mapa vazio usado no ar vira mapa preenchido (`map_uuid`) da área de 128x128 da grade vanilla em volta do jogador (escala 0); MapInfoRequest (0x44) responde com ClientboundMapItemData (0x43); segurando o mapa dentro da área, a parte num raio de 32 blocos é redesenhada a cada segundo; imagens salvas em `<mundo>/maps/<id>.map`. Cores: paleta base vanilla escolhida pelo nome do bloco (o PNX usa uma tabela baixada no build, que não está no clone), sombreada pela altura do bloco ao norte; água mais escura quanto mais funda. Só chunks carregados aparecem
-- [ ] Mapas: escalas maiores (ampliar), travar, marcadores de jogadores, mapa localizador, mapas em molduras
+- [x] Mapas: marcadores dos jogadores dentro da área (seta branca na direção do olhar), enviados a cada segundo a quem segura o mapa num pacote só de decorações; a imagem só é reenviada quando muda
+- [x] Mapas: no máximo um mapa novo por segundo por jogador (cada um é desenhado inteiro e salvo); mapas salvos que ninguém segura saem da memória a cada minuto
+- [ ] Mapas: escalas maiores (ampliar), travar, mapa localizador, mapas em molduras
 
 ## Lote 3: construção e uso de blocos
 
