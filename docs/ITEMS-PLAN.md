@@ -61,7 +61,7 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Montaria: montar mobs cujo `minecraft:rideable` aceita jogadores (porco selado, cavalo, lavagante selado...), vínculo SetActorLink (41), o mob segue o assento do jogador (o cliente dirige: movimento autoritativo do servidor com previsão do veículo), sinal WASD_CONTROLLED/CAN_POWER_JUMP; descer com Interact StopRiding (3), ao morrer, sair ou teleportar
 - [x] Sela e armadura de cavalo (`minecraft:equippable`); sela do porco pelo `minecraft:interact` do pack; domar cavalo montando (`minecraft:tamemount`: aceita ou derruba)
 - [ ] Barcos e carrinhos de mina (não são mobs com vida), passageiros extras, pulo do cavalo
-- [ ] Laço (guia)
+- [x] Laço (guia): amarra mob com `minecraft:leashable` ao jogador (LeashHolder, metadado 37), puxa a partir de 6 blocos e arrebenta a 10 soltando o laço; usado numa cerca amarra ali os mobs que o jogador guia (entidade `minecraft:leash_knot` compartilhada, salva em mobs.json), usar a cerca de novo os devolve, usar o mob amarrado o solta, quebrar a cerca solta o laço
 - [ ] Mapas (vazio, preenchido)
 
 ## Lote 3: construção e uso de blocos

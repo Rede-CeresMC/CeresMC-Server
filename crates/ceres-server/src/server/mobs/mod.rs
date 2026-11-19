@@ -183,6 +183,8 @@ pub(crate) struct Mob {
     pub riders: Vec<SessionId>,
     /// player holding its lead
     pub leash: Option<SessionId>,
+    /// fence its lead is tied to (a leash knot there)
+    pub knot: Option<[i32; 3]>,
     pub home: Option<[i32; 3]>,
     /// mob effects on this mob: name, ticks left
     pub effects: Vec<(String, u32)>,
@@ -234,6 +236,8 @@ pub(crate) struct MobSys {
     pub player_hurt_by: HashMap<SessionId, (Ent, u64)>,
     /// what a player last attacked, and when
     pub player_attacked: HashMap<SessionId, (Ent, u64)>,
+    /// leash knots on fences: (world, fence) -> knot entity id
+    pub knots: HashMap<(usize, [i32; 3]), i64>,
     /// villagers attacked: (world, where, attacker, tick)
     pub villager_attacks: Vec<(usize, [f32; 3], Ent, u64)>,
     /// block runtime id -> nav class bits
@@ -554,6 +558,8 @@ impl Server {
         }
         if let Some(holder) = m.leash.and_then(|s| self.players.get(&s)) {
             meta.push(Meta::Long(37, holder.entity_id)); // LeashHolder
+        } else if let Some(k) = m.knot.and_then(|f| self.mobsys.knots.get(&(m.world, f))) {
+            meta.push(Meta::Long(37, *k));
         }
         if let Some(n) = &m.name_tag {
             meta.push(Meta::Str(meta_key::NAMETAG, n.clone()));
@@ -595,7 +601,8 @@ impl Server {
     /// The mobs of the player's world (on joining or changing worlds).
     pub(crate) fn send_world_mobs(&mut self, sid: SessionId) {
         let Some(world) = self.players.get(&sid).map(|p| p.world) else { return };
-        let pks: Vec<Vec<u8>> = self.mobs.iter().filter(|m| m.world == world && m.alive()).flat_map(|m| self.spawn_packets(m)).collect();
+        let mut pks: Vec<Vec<u8>> = self.knot_packets(world);
+        pks.extend(self.mobs.iter().filter(|m| m.world == world && m.alive()).flat_map(|m| self.spawn_packets(m)));
         if let Some(p) = self.players.get_mut(&sid) {
             p.out.extend(pks);
         }
@@ -651,6 +658,9 @@ impl Server {
             return;
         }
         self.reindex();
+        if self.ticks % 20 == 0 && !self.mobsys.knots.is_empty() {
+            self.prune_knots();
+        }
         // where the players are standing (for filters such as in_water / has_biome_tag)
         let sids: Vec<(SessionId, usize, [f32; 3])> = self
             .players
@@ -974,6 +984,7 @@ impl Server {
                         "pose": m.pose,
                         "grow": m.grow_ticks,
                         "home": m.home,
+                        "knot": m.knot,
                         "hand": item(&m.equip.hand),
                         "offhand": item(&m.equip.offhand),
                         "armor": m.equip.armor.iter().map(item).collect::<Vec<_>>(),
@@ -1053,6 +1064,10 @@ impl Server {
                     m.pose = v["pose"].as_i64().unwrap_or(0).clamp(0, 12) as i32;
                     m.grow_ticks = v["grow"].as_u64().unwrap_or(0) as u32;
                     m.home = v["home"].as_array().and_then(|a| {
+                        let c: Vec<i32> = a.iter().filter_map(|n| n.as_i64()).map(|n| n as i32).collect();
+                        (c.len() == 3).then(|| [c[0], c[1], c[2]])
+                    });
+                    m.knot = v["knot"].as_array().and_then(|a| {
                         let c: Vec<i32> = a.iter().filter_map(|n| n.as_i64()).map(|n| n as i32).collect();
                         (c.len() == 3).then(|| [c[0], c[1], c[2]])
                     });

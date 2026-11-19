@@ -141,6 +141,17 @@ impl Server {
     /// Lead: used on a leashable mob it ties the mob to the player (LeashHolder metadata 37);
     /// used again by the holder it unties it and gives the lead back. True when handled.
     pub(crate) fn use_lead(&mut self, sid: SessionId, m: &mut Mob, held_name: &str, gm: i32) -> bool {
+        // tied to a fence: anyone unties it and gets the lead
+        if m.knot.take().is_some() {
+            if gm != 1 {
+                if let Some(it) = self.simple_item("minecraft:lead", 1) {
+                    self.give_stack(sid, it);
+                }
+            }
+            self.mob_sound(m, "leashknot.break");
+            self.prune_knots();
+            return true;
+        }
         if m.leash.is_some() {
             if m.leash == Some(sid) {
                 m.leash = None;
@@ -169,16 +180,35 @@ impl Server {
 
     /// A leashed mob is pulled towards its holder; too far, the lead snaps and drops.
     pub(crate) fn leash_tick(&mut self, m: &mut Mob) {
+        if let Some(f) = m.knot {
+            if !self.is_fence(m.world, f) {
+                m.knot = None;
+                self.snap_leash(m);
+                self.prune_knots();
+                return;
+            }
+            self.knot_eid(m.world, f);
+            self.pull_to([f[0] as f32 + 0.5, f[1] as f32, f[2] as f32 + 0.5], m);
+            return;
+        }
         let Some(sid) = m.leash else { return };
         let holder = self.players.get(&sid).filter(|p| p.world == m.world && !p.dead && p.state == State::Spawned).map(|p| [p.pos[0], p.pos[1] - EYE_HEIGHT, p.pos[2]]);
         let Some(h) = holder else {
             self.snap_leash(m);
             return;
         };
+        if !self.pull_to(h, m) {
+            self.snap_leash(m);
+        }
+    }
+
+    /// Pulls a leashed mob towards `h`; false when it is too far and the lead snaps.
+    fn pull_to(&mut self, h: [f32; 3], m: &mut Mob) -> bool {
         let d = filters::dist(h, m.pos);
         if d > 10.0 {
-            self.snap_leash(m);
-        } else if d > 6.0 {
+            return false;
+        }
+        if d > 6.0 {
             let k = 0.05 * (d - 6.0);
             for i in 0..3 {
                 m.motion[i] += (h[i] - m.pos[i]) / d * k;
@@ -186,13 +216,107 @@ impl Server {
             m.ctl.dest = Some(h);
             m.ctl.speed = 1.2;
         }
+        true
     }
 
     fn snap_leash(&mut self, m: &mut Mob) {
         m.leash = None;
+        if m.knot.take().is_some() {
+            self.prune_knots();
+        }
         if let Some(it) = self.simple_item("minecraft:lead", 1) {
             self.drop_at(m.world, [m.pos[0], m.pos[1] + 0.5, m.pos[2]], it);
         }
         self.mob_sound(m, "leashknot.break");
+    }
+}
+
+/// Leash knots: a player holding mobs on leads uses a fence and ties them to it (a
+/// `minecraft:leash_knot` entity on the fence, shared by every mob tied there). Using the fence
+/// again with nothing tied to the player takes the leads back; breaking the fence drops them.
+impl Server {
+    fn is_fence(&mut self, world: usize, pos: [i32; 3]) -> bool {
+        let Some(w) = self.worlds.worlds.get_mut(world) else { return false };
+        if !w.is_loaded(pos) {
+            return true; // unloaded: keep it as it is
+        }
+        let id = w.get_block(pos, &self.gd);
+        self.gd.block_name(id).ends_with("_fence")
+    }
+
+    fn knot_pos(f: [i32; 3]) -> [f32; 3] {
+        [f[0] as f32 + 0.5, f[1] as f32 + 0.25, f[2] as f32 + 0.5]
+    }
+
+    /// The knot on a fence, made (and shown) when missing.
+    fn knot_eid(&mut self, world: usize, f: [i32; 3]) -> i64 {
+        if let Some(e) = self.mobsys.knots.get(&(world, f)) {
+            return *e;
+        }
+        let eid = self.next_entity_id;
+        self.next_entity_id += 1;
+        self.mobsys.knots.insert((world, f), eid);
+        let pk = protocol::add_entity(eid, "minecraft:leash_knot", Self::knot_pos(f), [0.0; 3], 0.0, 0.0, 0.0, &[], &[]);
+        self.broadcast(&pk, |_, q| q.world == world);
+        self.broadcast(&protocol::level_sound_event("leashknot.place", Self::knot_pos(f), -1), |_, q| q.world == world);
+        eid
+    }
+
+    /// Knots that no mob is tied to any more go away.
+    pub(crate) fn prune_knots(&mut self) {
+        let used: std::collections::HashSet<(usize, [i32; 3])> = self.mobs.iter().filter(|m| m.alive()).filter_map(|m| m.knot.map(|f| (m.world, f))).collect();
+        let gone: Vec<((usize, [i32; 3]), i64)> = self.mobsys.knots.iter().filter(|(k, _)| !used.contains(k)).map(|(k, e)| (*k, *e)).collect();
+        for ((world, f), eid) in gone {
+            self.mobsys.knots.remove(&(world, f));
+            self.broadcast(&protocol::remove_actor(eid), |_, q| q.world == world);
+        }
+    }
+
+    /// The knots of a world (for a player joining it).
+    pub(crate) fn knot_packets(&self, world: usize) -> Vec<Vec<u8>> {
+        self.mobsys
+            .knots
+            .iter()
+            .filter(|((w, _), _)| *w == world)
+            .map(|((_, f), eid)| protocol::add_entity(*eid, "minecraft:leash_knot", Self::knot_pos(*f), [0.0; 3], 0.0, 0.0, 0.0, &[], &[]))
+            .collect()
+    }
+
+    /// A player uses a fence: ties the mobs they lead to it, or takes back the ones tied there.
+    /// True when something happened.
+    pub(crate) fn use_fence_leash(&mut self, sid: SessionId, f: [i32; 3]) -> bool {
+        let Some(p) = self.players.get(&sid) else { return false };
+        let (world, feet) = (p.world, [p.pos[0], p.pos[1] - EYE_HEIGHT, p.pos[2]]);
+        if !self.is_fence(world, f) {
+            return false;
+        }
+        let at = Self::knot_pos(f);
+        let led: Vec<usize> = (0..self.mobs.len()).filter(|&i| {
+            let m = &self.mobs[i];
+            m.alive() && m.world == world && m.leash == Some(sid) && filters::dist(m.pos, at) <= 7.0
+        }).collect();
+        if !led.is_empty() {
+            for i in led {
+                self.mobs[i].leash = None;
+                self.mobs[i].knot = Some(f);
+            }
+            self.knot_eid(world, f);
+            self.swing_arm(sid);
+            return true;
+        }
+        let tied: Vec<usize> = (0..self.mobs.len()).filter(|&i| {
+            let m = &self.mobs[i];
+            m.alive() && m.world == world && m.knot == Some(f) && filters::dist(m.pos, feet) <= 10.0
+        }).collect();
+        if tied.is_empty() {
+            return false;
+        }
+        for i in tied {
+            self.mobs[i].knot = None;
+            self.mobs[i].leash = Some(sid);
+        }
+        self.prune_knots();
+        self.swing_arm(sid);
+        true
     }
 }

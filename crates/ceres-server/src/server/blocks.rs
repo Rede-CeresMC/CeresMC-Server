@@ -251,6 +251,12 @@ impl Server {
             }
             return;
         }
+        if !sneaking && self.use_fence_leash(sid, clicked) {
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
         if !sneaking && self.use_on_decoration(sid, clicked) {
             if let Some(t) = side(clicked, face) {
                 self.resync(sid, t);
