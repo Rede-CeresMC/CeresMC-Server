@@ -889,11 +889,24 @@ impl Server {
         if name == "lightning_bolt" || name == "minecraft:lightning_bolt" {
             let commands::Sender::Player(sid) = sender else { return self.reply(sender, "§cUse /summon como jogador.") };
             let Some(p) = self.players.get(&sid) else { return };
-            let (world, mut at) = (p.world, [p.pos[0], p.pos[1] - EYE_HEIGHT, p.pos[2]]);
+            let (world, feet) = (p.world, [p.pos[0], p.pos[1] - EYE_HEIGHT, p.pos[2]]);
+            let mut at = feet;
             if args.len() >= 4 {
-                if let (Ok(x), Ok(y), Ok(z)) = (args[1].parse::<f32>(), args[2].parse::<f32>(), args[3].parse::<f32>()) {
-                    at = [x, y, z];
+                let c = |s: &str, base: f32| -> Option<f32> {
+                    match s.strip_prefix('~') {
+                        Some("") => Some(base),
+                        Some(rest) => rest.parse::<f32>().ok().map(|v| base + v),
+                        None => s.parse().ok(),
+                    }
+                };
+                match (c(args[1], feet[0]), c(args[2], feet[1]), c(args[3], feet[2])) {
+                    (Some(x), Some(y), Some(z)) if [x, y, z].iter().all(|v| v.is_finite() && v.abs() < 30_000_000.0) => at = [x, y, z],
+                    _ => return self.reply(sender, "§cUso: /summon lightning_bolt [x y z]"),
                 }
+            }
+            let block = [at[0].floor() as i32, at[1].floor() as i32, at[2].floor() as i32];
+            if !self.worlds.worlds[world].is_loaded(block) {
+                return self.reply(sender, "§cEsse lugar não está carregado.");
             }
             self.strike_lightning(world, at);
             return self.reply(sender, "§aminecraft:lightning_bolt criado.");

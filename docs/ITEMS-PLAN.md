@@ -1,7 +1,7 @@
 # Itens: plano e progresso
 
 Objetivo: cada item do jogo com o comportamento vanilla (usar, consumir, atacar, minerar, construir),
-item por item. Referências estudadas: df-mc/dragonfly (MIT, `server/item`, `server/block`),
+item por item. Referências estudadas: PowerNukkitX (LGPL-3.0, referência principal a partir de agora), df-mc/dragonfly (MIT, `server/item`, `server/block`),
 PocketMine-MP (LGPL, só leitura), Mojang bedrock-samples (behavior pack em `data/behavior/`),
 bedrock-protocol-docs. Clones locais em `c:\tmp\refs`.
 
@@ -22,7 +22,8 @@ Testes de bot: `tools/weapons_test.py`, `tools/projectiles_test.py`, `tools/mobs
 - [x] Raios (`lightning_bolt`): 5 de dano e fogo a até 3 blocos, fogo no chão (com `mob-griefing`); nos mobs a causa `lightning` aciona os sensores do pack (porco vira piglin zumbi, creeper carregado, aldeão vira bruxa...). Raios naturais nas tempestades perto dos jogadores; `/summon lightning_bolt`
 - [x] Canalização: tridente que acerta algo a céu aberto numa tempestade chama um raio
 - [x] Apelidos de identificador que os arquivos do pack ainda usam (`pig_zombie`, `evoker`...)
-- [ ] Ataque de investida da lança e encantamento Estocada
+- [x] Carga da lança (lógica do PowerNukkitX `ItemSpear.whileUsing`, LGPL-3.0): segurando o uso e movendo-se a 0,13 bloco/tick ou mais, a cada 5 ticks acerta o mais próximo à frente com 1,5x o dano + 3 por bloco de velocidade (sem teste de bot)
+- [ ] Golpe com Estocada (Lunge, encantamento 41: impulso para a frente gastando fome)
 
 ## Lote 2: ferramentas (em andamento)
 
