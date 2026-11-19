@@ -530,6 +530,51 @@ check(boats and any(p == 0x0e for p, _ in other.received[n2:]), "hitting the boa
 other.move(X + 3, EYE, Z)
 other.pump(0.3)
 
+# a minecart on a straight rail line moves when its rider presses forward
+def forward(cl):
+    x, y, z = cl.pos
+    body = struct.pack("<ff", 0, 0) + struct.pack("<fff", x, y, z) + struct.pack("<fff", 0, 1, 0)
+    body += uvarint(0) + uvarint(1) + uvarint(0) + svarint(0) + struct.pack("<ff", 0, 0)
+    body += uvarint(1) + struct.pack("<fff", 0, 0, 0)
+    body += bytes(3)
+    body += bytes(2) + struct.pack("<ff", 0, 0) + struct.pack("<fff", 0, 0, 0) + struct.pack("<ff", 0, 0)
+    cl.send(uvarint(0x90) + body)
+
+RX = int(X + 510)
+other.move(RX + 1.5, EYE, Z)
+other.pump(0.3)
+command(other, "/clear")
+n2 = len(other.received)
+command(other, "/give @s rail 8")
+other.pump(3.0, lambda: any(p == 0x32 for p, _ in other.received[n2:]))
+for dz in range(8):
+    other.place_block((RX, G - 1, int(Z) + dz), 1, block_id("minecraft:rail"))
+    other.pump(0.2)
+command(other, "/clear")
+n2 = len(other.received)
+command(other, "/give @s minecart 1")
+other.pump(3.0, lambda: any(p == 0x32 for p, _ in other.received[n2:]))
+n2 = len(other.received)
+other.place_block((RX, G, int(Z)), 1, 0)
+both(other, c, 1.0)
+carts = mob_adds(other, n2, "minecraft:minecart")
+check(carts, "a minecart goes on a rail")
+command(other, "/clear")
+if carts:
+    hit(other, carts[0], 0)
+    both(other, c, 0.5)
+    n2 = len(other.received)
+    for _ in range(10):
+        forward(other)
+        both(other, c, 0.1)
+    both(other, c, 1.0)
+    zs = [m[2] for m in moves(other, n2, carts[0])]
+    check(zs and max(zs) - min(zs) > 1.0, f"the minecart rolls along the rails ({zs and round(max(zs) - min(zs), 2)} blocks)")
+    other.send(uvarint(0x21) + bytes([3]) + uvarint(carts[0]))
+    both(other, c, 0.5)
+other.move(X + 3, EYE, Z)
+other.pump(0.3)
+
 # two cows fed with wheat make a baby
 c.move(X + 80, EYE, Z)
 c.pump(0.3)

@@ -650,7 +650,8 @@ impl Server {
             let flip = if m.t.dragon { 180.0 } else { 0.0 };
             let pk = protocol::move_entity(m.entity_id, m.pos, m.pitch, m.yaw + flip, m.head_yaw + flip, m.on_ground);
             // the rider's client moves its vehicle itself
-            self.broadcast(&pk, |s, q| q.world == m.world && !m.riders.contains(&s));
+            let rail = m.comps.contains_key("minecraft:rail_movement");
+            self.broadcast(&pk, |s, q| q.world == m.world && (rail || !m.riders.contains(&s)));
         }
     }
 
@@ -761,6 +762,13 @@ impl Server {
         }
         self.mob_sensors(m);
         if m.gone || m.death_ticks.is_some() {
+            return;
+        }
+        // carts: the server moves them along the rails, ridden or not
+        if m.comps.contains_key("minecraft:rail_movement") {
+            m.riders.retain(|sid| self.players.get(sid).is_some_and(|p| p.riding == Some(m.entity_id) && !p.dead && p.world == m.world));
+            self.rail_tick(m);
+            self.sync_mob(m);
             return;
         }
         if self.ridden_tick(m) {

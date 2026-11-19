@@ -136,6 +136,8 @@ pub(crate) struct Player {
     noclip: bool,
     /// entity id of the mob this player rides
     riding: Option<i64>,
+    /// forward input of the last PlayerAuthInput (-1 to 1; drives carts)
+    move_forward: f32,
     /// ticks the shield stays disabled (hit by an axe)
     shield_cooldown: u32,
     /// ticks until a raised shield makes a sound and wears again
@@ -362,6 +364,7 @@ impl Server {
                             punching: None,
                             noclip: false,
                             riding: None,
+                            move_forward: 0.0,
                             shield_cooldown: 0,
                             shield_block_cooldown: 0,
                             window_counter: 0,

@@ -213,10 +213,13 @@ impl Server {
         let yaw = r.f32_le()?;
         let pos = [r.f32_le()?, r.f32_le()?, r.f32_le()?];
         let _move_x = r.f32_le()?;
-        let _move_z = r.f32_le()?;
+        let move_z = r.f32_le()?;
         let head_yaw = r.f32_le()?;
         if !pos.iter().chain([pitch, yaw, head_yaw].iter()).all(|v| v.is_finite()) {
             return Ok(());
+        }
+        if let Some(p) = self.players.get_mut(&sid) {
+            p.move_forward = if move_z.is_finite() { move_z.clamp(-1.0, 1.0) } else { 0.0 };
         }
         // the world border: nothing beyond 30 million blocks (or far above/below the world)
         if pos[0].abs() > 30_000_000.0 || pos[2].abs() > 30_000_000.0 || pos[1].abs() > 20_000.0 {
