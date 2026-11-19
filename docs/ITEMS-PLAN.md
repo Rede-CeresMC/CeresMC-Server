@@ -77,7 +77,7 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Carga de fogo (acende fogo), chifre de cabra (som pela variante, recarga de 7 s), carga de vento (projétil do pack com rajada; serve para impulso)
 - [x] Vara de pesca: boia com linha, espera de 5-30 s (Isca reduz), fisgada com bolhas, loot de pesca do pack com Sorte do Mar (qualidade das entradas), XP, puxar mob/jogador fisgado, durabilidade
 - [x] Pesca na selva: com a boia num bioma com a tag `jungle` usa `jungle_fishing.json`
-- [ ] Peixe nadando até a boia (efeito visual)
+- [x] Peixe nadando até a boia (como o `EntityFishingHook` do PowerNukkitX): 2 s antes de morder, um peixe aparece a 1-2,2 blocos e se aproxima 10% por tique deixando rastro na água (LevelEvent 0x4000 + partícula 25, water wake); na mordida, 5 bolhas (partícula 1) em volta da boia. Sem teste de bot (precisa de água e de esperar a mordida); conferir no jogo
 - [x] Pincel em areia/cascalho suspeitos (como o `BlockBrushable` do PowerNukkitX): cada pincelada (no máximo uma a cada 4 ticks) sobe `brushed_progress`; na quarta o bloco solta o item guardado (`item` da entidade de bloco) ou um sorteio da sua `LootTable`, vira areia/cascalho e o pincel gasta 1 (teste de bot)
 - [ ] Arqueologia: o pack só traz as loot tables das ruínas da trilha (`trail_ruins_brushable_block_common/rare`); faltam as do deserto, poço do deserto e ruínas oceânicas, e a geração dos blocos suspeitos nas estruturas
 - [x] Lança (estocada e carga) passa pelas mesmas travas do ataque corpo a corpo: mobs via `attack_mob` (alcance, `cannot_be_attacked`), jogadores só com PvP, plugins ("attack") e escudo

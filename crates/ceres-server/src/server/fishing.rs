@@ -12,6 +12,12 @@ const ENCHANT_LUCK_OF_THE_SEA: i16 = 23;
 const ENCHANT_LURE: i16 = 24;
 const FISHHOOK_BUBBLE: u8 = 11;
 const FISHHOOK_HOOKTIME: u8 = 13;
+/// LevelEvent "legacy particle" mask and the particle ids (gophertunnel `ParticleType*`)
+const PARTICLE: i32 = 0x4000;
+const PARTICLE_BUBBLE: i32 = 1;
+const PARTICLE_WATER_WAKE: i32 = 25;
+/// ticks before the bite when the fish shows up and swims to the bobber
+const ATTRACT: u32 = 40;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 enum State {
@@ -32,6 +38,8 @@ pub(crate) struct Bobber {
     wait: u32,
     /// ticks a fish stays on the hook
     bite: u32,
+    /// the fish swimming to the bobber before it bites (its wake shows on the water)
+    fish: Option<[f32; 3]>,
     age: u32,
 }
 
@@ -66,7 +74,7 @@ impl Server {
         self.broadcast(&protocol::level_sound_event("throw", start, -1), |_, q| q.world == world);
         self.swing_arm(sid);
         let lure = blocks::enchant_level(&rod, ENCHANT_LURE) as u32;
-        self.bobbers.push(Bobber { entity_id: bid, owner: sid, world, pos: start, motion, state: State::Flying, wait: Self::bite_wait(lure), bite: 0, age: 0 });
+        self.bobbers.push(Bobber { entity_id: bid, owner: sid, world, pos: start, motion, state: State::Flying, wait: Self::bite_wait(lure), bite: 0, fish: None, age: 0 });
         true
     }
 
@@ -203,10 +211,29 @@ impl Server {
                         }
                     } else if wait > 0 {
                         self.bobbers[i].wait -= 1;
+                        // as PowerNukkitX's EntityFishingHook: a fish appears 1-2.2 blocks away and
+                        // closes 10 % of the distance each tick, leaving a wake
+                        if wait == ATTRACT {
+                            let r = || (1.0 + rand::random::<f32>() * 1.2) * if rand::random::<bool>() { -1.0 } else { 1.0 };
+                            self.bobbers[i].fish = Some([pos[0] + r(), pos[1], pos[2] + r()]);
+                        }
+                        if let Some(f) = self.bobbers[i].fish.as_mut() {
+                            f[0] += (pos[0] - f[0]) * 0.1;
+                            f[2] += (pos[2] - f[2]) * 0.1;
+                            let at = [f[0], pos[1] + 0.1, f[2]];
+                            if rand::random::<u32>() % 100 < 85 {
+                                self.broadcast(&protocol::level_event(PARTICLE | PARTICLE_WATER_WAKE, at, 0), |_, q| q.world == world);
+                            }
+                        }
                         if wait == 21 {
                             self.broadcast(&protocol::actor_event(eid, FISHHOOK_BUBBLE, 0), |_, q| q.world == world);
                         }
                         if wait == 1 {
+                            self.bobbers[i].fish = None;
+                            for _ in 0..5 {
+                                let at = [pos[0] + rand::random::<f32>() * 0.5 - 0.25, pos[1] + 0.1, pos[2] + rand::random::<f32>() * 0.5 - 0.25];
+                                self.broadcast(&protocol::level_event(PARTICLE | PARTICLE_BUBBLE, at, 0), |_, q| q.world == world);
+                            }
                             self.bobbers[i].bite = 20 + rand::random::<u32>() % 20;
                             new_pos[1] -= 0.2; // the bobber dips
                             self.broadcast(&protocol::actor_event(eid, FISHHOOK_HOOKTIME, 0), |_, q| q.world == world);
