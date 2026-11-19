@@ -129,7 +129,9 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Sementes restantes: melancia, abóbora, flor-tocha e vagem de jarro na terra arada; fungo do Nether na areia das almas; frutas silvestres na terra/grama; cacau na lateral do tronco da selva (direção como no dragonfly `cocoa_bean.go`)
 - [x] Velas e picles do mar empilham até 4 no mesmo bloco; isqueiro/carga de fogo acende velas, bolo com vela e fogueiras; pá apaga fogueira; mão vazia apaga velas; vela em bolo inteiro vira bolo com vela da mesma cor
 - [x] Bolo: comer fatia a fatia (2 de fome, 0,4 de saturação, 7 fatias)
-- [ ] Alga e picles do mar na água, bagas brilhantes (cipó de caverna), cogumelos com regra de luz
+- [x] Alga e ervas marinhas postas na água guardam a água na segunda camada (como o PowerNukkitX); picles do mar fora da água ficam mortos (`dead_bit`, sem luz) e acendem/apagam quando um balde põe ou tira a água (teste de bot: picles fora da água morto)
+- [x] Bagas brilhantes plantam cipó de caverna embaixo de um bloco sólido ou de outro cipó; a ponta cresce para baixo (1 em 10 por tique aleatório, até idade 25) e a nova ponta tem bagas 11% das vezes (regra da wiki; o PNX tem uma regra própria); cipó sem apoio em cima cai, até o fim da coluna (teste de bot: plantar e cair)
+- [x] Cogumelos: só ficam com luz até 12 em bloco sólido (qualquer luz em micélio, podzol e nílio; luz é a estimativa do `light_at`) e se espalham (1 em 25 por tique, até 5 iguais num 9x3x9)
 - [x] Livro e pena: páginas guardadas no NBT (pacote BookEdit 97: trocar, adicionar, apagar, trocar de lugar; até 50 páginas de 256 caracteres) e assinar vira livro escrito com título, autor e geração 0
 - [x] Molduras (e brilhantes): usar coloca o item da mão, usar de novo gira (8 posições), bater tira o item, quebrar solta o item (lógica do dragonfly `item_frame.go`, sons por LevelEvent 1040/1043/1044)
 - [x] Púlpito: recebe livro e pena ou livro escrito, virar páginas (LecternUpdate 125) é guardado para todos, bater devolve o livro, quebrar também

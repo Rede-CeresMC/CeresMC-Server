@@ -108,6 +108,16 @@ impl Server {
                     self.grow_up(world, pos, block, max, false);
                 }
             }
+            "minecraft:cave_vines" | "minecraft:cave_vines_head_with_berries" | "minecraft:cave_vines_body_with_berries" => {
+                if roll(10) {
+                    self.grow_cave_vine(world, pos, block, name);
+                }
+            }
+            "minecraft:brown_mushroom" | "minecraft:red_mushroom" => {
+                if roll(25) {
+                    self.spread_mushroom(world, pos, block, name);
+                }
+            }
             "minecraft:kelp" => {
                 if roll(7) && state(&self.gd, block, "kelp_age").unwrap_or(0) < 25 {
                     self.grow_up(world, pos, block, 26, true);
@@ -339,6 +349,11 @@ impl Server {
                 face == 1 && matches!(ground.as_str(), "minecraft:grass_block" | "minecraft:dirt" | "minecraft:podzol" | "minecraft:coarse_dirt" | "minecraft:farmland" | "minecraft:moss_block"),
                 vec![],
             ),
+            "minecraft:glow_berries" => {
+                let cid = self.worlds.worlds[world].get_block(clicked, &self.gd);
+                let hold = self.gd.is_solid(cid) || ground.starts_with("minecraft:cave_vines");
+                ("minecraft:cave_vines", face == 0 && hold, vec![])
+            }
             "minecraft:cocoa_beans" => {
                 let jungle = matches!(ground.as_str(), "minecraft:jungle_log" | "minecraft:jungle_wood" | "minecraft:stripped_jungle_log" | "minecraft:stripped_jungle_wood");
                 // the bean faces the log: dragonfly's horizontalDirection of the opposite face
@@ -355,7 +370,7 @@ impl Server {
         };
         if !ok || self.name_at(world, target) != "minecraft:air" {
             // sweet berries in the air are still food: let eating handle the click
-            return item != "minecraft:sweet_berries" && ok;
+            return item != "minecraft:sweet_berries" && item != "minecraft:glow_berries" && ok;
         }
         let Some(mut id) = self.gd.default_block(plant) else { return true };
         if !states.is_empty() {
@@ -630,5 +645,52 @@ impl Server {
         let (at, bits) = spots[rand::random::<u32>() as usize % spots.len()];
         let Some(id) = self.gd.with_states(lichen, &[("multi_face_direction_bits", Tag::Int(bits))]) else { return false };
         self.change_block(world, at, id)
+    }
+}
+
+impl Server {
+    /// The tip of cave vines grows one block down (age below 25); the new tip has berries 11 %
+    /// of the time (minecraft.wiki "Glow Berries", growth).
+    fn grow_cave_vine(&mut self, world: usize, pos: [i32; 3], block: i32, name: &str) {
+        let below = [pos[0], pos[1] - 1, pos[2]];
+        if pos[1] - 1 < ceres_world::MIN_Y || self.name_at(world, below) != "minecraft:air" {
+            return;
+        }
+        let age = state(&self.gd, block, "growing_plant_age").unwrap_or(0);
+        if age >= 25 {
+            return;
+        }
+        let tip = if rand::random::<u32>() % 100 < 11 { "minecraft:cave_vines_head_with_berries" } else { "minecraft:cave_vines" };
+        let Some(new) = self.gd.with_name(block, tip).and_then(|b| self.gd.with_states(b, &[("growing_plant_age", Tag::Int(age as i32 + 1))])) else { return };
+        // the old tip with berries becomes a body with berries
+        if name == "minecraft:cave_vines_head_with_berries" {
+            if let Some(body) = self.gd.with_name(block, "minecraft:cave_vines_body_with_berries") {
+                self.change_block(world, pos, body);
+            }
+        }
+        self.change_block(world, below, new);
+    }
+
+    /// A mushroom spreads to a random spot near it while fewer than 5 of its kind are around
+    /// (9x3x9), where a mushroom could stand.
+    fn spread_mushroom(&mut self, world: usize, pos: [i32; 3], block: i32, name: &str) {
+        let mut near = 0;
+        for dx in -4..=4 {
+            for dy in -1..=1 {
+                for dz in -4..=4 {
+                    if self.name_at(world, [pos[0] + dx, pos[1] + dy, pos[2] + dz]) == name {
+                        near += 1;
+                        if near >= 5 {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        let r = |n: u32| (rand::random::<u32>() % n) as i32;
+        let to = [pos[0] + r(3) - 1, pos[1] + r(2) - r(2), pos[2] + r(3) - 1];
+        if self.worlds.worlds[world].is_loaded(to) && self.name_at(world, to) == "minecraft:air" && self.can_stay(world, to, block, None, false) {
+            self.change_block(world, to, block);
+        }
     }
 }

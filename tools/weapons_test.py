@@ -298,6 +298,49 @@ last = {pos: bid for pos, bid in update_blocks(archer)}
 check(F1 in last and F2 in last and last[F1] != plain and last[F2] != plain, "two fences side by side connect (connection states)")
 archer.break_block(F1)
 archer.break_block(F2)
+
+# glow berries under an overhang plant cave vines; breaking the overhang drops the vines;
+# a sea pickle placed out of water is dead (not the default, lit state)
+command(archer, "/clear")
+give(archer, "stone 3")
+STONE = block_id("minecraft:stone")
+n2 = len(archer.received)
+archer.place_block((int(X) + 3, 69, int(Z) + 1), 1, STONE)
+pump_both(0.4)
+landed = [q for q, b in update_blocks(archer)[-50:] if b == STONE and q[0] == int(X) + 3 and q[2] == int(Z) + 1]
+y0 = landed[-1][1] if landed else 70
+P1, P2, OV = (int(X) + 3, y0, int(Z) + 1), (int(X) + 3, y0 + 1, int(Z) + 1), (int(X) + 4, y0 + 1, int(Z) + 1)
+archer.place_block(P1, 1, STONE)
+pump_both(0.3)
+archer.place_block(P2, 5, STONE)
+pump_both(0.4)
+command(archer, "/clear")
+give(archer, "glow_berries 1")
+VINE = (OV[0], OV[1] - 1, OV[2])
+archer.place_block(OV, 0, 0)
+pump_both(0.6)
+last = {pos: bid for pos, bid in update_blocks(archer)}
+check(OV in last and last[OV] == STONE, "an overhanging stone is placed")
+check(VINE in last and last[VINE] == block_id("minecraft:cave_vines"), "glow berries plant cave vines under a block")
+command(archer, "/gamemode creative")
+archer.break_block(OV)
+pump_both(0.6)
+last = {pos: bid for pos, bid in update_blocks(archer)}
+check(last.get(VINE) == block_id("minecraft:air"), "the cave vines fall when the block above goes")
+command(archer, "/gamemode survival")
+command(archer, "/clear")
+give(archer, "sea_pickle 1")
+PK = (int(X) + 5, 70, int(Z) + 1)
+archer.place_block((PK[0], 69, PK[2]), 1, block_id("minecraft:sea_pickle"))
+pump_both(0.5)
+last = {pos: bid for pos, bid in update_blocks(archer)}
+col = [(q, b) for q, b in update_blocks(archer)[-30:] if q[0] == PK[0] and q[2] == PK[2]]
+check(col and col[-1][1] not in (block_id("minecraft:sea_pickle"), block_id("minecraft:air")), "a sea pickle placed out of water is dead")
+if col:
+    PK = col[-1][0]
+for q in (P1, P2, PK):
+    archer.break_block(q)
+pump_both(0.3)
 pump_both(0.4)
 
 # map: an empty map used in the air becomes a filled map and its image is sent (0x43);

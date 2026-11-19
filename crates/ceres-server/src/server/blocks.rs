@@ -533,6 +533,12 @@ impl Server {
             (n == "minecraft:water" || n == "minecraft:flowing_water")
                 && self.gd.block_states.get(&old).and_then(|s| s.states.get("liquid_depth")).and_then(|t| t.as_i64()).unwrap_or(0) == 0
         };
+        // a sea pickle out of water is dead (gives no light), as PowerNukkitX's BlockSeaPickle
+        let final_block = if self.gd.block_name(final_block) == "minecraft:sea_pickle" {
+            self.gd.with_states(final_block, &[("dead_bit", Tag::Byte((!water_here) as i8))]).unwrap_or(final_block)
+        } else {
+            final_block
+        };
         if !self.change_block(world, target, final_block) {
             self.resync(sid, target);
             return;
@@ -810,7 +816,7 @@ pub(crate) fn enchant_level(item: &ItemDesc, id: i16) -> u8 {
 /// Blocks that hold water in Bedrock when placed in it (not full cubes).
 pub(crate) fn waterloggable(name: &str) -> bool {
     let n = name.strip_prefix("minecraft:").unwrap_or(name);
-    ["_slab", "_stairs", "fence", "_wall", "glass_pane", "iron_bars", "chest", "_sign", "ladder", "lantern", "chain", "trapdoor", "leaves", "coral", "candle", "sea_pickle", "campfire", "lightning_rod", "grate", "dripleaf", "conduit", "_head", "_skull", "_bars", "scaffolding", "pointed_dripstone", "amethyst_cluster", "_bud", "heavy_core", "decorated_pot", "hanging_roots", "mangrove_roots", "glow_lichen", "sculk_vein", "copper_golem_statue", "shelf"]
+    ["_slab", "_stairs", "fence", "_wall", "glass_pane", "iron_bars", "chest", "_sign", "ladder", "lantern", "chain", "trapdoor", "leaves", "coral", "candle", "sea_pickle", "campfire", "lightning_rod", "grate", "dripleaf", "conduit", "_head", "_skull", "_bars", "scaffolding", "pointed_dripstone", "amethyst_cluster", "_bud", "heavy_core", "decorated_pot", "hanging_roots", "mangrove_roots", "glow_lichen", "sculk_vein", "copper_golem_statue", "shelf", "kelp", "seagrass"]
         .iter()
         .any(|k| n.contains(k))
 }
@@ -822,6 +828,15 @@ impl Server {
         if self.worlds.worlds[world].set_block_layer(pos, 1, id, &self.gd) {
             self.broadcast(&protocol::update_block_layer(pos, id, 1), |_, q| q.world == world);
             self.queue_liquid(world, pos);
+        }
+        // a sea pickle lights up in water and dies out of it
+        let block = self.worlds.worlds[world].get_block(pos, &self.gd);
+        if self.gd.block_name(block) == "minecraft:sea_pickle" {
+            if let Some(n) = self.gd.with_states(block, &[("dead_bit", Tag::Byte((!water) as i8))]) {
+                if n != block {
+                    self.change_block(world, pos, n);
+                }
+            }
         }
     }
 

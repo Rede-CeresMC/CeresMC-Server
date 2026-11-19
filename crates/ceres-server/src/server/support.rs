@@ -29,6 +29,10 @@ enum Need {
     Kelp,
     Seagrass,
     SolidBelow,
+    /// light 12 or less on a solid block, any light on mycelium, podzol or nylium
+    Mushroom,
+    /// a solid block or more of the vine above
+    Hanging,
     /// against the block that was clicked
     Attached,
 }
@@ -44,7 +48,9 @@ fn need_of(name: &str) -> Option<Need> {
         "kelp" => Need::Kelp,
         "seagrass" => Need::Seagrass,
         "deadbush" | "dead_bush" => Need::DeadBushSoil,
-        "brown_mushroom" | "red_mushroom" | "crimson_fungus" | "warped_fungus" | "crimson_roots" | "warped_roots" | "nether_sprouts" => Need::AnySolid,
+        "brown_mushroom" | "red_mushroom" => Need::Mushroom,
+        "cave_vines" | "cave_vines_body_with_berries" | "cave_vines_head_with_berries" => Need::Hanging,
+        "crimson_fungus" | "warped_fungus" | "crimson_roots" | "warped_roots" | "nether_sprouts" => Need::AnySolid,
         "short_grass" | "tall_grass" | "fern" | "large_fern" | "sweet_berry_bush" | "dandelion" | "poppy" | "blue_orchid" | "allium" | "azure_bluet"
         | "oxeye_daisy" | "cornflower" | "lily_of_the_valley" | "wither_rose" | "sunflower" | "lilac" | "rose_bush" | "peony" | "torchflower"
         | "pitcher_plant" | "pink_petals" | "wildflowers" | "bush" | "firefly_bush" | "short_dry_grass" | "tall_dry_grass" | "leaf_litter"
@@ -110,6 +116,14 @@ impl Server {
             Need::Kelp => in_water && (bn == name || bn == "minecraft:kelp" || self.solid_block(world, below)),
             Need::Seagrass => in_water && self.solid_block(world, below),
             Need::SolidBelow => self.solid_block(world, below),
+            Need::Mushroom => {
+                matches!(bn.as_str(), "minecraft:mycelium" | "minecraft:podzol" | "minecraft:crimson_nylium" | "minecraft:warped_nylium")
+                    || (self.solid_block(world, below) && self.light_at(world, pos) <= 12)
+            }
+            Need::Hanging => {
+                let above = [pos[0], pos[1] + 1, pos[2]];
+                self.solid_block(world, above) || self.block_name_at(world, above).starts_with("minecraft:cave_vines")
+            }
             Need::Attached => against.is_none_or(|a| self.solid_block(world, a)),
         }
     }
@@ -119,6 +133,24 @@ impl Server {
     /// a `block_break` by the player who broke the support, so plugins protecting an area stop
     /// the cascade where they deny it.
     pub(crate) fn support_update(&mut self, sid: SessionId, world: usize, pos: [i32; 3]) {
+        // hanging plants below lose their hold all the way down
+        let mut at = [pos[0], pos[1] - 1, pos[2]];
+        for _ in 0..32 {
+            if at[1] < ceres_world::MIN_Y {
+                break;
+            }
+            let id = self.worlds.worlds[world].get_block(at, &self.gd);
+            let name = self.gd.block_name(id).to_string();
+            if need_of(&name) != Some(Need::Hanging) || self.can_stay(world, at, id, None, false) {
+                break;
+            }
+            let ev = self.block_event_json("block_break", sid, world, at, id);
+            if !self.plugins_allow(ev) {
+                break;
+            }
+            self.pop_block(world, at, id, &name);
+            at[1] -= 1;
+        }
         let mut at = [pos[0], pos[1] + 1, pos[2]];
         for _ in 0..32 {
             if at[1] > ceres_world::MAX_Y {
