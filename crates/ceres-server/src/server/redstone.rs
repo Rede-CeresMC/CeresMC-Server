@@ -57,6 +57,21 @@ fn short(name: &str) -> &str {
     name.strip_prefix("minecraft:").unwrap_or(name)
 }
 
+fn is_repeater(n: &str) -> bool {
+    matches!(short(n), "unpowered_repeater" | "powered_repeater")
+}
+
+/// A repeater's facing (towards its input, PowerNukkitX's `getFacing`): north 2, south 3,
+/// west 4, east 5. Power goes in from that side and out of the opposite one.
+fn cardinal(dir: &str) -> usize {
+    match dir {
+        "north" => 2,
+        "south" => 3,
+        "west" => 4,
+        _ => 5,
+    }
+}
+
 fn is_plate(n: &str) -> bool {
     n.ends_with("_pressure_plate")
 }
@@ -67,13 +82,14 @@ fn is_button(n: &str) -> bool {
 
 /// Blocks that give power (dust connects to them).
 fn is_source(n: &str) -> bool {
-    matches!(short(n), "lever" | "redstone_torch" | "redstone_block" | "redstone_wire") || is_plate(n) || is_button(n)
+    matches!(short(n), "lever" | "redstone_torch" | "redstone_block" | "redstone_wire") || is_plate(n) || is_button(n) || is_repeater(n)
 }
 
 /// Blocks that react to power.
 fn is_consumer(n: &str) -> bool {
     let s = short(n);
     matches!(s, "redstone_lamp" | "lit_redstone_lamp" | "tnt" | "golden_rail" | "activator_rail" | "redstone_torch" | "unlit_redstone_torch")
+        || is_repeater(n)
         || s.ends_with("_door")
         || s.ends_with("trapdoor")
         || s.ends_with("fence_gate")
@@ -149,6 +165,14 @@ impl Server {
                 (if side != flame { 15 } else { 0 }, if side == DOWN { 15 } else { 0 })
             }
             "redstone_block" => (15, 0),
+            "powered_repeater" => {
+                let f = cardinal(&self.rs_str(id, "minecraft:cardinal_direction"));
+                if side == f {
+                    (15, 15)
+                } else {
+                    (0, 0)
+                }
+            }
             n if is_plate(n) => {
                 let s = self.rs_int(id, "redstone_signal") as i32;
                 (s, if side == UP { s } else { 0 })
@@ -218,9 +242,17 @@ impl Server {
         let n = add(pos, d);
         let n_full = self.conductor(world, n);
         let covered = self.conductor(world, add(pos, UP));
-        (!covered && n_full && self.is_wire(world, add(n, UP)))
-            || is_source(&self.rs_block(world, n).1)
-            || (!n_full && self.is_wire(world, add(n, DOWN)))
+        (!covered && n_full && self.is_wire(world, add(n, UP))) || self.wire_joins(world, n, d) || (!n_full && self.is_wire(world, add(n, DOWN)))
+    }
+
+    /// Dust beside `n` (on its side `d`) joins it: dust, a source, a repeater along its axis.
+    fn wire_joins(&mut self, world: usize, n: [i32; 3], d: usize) -> bool {
+        let (id, name) = self.rs_block(world, n);
+        if is_repeater(&name) {
+            let f = cardinal(&self.rs_str(id, "minecraft:cardinal_direction"));
+            return f == d || f == (d ^ 1);
+        }
+        is_source(&name)
     }
 
     /// The dust neighbours power flows between (same level, one up past an open top, one down
@@ -253,7 +285,7 @@ impl Server {
             let n_full = self.conductor(world, n);
             out[i] = if !covered && n_full && self.is_wire(world, add(n, UP)) {
                 "up"
-            } else if is_source(&self.rs_block(world, n).1) || (!n_full && self.is_wire(world, add(n, DOWN))) {
+            } else if self.wire_joins(world, n, *d) || (!n_full && self.is_wire(world, add(n, DOWN))) {
                 "side"
             } else {
                 "none"
@@ -459,6 +491,13 @@ impl Server {
                     }
                 }
             }
+            "unpowered_repeater" | "powered_repeater" => {
+                let on = s == "powered_repeater";
+                if !self.repeater_locked(world, pos, id) && self.repeater_input(world, pos, id) != on {
+                    let delay = (self.rs_int(id, "repeater_delay").clamp(0, 3) as u64 + 1) * 2;
+                    self.schedule_redstone(world, pos, delay);
+                }
+            }
             "redstone_torch" | "unlit_redstone_torch" => {
                 let lit = s == "redstone_torch";
                 if self.torch_should_light(world, pos, id) != lit {
@@ -616,6 +655,14 @@ impl Server {
             self.gd.with_states(id, &[("button_pressed_bit", Tag::Byte(0))])
         } else if s == "lit_redstone_lamp" && self.power_at(world, pos) == 0 {
             self.gd.with_name(id, "minecraft:redstone_lamp")
+        } else if is_repeater(&s) {
+            let on = s == "powered_repeater";
+            let want = self.repeater_input(world, pos, id);
+            if want != on && !self.repeater_locked(world, pos, id) {
+                self.gd.with_name(id, if want { "minecraft:powered_repeater" } else { "minecraft:unpowered_repeater" })
+            } else {
+                None
+            }
         } else if s == "redstone_torch" || s == "unlit_redstone_torch" {
             let lit = self.torch_should_light(world, pos, id);
             if lit != (s == "redstone_torch") {
@@ -683,5 +730,47 @@ impl Server {
                 }
             }
         }
+    }
+}
+
+impl Server {
+    /// Whether power comes into a repeater from behind (PowerNukkitX's `calculateInputStrength`:
+    /// the power from that side, or the signal of dust there).
+    fn repeater_input(&mut self, world: usize, pos: [i32; 3], id: i32) -> bool {
+        let f = cardinal(&self.rs_str(id, "minecraft:cardinal_direction"));
+        if self.power_from(world, pos, f) > 0 {
+            return true;
+        }
+        let (bid, name) = self.rs_block(world, add(pos, f));
+        name == "minecraft:redstone_wire" && self.rs_int(bid, "redstone_signal") > 0
+    }
+
+    /// A repeater is locked while a powered repeater points into its side.
+    fn repeater_locked(&mut self, world: usize, pos: [i32; 3], id: i32) -> bool {
+        let f = cardinal(&self.rs_str(id, "minecraft:cardinal_direction"));
+        for d in perpendicular(f) {
+            let n = add(pos, d);
+            let (nid, name) = self.rs_block(world, n);
+            // the side repeater's output side faces us: its facing is `d` seen from it
+            if name == "minecraft:powered_repeater" && cardinal(&self.rs_str(nid, "minecraft:cardinal_direction")) == d {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Use on a repeater: the next delay (1 to 4 redstone ticks).
+    pub(crate) fn use_repeater(&mut self, sid: SessionId, pos: [i32; 3]) -> bool {
+        let Some(world) = self.players.get(&sid).map(|p| p.world) else { return false };
+        let (id, name) = self.rs_block(world, pos);
+        if !is_repeater(&name) {
+            return false;
+        }
+        let next = (self.rs_int(id, "repeater_delay") + 1) % 4;
+        if let Some(new) = self.gd.with_states(id, &[("repeater_delay", Tag::Int(next as i32))]) {
+            self.rs_set(world, pos, new);
+        }
+        self.swing_arm(sid);
+        true
     }
 }

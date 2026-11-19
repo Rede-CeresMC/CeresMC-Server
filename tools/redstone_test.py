@@ -102,7 +102,32 @@ check(last(c, L3) == LIT, "pressing a button lights the lamp")
 c.pump(1.8)
 check(last(c, L3) == LAMP, "the button springs back and the lamp goes out")
 
-# 4. TNT next to a redstone block is lit
+# 4. a repeater placed looking east carries power from the west to a lamp on its east
+RB, REP, L4 = (BX + 1, G, BZ + 3), (BX + 2, G, BZ + 3), (BX + 3, G, BZ + 3)
+command(c, "/give @s stone 8")
+for x in (RB[0], REP[0], L4[0]):
+    c.place_block((x, G - 1, BZ + 3), 1, STONE)
+    c.pump(0.05)
+for x in (RB[0], REP[0], L4[0]):
+    c.break_block((x, G, BZ + 3))
+c.pump(0.4)
+put("redstone_lamp", L4)
+c.move(BX - 1.5, G + 1.62, BZ + 3.5, 0.0, -90.0)  # looking east
+c.pump(0.3)
+put("repeater", REP, block="minecraft:unpowered_repeater")
+check(last(c, REP) not in (None, AIR), "a repeater is placed")
+put("redstone_block", RB)
+c.pump(0.8)
+check(last(c, L4) == LIT, "a repeater carries the power on to a lamp")
+check(last(c, REP) not in (None, AIR, block_id("minecraft:unpowered_repeater")), "the repeater is powered")
+n = len(c.received)
+command(c, "/clear")
+use(REP)
+check(any(q == REP for q, _ in update_blocks(c)[-5:]), "using a repeater changes its delay")
+c.move(BX + 5.5, G + 1.62, BZ - 2.5)
+c.pump(0.3)
+
+# 5. TNT next to a redstone block is lit
 T, R2 = (BX + 11, G, BZ), (BX + 12, G, BZ)
 put("tnt", T)
 n = len(c.received)
