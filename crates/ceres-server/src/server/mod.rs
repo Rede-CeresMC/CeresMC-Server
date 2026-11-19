@@ -38,6 +38,7 @@ mod hopper;
 mod inventory;
 mod items;
 mod lightning;
+mod maps;
 mod liquids;
 mod loot;
 mod moderation;
@@ -187,6 +188,8 @@ pub struct Server {
     bobbers: Vec<fishing::Bobber>,
     /// lightning bolts shown for a second
     bolts: Vec<lightning::Bolt>,
+    /// filled maps (images)
+    maps: maps::Maps,
     /// players charging with a spear: where they were last tick
     spear_prev: HashMap<SessionId, [f32; 3]>,
     projectiles: Vec<projectiles::Projectile>,
@@ -245,6 +248,7 @@ impl Server {
             item_cooldowns: HashMap::new(),
             bobbers: Vec::new(),
             bolts: Vec::new(),
+            maps: maps::Maps::default(),
             spear_prev: HashMap::new(),
             projectiles: Vec::new(),
             fireworks: Vec::new(),

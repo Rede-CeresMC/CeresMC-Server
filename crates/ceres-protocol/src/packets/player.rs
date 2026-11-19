@@ -1138,3 +1138,37 @@ pub fn set_actor_link(vehicle: i64, rider: i64, link_type: u8, immediate: bool, 
         w.f32_le(0.0); // vehicle angular velocity
     })
 }
+
+/// ClientboundMapItemData (0x43): the whole 128x128 image of a map. `pixels` are RGBA.
+pub fn map_item_data(map_id: i64, dimension: u8, origin: [i32; 3], scale: u8, pixels: &[[u8; 4]]) -> Vec<u8> {
+    packet(0x43, |w| {
+        w.varlong(map_id);
+        w.u8(dimension);
+        w.bool(false); // locked
+        for v in origin {
+            w.varint(v);
+        }
+        w.bool(true); // maps included in
+        w.uvarint(1);
+        w.varlong(map_id);
+        w.bool(true); // scale
+        w.u8(scale);
+        w.bool(false); // tracked objects
+        w.bool(false); // decorations
+        w.bool(true); // width
+        w.varint(128);
+        w.bool(true); // height
+        w.varint(128);
+        w.bool(true); // x offset
+        w.varint(0);
+        w.bool(true); // y offset
+        w.varint(0);
+        w.bool(true); // pixels
+        w.uvarint(pixels.len() as u32);
+        for p in pixels {
+            // big-endian A | R<<8 | G<<16 | B<<24
+            let v = p[3] as u32 | (p[0] as u32) << 8 | (p[1] as u32) << 16 | (p[2] as u32) << 24;
+            w.u32_be(v);
+        }
+    })
+}

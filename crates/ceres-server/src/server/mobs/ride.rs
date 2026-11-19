@@ -293,7 +293,8 @@ impl Server {
         let at = Self::knot_pos(f);
         let led: Vec<usize> = (0..self.mobs.len()).filter(|&i| {
             let m = &self.mobs[i];
-            m.alive() && m.world == world && m.leash == Some(sid) && filters::dist(m.pos, at) <= 7.0
+            // vanilla: the mobs in a box of 7 blocks around the fence
+            m.alive() && m.world == world && m.leash == Some(sid) && (0..3).all(|k| (m.pos[k] - at[k]).abs() <= 7.0)
         }).collect();
         if !led.is_empty() {
             for i in led {

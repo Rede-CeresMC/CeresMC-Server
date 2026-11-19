@@ -62,7 +62,8 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Sela e armadura de cavalo (`minecraft:equippable`); sela do porco pelo `minecraft:interact` do pack; domar cavalo montando (`minecraft:tamemount`: aceita ou derruba)
 - [ ] Barcos e carrinhos de mina (não são mobs com vida), passageiros extras, pulo do cavalo
 - [x] Laço (guia): amarra mob com `minecraft:leashable` ao jogador (LeashHolder, metadado 37), puxa a partir de 6 blocos e arrebenta a 10 soltando o laço; usado numa cerca amarra ali os mobs que o jogador guia (entidade `minecraft:leash_knot` compartilhada, salva em mobs.json), usar a cerca de novo os devolve, usar o mob amarrado o solta, quebrar a cerca solta o laço
-- [ ] Mapas (vazio, preenchido)
+- [x] Mapas: mapa vazio usado no ar vira mapa preenchido (`map_uuid`) da área de 128x128 da grade vanilla em volta do jogador (escala 0); MapInfoRequest (0x44) responde com ClientboundMapItemData (0x43); segurando o mapa dentro da área, a parte num raio de 32 blocos é redesenhada a cada segundo; imagens salvas em `<mundo>/maps/<id>.map`. Cores: paleta base vanilla escolhida pelo nome do bloco (o PNX usa uma tabela baixada no build, que não está no clone), sombreada pela altura do bloco ao norte; água mais escura quanto mais funda. Só chunks carregados aparecem
+- [ ] Mapas: escalas maiores (ampliar), travar, marcadores de jogadores, mapa localizador, mapas em molduras
 
 ## Lote 3: construção e uso de blocos
 

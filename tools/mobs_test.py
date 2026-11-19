@@ -464,9 +464,16 @@ both(other, c, 1.0)
 check(cows2 and any(p == 0x27 and read_uvarint(d, 0)[0] == cows2[0] for p, d in other.received[n2:]), "a lead ties a cow to the player")
 # using a fence while leading it ties the cow there (a leash knot appears)
 command(other, "/clear")
+n2 = len(other.received)
 command(other, "/give @s oak_fence 1")
-other.place_block((int(X + 471), G - 1, int(Z + 3)), 1, block_id("minecraft:oak_fence"))
-other.pump(1.0)
+other.pump(3.0, lambda: any(p == 0x32 for p, _ in other.received[n2:]))
+fence_at = (int(X + 471), G, int(Z + 3))
+for _ in range(3):
+    n2 = len(other.received)
+    other.place_block((fence_at[0], G - 1, fence_at[2]), 1, block_id("minecraft:oak_fence"))
+    other.pump(1.0)
+    if any(p == 0x15 for p, _ in other.received[n2:]):
+        break
 command(other, "/clear")
 n2 = len(other.received)
 other.place_block((int(X + 471), G, int(Z + 3)), 1, 0)

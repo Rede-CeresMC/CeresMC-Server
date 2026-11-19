@@ -224,6 +224,7 @@ impl Server {
         let now = self.ticks;
         let ready = |s: &Server| s.item_cooldowns.get(&(sid, name.clone())).is_none_or(|t| now >= *t);
         match name.as_str() {
+            "minecraft:empty_map" => self.create_map(sid),
             "minecraft:goat_horn" => {
                 if ready(self) {
                     self.start_cooldown(sid, &name, "goat_horn", 140);

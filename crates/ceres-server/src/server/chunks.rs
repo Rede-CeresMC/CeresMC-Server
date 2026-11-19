@@ -90,6 +90,7 @@ impl Server {
         self.tick_fishing();
         self.tick_spawners();
         self.tick_lightning();
+        self.tick_maps();
         self.tick_spear_charges();
         self.tick_fireworks();
         self.check_sleep();

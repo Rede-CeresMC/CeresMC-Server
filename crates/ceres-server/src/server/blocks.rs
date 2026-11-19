@@ -746,6 +746,7 @@ impl Server {
     pub(crate) fn save_worlds(&mut self) {
         self.save_all_players();
         self.save_mobs();
+        self.save_maps();
         for w in self.worlds.worlds.iter_mut() {
             match w.save(&self.gd) {
                 Ok(0) => {}
