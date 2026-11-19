@@ -247,13 +247,17 @@ impl Server {
         if d > 10.0 {
             return false;
         }
+        // Bedrock's leashable defaults: past the soft distance (4) the mob walks to the holder,
+        // past the hard distance (6) the lead also pulls it, past the max (10) it snaps
+        if d > 4.0 {
+            m.ctl.dest = Some(h);
+            m.ctl.speed = 1.2;
+        }
         if d > 6.0 {
             let k = 0.05 * (d - 6.0);
             for i in 0..3 {
                 m.motion[i] += (h[i] - m.pos[i]) / d * k;
             }
-            m.ctl.dest = Some(h);
-            m.ctl.speed = 1.2;
         }
         true
     }

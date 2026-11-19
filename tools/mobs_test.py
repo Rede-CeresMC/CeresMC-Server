@@ -479,6 +479,10 @@ n2 = len(other.received)
 other.place_block((int(X + 471), G, int(Z + 3)), 1, 0)
 both(other, c, 2.0)
 check(any(p == 0x0d and b"leash_knot" in d for p, d in other.received[n2:]), "a lead is tied to a fence (leash knot)")
+knots = mob_adds(other, n2, "minecraft:leash_knot")
+# the cow's lead now runs to the knot: LeashHolder (37, long) = knot id, LEASHED flag still on
+check(cows2 and knots and any(p == 0x27 and read_uvarint(d, 0)[0] == cows2[0] and (uvarint(37) + uvarint(7) + bytes([7]) + svarint(knots[0])) in d
+                             for p, d in other.received[n2:]), "the tied cow's lead runs to the knot (LeashHolder = knot)")
 command(other, "/clear")
 other.move(X + 3, EYE, Z)
 other.pump(0.3)

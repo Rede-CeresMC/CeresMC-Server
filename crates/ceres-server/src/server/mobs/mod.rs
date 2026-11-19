@@ -513,7 +513,7 @@ impl Server {
         set(26, m.interested);
         set(27, m.charging);
         set(28, t.tamed);
-        set(30, m.leash.is_some()); // LEASHED
+        set(30, m.leash.is_some() || m.knot.is_some()); // LEASHED (to a player or a fence knot)
         set(31, t.sheared);
         set(33, m.id() == "minecraft:elder_guardian");
         set(34, m.walk_speed > 0.001);
@@ -567,6 +567,9 @@ impl Server {
             meta.push(Meta::Long(37, holder.entity_id)); // LeashHolder
         } else if let Some(k) = m.knot.and_then(|f| self.mobsys.knots.get(&(m.world, f))) {
             meta.push(Meta::Long(37, *k));
+        } else {
+            // metadata goes out as a partial list: without -1 the client keeps drawing the old lead
+            meta.push(Meta::Long(37, -1));
         }
         if let Some(n) = &m.name_tag {
             meta.push(Meta::Str(meta_key::NAMETAG, n.clone()));

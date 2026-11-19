@@ -148,7 +148,7 @@ impl Server {
             return;
         }
         self.break_partner(world, pos, old);
-        self.support_update(world, pos);
+        self.support_update(sid, world, pos);
         self.swing_arm(sid);
         let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
         // a broken container spills what it held, in every game mode (like vanilla)

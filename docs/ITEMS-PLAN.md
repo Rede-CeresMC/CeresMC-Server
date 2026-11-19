@@ -23,8 +23,13 @@ mostra e faz o certo.** Nada marcado aqui foi conferido no cliente real, a não 
 - "Reset" ao andar usando itens: cada atualização de vida/fome/XP reenviava o atributo
   `minecraft:movement` sem modificadores, apagando o modificador de corrida do cliente. Agora
   só vai ao entrar e quando velocidade/lentidão mudam. Falta conferir.
-- Com problema, ainda sem causa achada: laço não prende direito na cerca nem no mob (metadados
-  conferidos com o gophertunnel; falta ver no jogo o que acontece).
+- Laço não prendia direito na cerca nem no mob: o sinal LEASHED (30) ficava desligado quando o
+  mob estava amarrado na cerca (só valia para laço na mão), e ao soltar o LeashHolder (37) não
+  voltava a -1 (os metadados vão como lista parcial, então o cliente continuava com o dono
+  antigo). Agora o mob também anda até quem segura a partir de 4 blocos (padrão do `leashable`:
+  4 suave, 6 puxa, 10 arrebenta). Falta conferir no jogo.
+- Plugins: blocos que caem por falta de apoio passam pelo evento `block_break` de quem quebrou o
+  bloco de baixo (uma área protegida para a cascata).
 
 ## Lote 1: armas (feito)
 

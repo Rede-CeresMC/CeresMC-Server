@@ -115,8 +115,10 @@ impl Server {
     }
 
     /// After the block at `pos` was removed: what stood on it and needs it pops off (columns of
-    /// sugar cane, cactus and kelp all the way up), dropping its items.
-    pub(crate) fn support_update(&mut self, world: usize, pos: [i32; 3]) {
+    /// sugar cane, cactus and kelp all the way up), dropping its items. Every block that pops is
+    /// a `block_break` by the player who broke the support, so plugins protecting an area stop
+    /// the cascade where they deny it.
+    pub(crate) fn support_update(&mut self, sid: SessionId, world: usize, pos: [i32; 3]) {
         let mut at = [pos[0], pos[1] + 1, pos[2]];
         for _ in 0..32 {
             if at[1] > ceres_world::MAX_Y {
@@ -136,6 +138,10 @@ impl Server {
                 if self.can_stay(world, at, id, None, in_water) {
                     return;
                 }
+            }
+            let ev = self.block_event_json("block_break", sid, world, at, id);
+            if !self.plugins_allow(ev) {
+                return;
             }
             self.pop_block(world, at, id, &name);
             at[1] += 1;
