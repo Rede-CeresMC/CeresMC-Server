@@ -338,6 +338,20 @@ col = [(q, b) for q, b in update_blocks(archer)[-30:] if q[0] == PK[0] and q[2] 
 check(col and col[-1][1] not in (block_id("minecraft:sea_pickle"), block_id("minecraft:air")), "a sea pickle placed out of water is dead")
 if col:
     PK = col[-1][0]
+# a torch on the side of a block falls when that block is broken
+command(archer, "/clear")
+give(archer, "torch 1")
+TORCH = (P1[0] - 1, P1[1], P1[2])
+archer.place_block(P1, 4, block_id("minecraft:torch"))
+pump_both(0.5)
+last = {pos: bid for pos, bid in update_blocks(archer)}
+check(TORCH in last and last[TORCH] != block_id("minecraft:air"), "a torch is put on the side of a block")
+command(archer, "/gamemode creative")
+archer.break_block(P1)
+pump_both(0.6)
+command(archer, "/gamemode survival")
+last = {pos: bid for pos, bid in update_blocks(archer)}
+check(last.get(TORCH) == block_id("minecraft:air"), "the torch falls when the block it hangs on is broken")
 for q in (P1, P2, PK):
     archer.break_block(q)
 pump_both(0.3)

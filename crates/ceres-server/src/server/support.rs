@@ -14,6 +14,7 @@
 //! entirely).
 
 use super::*;
+use ceres_codec::nbt::Tag;
 use ceres_protocol::level_event;
 
 /// How a block is held up.
@@ -63,6 +64,46 @@ fn need_of(name: &str) -> Option<Need> {
         _ if has("button") || n == "lever" || n == "ladder" || n.ends_with("_wall_sign") || n == "wall_sign" => Need::Attached,
         _ => return None,
     })
+}
+
+/// Offset of a block face (0 down, 1 up, 2 north, 3 south, 4 west, 5 east).
+fn face_offset(f: i64) -> Option<[i32; 3]> {
+    Some(match f {
+        0 => [0, -1, 0],
+        1 => [0, 1, 0],
+        2 => [0, 0, -1],
+        3 => [0, 0, 1],
+        4 => [-1, 0, 0],
+        5 => [1, 0, 0],
+        _ => return None,
+    })
+}
+
+/// Where the block an attached block hangs on is, from its state (as PowerNukkitX's torches,
+/// buttons, levers, ladders and wall signs): torches name the side of their support ("top" is
+/// below); the others face away from it.
+fn attached_offset(states: &Tag) -> Option<[i32; 3]> {
+    if let Some(t) = states.get("torch_facing_direction").and_then(|v| v.as_str()) {
+        return Some(match t {
+            "west" => [-1, 0, 0],
+            "east" => [1, 0, 0],
+            "north" => [0, 0, -1],
+            "south" => [0, 0, 1],
+            _ => [0, -1, 0],
+        });
+    }
+    if let Some(l) = states.get("lever_direction").and_then(|v| v.as_str()) {
+        return Some(match l {
+            "east" => [-1, 0, 0],
+            "west" => [1, 0, 0],
+            "south" => [0, 0, -1],
+            "north" => [0, 0, 1],
+            s if s.starts_with("up") => [0, -1, 0],
+            _ => [0, 1, 0],
+        });
+    }
+    let f = states.get("facing_direction").and_then(|v| v.as_i64())?;
+    face_offset(f).map(|o| [-o[0], -o[1], -o[2]])
 }
 
 fn is_soil(n: &str) -> bool {
@@ -133,6 +174,26 @@ impl Server {
     /// a `block_break` by the player who broke the support, so plugins protecting an area stop
     /// the cascade where they deny it.
     pub(crate) fn support_update(&mut self, sid: SessionId, world: usize, pos: [i32; 3]) {
+        // torches, buttons, levers, ladders and wall signs that hung on it fall
+        for o in [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]] {
+            let at = [pos[0] + o[0], pos[1] + o[1], pos[2] + o[2]];
+            if !self.worlds.worlds[world].is_loaded(at) {
+                continue;
+            }
+            let id = self.worlds.worlds[world].get_block(at, &self.gd);
+            let name = self.gd.block_name(id).to_string();
+            if need_of(&name) != Some(Need::Attached) {
+                continue;
+            }
+            let Some(off) = self.gd.block_states.get(&id).and_then(|s| attached_offset(&s.states)) else { continue };
+            if [at[0] + off[0], at[1] + off[1], at[2] + off[2]] != pos || self.solid_block(world, pos) {
+                continue;
+            }
+            let ev = self.block_event_json("block_break", sid, world, at, id);
+            if self.plugins_allow(ev) {
+                self.pop_block(world, at, id, &name);
+            }
+        }
         // hanging plants below lose their hold all the way down
         let mut at = [pos[0], pos[1] - 1, pos[2]];
         for _ in 0..32 {
@@ -159,12 +220,9 @@ impl Server {
             let id = self.worlds.worlds[world].get_block(at, &self.gd);
             let name = self.gd.block_name(id).to_string();
             let Some(need) = need_of(&name) else { return };
-            // attached blocks hold on to their side; a standing torch needs the block below
+            // attached blocks were handled above (on all six sides)
             if need == Need::Attached {
-                let standing = self.gd.block_states.get(&id).and_then(|s| s.states.get("torch_facing_direction")).and_then(|v| v.as_str().map(String::from));
-                if standing.as_deref() != Some("top") || self.solid_block(world, pos) {
-                    return;
-                }
+                return;
             } else {
                 let in_water = name.contains("kelp") || name.contains("seagrass");
                 if self.can_stay(world, at, id, None, in_water) {

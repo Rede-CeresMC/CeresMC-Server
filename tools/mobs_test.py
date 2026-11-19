@@ -168,11 +168,11 @@ other.pump(0.3)
 
 # melon seeds planted on farmland made with a hoe
 other.move(X + 220, EYE, Z)
-other.pump(0.3)
+other.pump(1.0)  # the chunks there load first
 command(other, "/clear")
 command(other, "/give @s wooden_hoe 1")
 other.place_block((int(X + 220), G - 1, int(Z + 3)), 1, 0)
-other.pump(0.4)
+other.pump(0.8)
 command(other, "/clear")
 command(other, "/give @s melon_seeds 1")
 n2 = len(other.received)
