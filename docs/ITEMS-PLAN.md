@@ -102,7 +102,9 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Estandarte no escudo (receita multi): o escudo recebe cor de base e padrões do estandarte; escudo que já tem estandarte recusa
 - [x] Vaso decorado (receita multi, na bancada): tijolos ou cacos de cerâmica em forma de cruz; o vaso guarda os cacos (`sherds`: fundo, esquerda, direita, frente). O PNX dá um vaso liso; seguido o vanilla. Falta o bloco colocado mostrar os cacos (entidade de bloco)
 - [x] Segurança das receitas multi: o consumo tem de sair exatamente das casas da grade usadas no resultado (antes só o id do item era conferido e dava para consumir itens do inventário e manter os da grade, duplicando)
-- [ ] Outras receitas multi (clonar/ampliar mapa, fogos), mapas em molduras
+- [x] Foguete de fogos (receita multi): 1 papel, 1-3 pólvoras (Flight) e até 7 estrelas (Explosions copiadas do `FireworksItem` de cada estrela) dão 3 foguetes
+- [x] Segurança das receitas multi: além da casa, o item consumido tem de ser o mesmo (tipo e NBT) que estava lá quando o resultado foi calculado (impede trocar por outro item no mesmo pedido)
+- [ ] Outras receitas multi (clonar/ampliar/travar mapa, duplicar e padronar estandarte), mapas em molduras
 - [x] Mob guiado ou amarrado solta o laço ao morrer
 
 ## Lote 4: consumíveis

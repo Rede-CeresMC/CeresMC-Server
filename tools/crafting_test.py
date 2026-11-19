@@ -231,6 +231,22 @@ check(not request(c, [craft(repair), consume(1, HOTBAR, 2), consume(1, HOTBAR, 3
 check(request(c, [craft(repair), consume(1, CRAFT_IN, 28), consume(1, CRAFT_IN, 29), take(1, slot(CREATED, 50), slot(HOTBAR, 4))]),
       "two pickaxes are combined into one (repair recipe)")
 
+# 4c. firework rocket (multi recipe): paper and two gunpowder make 3 rockets
+rocket = ids.get("multi:00000000-0000-0000-0000-000000000002")
+command(c, "/clear")
+give(c, "paper 1")
+give(c, "gunpowder 2")
+give(c, "dirt 1")
+check(request(c, [take(1, slot(HOTBAR, 0), slot(CRAFT_IN, 28)), take(1, slot(HOTBAR, 1), slot(CRAFT_IN, 29)), take(1, slot(HOTBAR, 1), slot(CRAFT_IN, 30))]),
+      "paper and gunpowder go into the grid")
+check(rocket is not None and not request(c, [craft(rocket), consume(1, CRAFT_IN, 28), consume(1, CRAFT_IN, 29), take(3, slot(CREATED, 50), slot(HOTBAR, 4))]),
+      "a rocket leaving gunpowder in the grid is refused")
+check(rocket is not None and not request(c, [craft(rocket), take(1, slot(CRAFT_IN, 30), slot(HOTBAR, 5)), take(1, slot(HOTBAR, 2), slot(CRAFT_IN, 30))]
+                                           + [consume(1, CRAFT_IN, s) for s in (28, 29, 30)] + [take(3, slot(CREATED, 50), slot(HOTBAR, 4))]),
+      "swapping another item into the grid after the recipe is refused")
+check(rocket is not None and request(c, [craft(rocket)] + [consume(1, CRAFT_IN, s) for s in (28, 29, 30)] + [take(3, slot(CREATED, 50), slot(HOTBAR, 4))]),
+      "paper and gunpowder make 3 firework rockets")
+
 # 5. crafting table: place it, click it, craft a chest
 command(c, "/gamemode creative")
 below = (TABLE_POS[0], TABLE_POS[1] - 1, TABLE_POS[2])
