@@ -55,7 +55,9 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Vara de pesca: boia com linha, espera de 5-30 s (Isca reduz), fisgada com bolhas, loot de pesca do pack com Sorte do Mar (qualidade das entradas), XP, puxar mob/jogador fisgado, durabilidade
 - [x] Pesca na selva: com a boia num bioma com a tag `jungle` usa `jungle_fishing.json`
 - [ ] Peixe nadando até a boia (efeito visual)
-- [ ] Pincel: areia/cascalho suspeitos (o behavior pack de exemplo não traz as loot tables de arqueologia; falta fonte para o loot)
+- [x] Pincel em areia/cascalho suspeitos (como o `BlockBrushable` do PowerNukkitX): cada pincelada (no máximo uma a cada 4 ticks) sobe `brushed_progress`; na quarta o bloco solta o item guardado (`item` da entidade de bloco) ou um sorteio da sua `LootTable`, vira areia/cascalho e o pincel gasta 1 (teste de bot)
+- [ ] Arqueologia: o pack só traz as loot tables das ruínas da trilha (`trail_ruins_brushable_block_common/rare`); faltam as do deserto, poço do deserto e ruínas oceânicas, e a geração dos blocos suspeitos nas estruturas
+- [x] Lança (estocada e carga) passa pelas mesmas travas do ataque corpo a corpo: mobs via `attack_mob` (alcance, `cannot_be_attacked`), jogadores só com PvP, plugins ("attack") e escudo
 - [x] Olho do fim na moldura do portal do End: encaixa o olho; com os 12 olhos no anel em volta de um buraco 3x3 o portal abre (som `block.end_portal.spawn`)
 - [ ] Olho do fim lançado no ar (sem fortalezas ainda); viajar pelo portal (sem o End); luneta, bússola e relógio são do cliente
 - [x] Montaria: montar mobs cujo `minecraft:rideable` aceita jogadores (porco selado, cavalo, lavagante selado...), vínculo SetActorLink (41), o mob segue o assento do jogador (o cliente dirige: movimento autoritativo do servidor com previsão do veículo), sinal WASD_CONTROLLED/CAN_POWER_JUMP; descer com Interact StopRiding (3), ao morrer, sair ou teleportar

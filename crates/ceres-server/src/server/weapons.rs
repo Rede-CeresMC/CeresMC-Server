@@ -400,18 +400,8 @@ impl Server {
             let base = combat::item_damage_of(&name);
             let dmg = base * 1.5 + speed * 3.0;
             let kb = [dir[0] * 0.5, 0.3, dir[2] * 0.5];
-            match target {
-                mobs::Ent::Player(o) => {
-                    if !self.cfg.pvp {
-                        continue;
-                    }
-                    let victim = self.players.get(&o).map(|p| p.name.clone()).unwrap_or_default();
-                    let attacker = self.players.get(&sid).map(|p| p.name.clone()).unwrap_or_default();
-                    self.damage_player(o, dmg, &format!("§c{victim} foi atravessado por {attacker}"), false, Some(kb));
-                }
-                mobs::Ent::Mob(eid) => {
-                    self.with_mob(eid, |s, m| s.hurt(m, dmg, "entity_attack", Some(mobs::Ent::Player(sid)), Some(feet)));
-                }
+            if !self.spear_hit(sid, target, dmg, kb) {
+                continue;
             }
             let snd = format!("{}.attack_hit", name.trim_start_matches("minecraft:"));
             self.broadcast(&protocol::level_sound_event(&snd, pos, -1), |_, q| q.world == world);
@@ -503,23 +493,41 @@ impl Server {
         };
         let dmg = combat::item_damage_of(&name) + level * 1.5;
         let kb = [dir[0] * 0.4, 0.3, dir[2] * 0.4];
-        let attacker_feet = [pos[0], pos[1] - EYE_HEIGHT, pos[2]];
-        match target {
-            mobs::Ent::Player(o) => {
-                if !self.cfg.pvp {
-                    return;
-                }
-                let victim = self.players.get(&o).map(|p| p.name.clone()).unwrap_or_default();
-                let attacker = self.players.get(&sid).map(|p| p.name.clone()).unwrap_or_default();
-                self.damage_player(o, dmg, &format!("§c{victim} foi atravessado por {attacker}"), false, Some(kb));
-            }
-            mobs::Ent::Mob(m) => {
-                self.with_mob(m, |s, mob| s.hurt(mob, dmg, "entity_attack", Some(mobs::Ent::Player(sid)), Some(attacker_feet)));
-            }
+        if !self.spear_hit(sid, target, dmg, kb) {
+            return;
         }
         if gm != 1 {
             self.wear_held(sid, 1);
         }
         self.broadcast(&protocol::level_sound_event(&format!("item.{short}.attack_hit"), pos, -1), |_, q| q.world == world);
+    }
+}
+
+impl Server {
+    /// A spear hit, through the same gates as a melee attack: mobs via `attack_mob` (world,
+    /// reach, `minecraft:cannot_be_attacked`), players only with PvP on, both alive in the same
+    /// world, not in creative/spectator, allowed by plugins ("attack") and not blocked by a shield.
+    /// True when the hit went through.
+    fn spear_hit(&mut self, sid: SessionId, target: mobs::Ent, dmg: f32, kb: [f32; 3]) -> bool {
+        match target {
+            mobs::Ent::Mob(eid) => self.attack_mob(sid, eid, dmg),
+            mobs::Ent::Player(o) => {
+                if !self.cfg.pvp || o == sid {
+                    return false;
+                }
+                let (Some(att), Some(vic)) = (self.players.get(&sid), self.players.get(&o)) else { return false };
+                if att.dead || vic.dead || att.world != vic.world || att.gamemode == 6 || vic.gamemode == 1 || vic.gamemode == 6 {
+                    return false;
+                }
+                let (attacker, victim, attacker_pos) = (att.name.clone(), vic.name.clone(), att.pos);
+                if !self.plugins_allow(serde_json::json!({"event": "attack", "player": attacker, "target": victim})) {
+                    return false;
+                }
+                if self.shield_blocks(o, attacker_pos, dmg, false) {
+                    return false;
+                }
+                self.damage_player(o, dmg, &format!("§c{victim} foi atravessado por {attacker}"), false, Some(kb))
+            }
+        }
     }
 }

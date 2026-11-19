@@ -3,7 +3,7 @@ gets its chargedItem), fires on the next use and the arrow hurts; a trident is t
 leaves the hand."""
 import sys, os, struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bedrock_client import Client, block_id, uvarint, svarint, string, read_uvarint
+from bedrock_client import Client, update_blocks, block_id, uvarint, svarint, string, read_uvarint
 
 ok = True
 def check(cond, what):
@@ -211,6 +211,24 @@ sprint_hits = [d for p, d in archer.received[n2:] if p == 0x1b]
 check(not walk_hits and sprint_hits, f"a spear stab misses walking and hits a mob in front when sprinting ({len(walk_hits)}, {len(sprint_hits)})")
 input_flag(archer, 26)  # STOP_SPRINTING
 command(archer, "/kill @e[type=pig]")
+
+# brush: four strokes on suspicious sand turn it into sand
+SUS = (int(X) + 1, 70, int(Z))
+command(archer, "/clear")
+give(archer, "stone 1")
+archer.place_block((int(X), 69, int(Z)), 5, block_id("minecraft:stone"))  # east of the floor block
+pump_both(0.5)
+command(archer, "/clear")
+give(archer, "suspicious_sand 1")
+archer.place_block((SUS[0], 69, SUS[2]), 1, block_id("minecraft:suspicious_sand"))
+pump_both(0.5)
+command(archer, "/clear")
+give(archer, "brush 1")
+for _ in range(5):
+    archer.place_block(SUS, 1, 0)
+    pump_both(0.4)
+sand = block_id("minecraft:sand")
+check(any(pos == SUS and bid == sand for pos, bid in update_blocks(archer)), "brushing suspicious sand four times turns it into sand")
 
 # map: an empty map used in the air becomes a filled map and its image is sent (0x43);
 # a MapInfoRequest (0x44) for its id gets the image again
