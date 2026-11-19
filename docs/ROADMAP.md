@@ -206,15 +206,22 @@ As fases são uma ordem sugerida, não uma regra. Itens de fases diferentes pode
 
 ### Mobs
 
-- [ ] Spawn natural por bioma, luz e limite de mobs (feito: animais na grama de dia, zumbis à noite a céu aberto, limite por jogador, despawn longe; falta luz/cavernas e biomas)
-- [ ] Pathfinding (A* em grade) e objetivos de IA (goals)
-- [ ] Passivos: vaca, porco, ovelha, galinha (feito: andar, fugir, sons, drops, tosquiar, ordenhar, ovos, lã volta comendo grama; falta criar/reproduzir e filhotes)
-- [ ] Hostis: zumbi, esqueleto, creeper, aranha, enderman (feito: zumbi persegue, bate, queima no sol, some no pacífico)
-- [ ] Neutros: lobo, abelha, golem de ferro
-- [ ] Aldeões: profissões, trocas, aldeias
-- [ ] Mobs do Nether e do End, chefes (Wither, Ender Dragon)
-- [ ] Drops e loot tables de mobs (feito para os mobs que existem, com XP)
-- [ ] Montaria e veículos: cavalo, barco, carrinho de mina
+IA data-driven: o servidor lê o behavior pack vanilla (`data/behavior/`) e os packs de `behavior_packs/`.
+
+- [x] Entidades do pack: componentes, component groups, eventos (add/remove, randomize, sequence, first_valid, trigger, set_property), propriedades, filtros (incluindo a sintaxe antiga AND/OR)
+- [x] Goals `minecraft:behavior.*` por prioridade com controles move/look/jump/target (todos os tipos do pack mapeados; os de montaria, troca e portas não fazem nada ainda)
+- [x] Pathfinding A* em grade para mobs terrestres; nado e voo em 3D; escalar (aranhas); pulos e degraus
+- [x] Combate: corpo a corpo, à distância com projéteis lidos do pack (flechas com efeito, bolas de fogo, crânios, bala do shulker, cuspe, poções), feixe do guardião, grito sônico, explosões (creeper, bola de fogo) com `mob-griefing`
+- [x] Sensores: ambiente, entidades, alvo próximo, dano; temporizadores, transformações (zumbi → afogado...), raiva compartilhada, queimar no sol, afogar, lava, queda
+- [x] Animais: tentação, criação, filhotes crescendo, seguir os pais, domar, sentar, seguir o dono e se teletransportar, curar, ovos, tosquia, ordenha, comer grama
+- [x] Loot tables e equipamento (tabelas de equipamento, chance de drop, looting, cozidos quando em chamas), XP por Molang
+- [x] Spawn natural pelas spawn rules (biome tags, luz estimada, dificuldade, altura, bloco do chão, densidade, bandos, permute_type) e despawn por distância
+- [x] Ender Dragon voando em círculo, investindo e cuspindo bola de fogo do dragão (sem o End e sem a barra de chefe)
+- [ ] Luz de verdade (hoje é uma estimativa: céu pela hora do dia + blocos que emitem luz por perto)
+- [ ] Barra de vida de chefe (BossEvent), propriedades sincronizadas com o cliente (variantes de clima)
+- [ ] Aldeões: profissões, trocas, aldeias; patrulhas e invasões
+- [ ] Montaria e veículos: cavalo, porco com sela, barco, carrinho de mina
+- [ ] Salvar mobs como entidades LevelDB (hoje em `mobs.json`)
 
 ---
 

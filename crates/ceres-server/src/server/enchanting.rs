@@ -238,7 +238,7 @@ impl Server {
         }
         if let Some(p) = self.players.get(&sid) {
             let (world, pos) = (p.world, p.pos);
-            self.broadcast(&protocol::level_sound_event("random.enchant", pos, -1), |_, q| q.world == world);
+            self.broadcast(&protocol::level_sound_event("block.enchanting_table.use", pos, -1), |_, q| q.world == world);
         }
         self.refresh_enchant_offers(sid);
     }

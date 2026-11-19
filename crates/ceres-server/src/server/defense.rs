@@ -108,6 +108,7 @@ impl Server {
             if let Some(p) = self.players.get_mut(&victim) {
                 p.shield_cooldown = SHIELD_DISABLED_TICKS;
                 p.actor_state.blocking = false;
+                p.out.push(protocol::start_item_cooldown("shield", SHIELD_DISABLED_TICKS as i32));
             }
             self.sync_actor_state(victim);
         }

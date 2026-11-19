@@ -128,6 +128,7 @@ impl Server {
         if self.gd.block_name(old) == "minecraft:jukebox" {
             contents.extend(self.eject_jukebox(world, pos));
         }
+        contents.extend(self.take_holder_contents(world, pos));
         let bed_color = if self.gd.block_name(old) == "minecraft:bed" {
             self.worlds.worlds[world]
                 .get_block_entity(pos, &self.gd)
@@ -136,7 +137,12 @@ impl Server {
         } else {
             0
         };
-        if !self.change_block(world, pos, air) {
+        let held_water = self.water_layer(world, pos);
+        if held_water {
+            self.set_water_layer(world, pos, false);
+        }
+        let after = if held_water { self.gd.default_block("minecraft:water").unwrap_or(air) } else { air };
+        if !self.change_block(world, pos, after) {
             self.resync(sid, pos);
             return;
         }
@@ -245,6 +251,18 @@ impl Server {
             }
             return;
         }
+        if !sneaking && self.use_on_decoration(sid, clicked) {
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
+        if !sneaking && self.use_holder(sid, clicked) {
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
         if !sneaking && self.use_bed(sid, clicked) {
             self.swing_arm(sid);
             if let Some(t) = side(clicked, face) {
@@ -298,6 +316,20 @@ impl Server {
 
         // cauldrons take and give buckets and bottles
         if self.use_cauldron(sid, clicked) {
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
+        // axe and honeycomb on copper, fire charges
+        if self.use_ender_eye(sid, clicked) || self.plant_item(sid, clicked, face) || self.use_egg_on_spawner(sid, clicked) || self.use_on_sign(sid, clicked) || self.use_on_copper(sid, clicked) || self.use_fire_charge(sid, clicked, face) {
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
+        // spawn eggs and buckets holding a mob, powder snow and buckets
+        if self.use_mob_item_on_block(sid, clicked, face) || self.use_powder_snow(sid, clicked, face) {
             if let Some(t) = side(clicked, face) {
                 self.resync(sid, t);
             }
@@ -461,9 +493,19 @@ impl Server {
             return;
         }
 
+        // placed in still water: a block that can hold water keeps it on the second layer
+        let water_here = {
+            let old = self.worlds.worlds[world].get_block(target, &self.gd);
+            let n = self.gd.block_name(old);
+            (n == "minecraft:water" || n == "minecraft:flowing_water")
+                && self.gd.block_states.get(&old).and_then(|s| s.states.get("liquid_depth")).and_then(|t| t.as_i64()).unwrap_or(0) == 0
+        };
         if !self.change_block(world, target, final_block) {
             self.resync(sid, target);
             return;
+        }
+        if water_here && waterloggable(self.gd.block_name(final_block)) {
+            self.set_water_layer(world, target, true);
         }
         self.finish_placement(sid, world, target, final_block, survival_slot);
     }
@@ -647,6 +689,7 @@ impl Server {
                 // hitting a note block plays it
                 if action == block_action::START_BREAK {
                     self.punch_note_block(world, pos);
+                    self.punch_holder(sid, pos);
                 }
                 // continuing onto a new block starts its timer
                 if let Some(p) = self.players.get_mut(&sid) {
@@ -727,4 +770,28 @@ pub(crate) fn enchant_level(item: &ItemDesc, id: i16) -> u8 {
         .and_then(|e| e.get("lvl").and_then(|v| v.as_i64()))
         .unwrap_or(0)
         .clamp(0, 255) as u8
+}
+
+/// Blocks that hold water in Bedrock when placed in it (not full cubes).
+pub(crate) fn waterloggable(name: &str) -> bool {
+    let n = name.strip_prefix("minecraft:").unwrap_or(name);
+    ["_slab", "_stairs", "fence", "_wall", "glass_pane", "iron_bars", "chest", "_sign", "ladder", "lantern", "chain", "trapdoor", "leaves", "coral", "candle", "sea_pickle", "campfire", "lightning_rod", "grate", "dripleaf", "conduit", "_head", "_skull", "_bars", "scaffolding", "pointed_dripstone", "amethyst_cluster", "_bud", "heavy_core", "decorated_pot", "hanging_roots", "mangrove_roots", "glow_lichen", "sculk_vein", "copper_golem_statue", "shelf"]
+        .iter()
+        .any(|k| n.contains(k))
+}
+
+impl Server {
+    /// Puts water on (or takes it off) the second layer of a block and tells the players.
+    pub(crate) fn set_water_layer(&mut self, world: usize, pos: [i32; 3], water: bool) {
+        let id = if water { self.gd.default_block("minecraft:water").unwrap_or(self.gd.air_id) } else { self.gd.air_id };
+        if self.worlds.worlds[world].set_block_layer(pos, 1, id, &self.gd) {
+            self.broadcast(&protocol::update_block_layer(pos, id, 1), |_, q| q.world == world);
+            self.queue_liquid(world, pos);
+        }
+    }
+
+    /// The water a waterlogged block held, when the block goes.
+    pub(crate) fn water_layer(&mut self, world: usize, pos: [i32; 3]) -> bool {
+        self.worlds.worlds[world].get_block_layer(pos, 1, &self.gd).is_some_and(|id| self.gd.block_name(id).contains("water"))
+    }
 }

@@ -81,6 +81,16 @@ check(slot0_count(c, n) == 1, f"the golden apple is eaten after its eating time 
 sat = attribute(c, "minecraft:player.saturation", n)
 check(sat is not None and sat > 10, f"saturation went up ({sat})")
 
+# chorus fruit teleports the player who eats it
+command(c, "/clear")
+give(c, "chorus_fruit 1")
+click_air(c)  # the client's own "done eating" click after the apple
+c.pump(0.2)
+n = len(c.received)
+click_air(c)
+c.pump(2.2)
+check(any(p == 0x13 for p, _ in c.received[n:]), "eating a chorus fruit teleports (MovePlayer)")
+
 c.close()
 print("PASS" if ok else "FAILED")
 sys.exit(0 if ok else 1)

@@ -69,6 +69,16 @@ pub fn update_block(pos: [i32; 3], block_id: i32) -> Vec<u8> {
     })
 }
 
+/// UpdateBlock on a given storage layer (1 = the water of waterlogged blocks).
+pub fn update_block_layer(pos: [i32; 3], block_id: i32, layer: u32) -> Vec<u8> {
+    packet(UPDATE_BLOCK, |w| {
+        write_block_pos(w, pos);
+        w.uvarint(block_id as u32);
+        w.uvarint(0b0010);
+        w.uvarint(layer);
+    })
+}
+
 /// LevelEventPacket (0x19): particles, break cracks, weather and block sounds.
 pub fn level_event(event_id: i32, pos: [f32; 3], data: i32) -> Vec<u8> {
     packet(LEVEL_EVENT, |w| {

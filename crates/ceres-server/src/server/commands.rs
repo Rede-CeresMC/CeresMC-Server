@@ -250,7 +250,7 @@ impl Server {
         ];
         let mut enums = enums;
         enums.push(("PluginOp".to_string(), ["enable", "disable"].map(String::from).to_vec()));
-        enums.push(("Mob".to_string(), ["cow", "pig", "sheep", "chicken", "zombie"].map(String::from).to_vec()));
+        enums.push(("Mob".to_string(), self.summonable_names()));
         (commands, enums)
     }
 
@@ -374,6 +374,7 @@ impl Server {
 
     /// Moves a player to `feet` in their current world.
     pub(crate) fn teleport(&mut self, sid: SessionId, feet: [f32; 3]) {
+        self.dismount(sid);
         self.close_container(sid, true);
         self.stop_sleeping(sid);
         let Some(p) = self.players.get_mut(&sid) else { return };

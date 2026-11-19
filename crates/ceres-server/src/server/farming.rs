@@ -142,11 +142,16 @@ impl Server {
                 }
                 return true;
             }
+            if self.bone_meal_plant(world, clicked) {
+                self.consume_held(sid, gm);
+                self.swing_arm(sid);
+                return true;
+            }
         }
         false
     }
 
-    fn tool_used(&mut self, sid: SessionId, pos: [i32; 3], sound: &str) {
+    pub(crate) fn tool_used(&mut self, sid: SessionId, pos: [i32; 3], sound: &str) {
         let Some(world) = self.players.get(&sid).map(|p| p.world) else { return };
         let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
         // hoe, shovel and axe: "item.use.on" with the resulting block, like vanilla
@@ -218,6 +223,22 @@ impl Server {
             return;
         }
         let block = self.worlds.worlds[world].get_block(pos, &self.gd);
+        let name = self.gd.block_name(block);
+        // copper slowly turns green (vanilla: about an hour per stage)
+        if name.contains("copper") && rand::random::<u32>() % 24 == 0 {
+            if let Some(next) = useitems::copper_oxidized(name) {
+                if let Some(id) = self.gd.with_name(block, &next) {
+                    self.change_block(world, pos, id);
+                }
+                return;
+            }
+        }
+        if !is_crop(name) {
+            let name = name.to_string();
+            if self.plant_random_tick(world, pos, block, &name) {
+                return;
+            }
+        }
         let name = self.gd.block_name(block);
         if is_crop(name) {
             let Some(g) = growth(&self.gd, block) else { return };

@@ -110,6 +110,7 @@ python -I tools/xp_test.py || status=1
 python -I tools/environment_test.py || status=1
 python -I tools/farming_test.py || status=1
 python -I tools/projectiles_test.py || status=1
+python -I tools/weapons_test.py || status=1
 python -I tools/sleep_test.py || status=1
 python -I tools/hopper_test.py || status=1
 python -I tools/potions_test.py || status=1

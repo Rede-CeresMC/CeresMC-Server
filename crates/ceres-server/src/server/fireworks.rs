@@ -21,6 +21,8 @@ pub(crate) struct Firework {
     rider: Option<SessionId>,
     /// who launched it
     owner: SessionId,
+    /// shot from a crossbow: flies straight and bursts on what it hits
+    shot: bool,
 }
 
 /// The "Fireworks" compound of a rocket item (empty when the item has none).
@@ -50,7 +52,7 @@ impl Server {
         self.broadcast(&pk, |_, q| q.world == world);
         let center = pos;
         self.broadcast(&protocol::level_sound_event("launch", center, -1), |_, q| q.world == world);
-        self.fireworks.push(Firework { entity_id: eid, world, pos, motion, life, age: 0, data, rider, owner });
+        self.fireworks.push(Firework { entity_id: eid, world, pos, motion, life, age: 0, data, rider, owner, shot: false });
     }
 
     /// A rocket used on a block: it takes off from the clicked face.
@@ -157,15 +159,31 @@ impl Server {
             match rider_pos {
                 // a boosting rocket stays with its player
                 Some(pos) => f.pos = pos,
+                None if f.shot => {
+                    f.pos = [f.pos[0] + f.motion[0], f.pos[1] + f.motion[1], f.pos[2] + f.motion[2]];
+                }
                 None => {
                     f.motion = [f.motion[0] * 1.15, f.motion[1] + 0.04, f.motion[2] * 1.15];
                     f.pos = [f.pos[0] + f.motion[0], f.pos[1] + f.motion[1], f.pos[2] + f.motion[2]];
                 }
             }
-            let (eid, world, pos) = (f.entity_id, f.world, f.pos);
+            let (eid, world, pos, shot, owner) = (f.entity_id, f.world, f.pos, f.shot, f.owner);
             if f.age >= f.life {
                 done.push(i);
                 continue;
+            }
+            if shot && f.age > 2 {
+                let owner_eid = self.players.get(&owner).map(|p| p.entity_id);
+                let hit_entity = self.entity_at(world, pos, None, true).is_some_and(|e| match e {
+                    mobs::Ent::Player(s) => s != owner,
+                    mobs::Ent::Mob(m) => Some(m) != owner_eid,
+                });
+                let b = [pos[0].floor() as i32, pos[1].floor() as i32, pos[2].floor() as i32];
+                let hit_block = !self.worlds.worlds[world].is_loaded(b) || self.gd.is_solid(self.worlds.worlds[world].get_block(b, &self.gd));
+                if hit_entity || hit_block {
+                    done.push(i);
+                    continue;
+                }
             }
             self.broadcast(&protocol::move_actor_absolute(eid, pos, false, false), |_, q| q.world == world);
         }
@@ -196,5 +214,21 @@ impl Server {
         p.inventory.armor[1] = piece;
         p.inventory.dirty = true;
         p.out.push(protocol::inventory_content(ceres_protocol::window::ARMOR as u32, &p.inventory.armor));
+    }
+}
+
+impl Server {
+    /// A crossbow fires a loaded rocket along the player's look (turned by `yaw_offset`).
+    pub(crate) fn shoot_firework(&mut self, sid: SessionId, data: Tag, yaw_offset: f32) {
+        let Some(p) = self.players.get(&sid) else { return };
+        let (world, pos, rot) = (p.world, p.pos, p.rot);
+        let (pitch, yaw) = (rot[0].to_radians(), (rot[1] + yaw_offset).to_radians());
+        let dir = [-yaw.sin() * pitch.cos(), -pitch.sin(), yaw.cos() * pitch.cos()];
+        let start = [pos[0] + dir[0] * 0.6, pos[1] - 0.3 + dir[1] * 0.6, pos[2] + dir[2] * 0.6];
+        let motion = [dir[0] * 1.6, dir[1] * 1.6, dir[2] * 1.6];
+        self.spawn_firework(sid, world, start, motion, data, None);
+        if let Some(f) = self.fireworks.last_mut() {
+            f.shot = true;
+        }
     }
 }

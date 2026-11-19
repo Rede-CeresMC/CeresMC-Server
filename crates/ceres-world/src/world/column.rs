@@ -120,6 +120,24 @@ impl Column {
         }
     }
 
+    /// The block on another storage layer (1 = the water of waterlogged blocks), if any.
+    pub(crate) fn get_layer(&self, x: i32, y: i32, z: i32, layer: usize) -> Option<i32> {
+        let sub = Column::sub_index(y).and_then(|s| self.subs[s].as_ref())?;
+        sub.layers.get(layer).map(|l| l.get(block_index(x, y, z)))
+    }
+
+    /// Sets a block on another storage layer (1 = water of waterlogged blocks).
+    pub(crate) fn set_layer(&mut self, x: i32, y: i32, z: i32, layer: usize, id: i32, gd: &GameData) -> bool {
+        let Some(s) = Column::sub_index(y) else { return false };
+        let sub = self.subs[s].get_or_insert_with(|| SubChunk { layers: vec![Storage::filled(gd.entry(gd.air_id))] });
+        while sub.layers.len() <= layer {
+            sub.layers.push(Storage::filled(gd.entry(gd.air_id)));
+        }
+        sub.layers[layer].set(block_index(x, y, z), gd.entry(id));
+        self.dirty |= 1 << s;
+        true
+    }
+
     /// Sets the block on layer 0. Returns false when y is outside the world.
     pub(crate) fn set(&mut self, x: i32, y: i32, z: i32, id: i32, gd: &GameData) -> bool {
         let Some(s) = Column::sub_index(y) else { return false };

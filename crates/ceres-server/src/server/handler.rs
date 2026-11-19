@@ -200,6 +200,8 @@ impl Server {
             (State::Spawned, protocol::BLOCK_PICK_REQUEST) => self.on_block_pick(sid, &mut r)?,
             (State::Spawned, protocol::BLOCK_ACTOR_DATA) => self.on_block_actor_data(sid, &mut r)?,
             (State::Spawned, protocol::mp::ANIMATE) => self.on_animate(sid, &mut r)?,
+            (State::Spawned, 0x61) => self.on_book_edit(sid, &mut r)?, // BookEdit
+            (State::Spawned, 0x7d) => self.on_lectern_update(sid, &mut r)?, // LecternUpdate
             (State::Spawned, protocol::mp::EMOTE) => self.on_emote(sid, &mut r)?,
             (State::Spawned, protocol::mp::PLAYER_SKIN) => self.on_player_skin(sid, &mut r)?,
             (State::Spawned, protocol::mp::RESPAWN) => self.on_respawn(sid, &mut r)?,
@@ -212,6 +214,9 @@ impl Server {
                 let target = r.uvarlong()? as i64;
                 if action == protocol::INTERACT_OPEN_INVENTORY && target == p.entity_id {
                     p.out.push(protocol::open_own_inventory(p.entity_id));
+                }
+                if action == 3 {
+                    self.dismount(sid); // StopRiding
                 }
             }
             (State::Spawned, sleep::PLAYER_ACTION) => self.on_player_action(sid, &mut r)?,

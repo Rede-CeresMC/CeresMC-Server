@@ -13,6 +13,8 @@ force-resource-packs=on
 # mobs appearing by themselves near players
 spawn-animals=on
 spawn-monsters=on
+# creeper and ghast explosions break blocks, endermen pick blocks up
+mob-griefing=on
 xbox-auth=on
 # NetherNet: UDP ports for players' connections (forward them on the router for players from outside)
 nethernet-udp-ports=19300-19399

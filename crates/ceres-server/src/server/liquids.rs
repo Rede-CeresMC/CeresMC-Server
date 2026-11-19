@@ -51,7 +51,12 @@ impl Server {
     /// (liquid, depth) of a block, if it is water or lava.
     pub(crate) fn liquid_at(&mut self, world: usize, pos: [i32; 3]) -> Option<(Liquid, i64)> {
         let id = self.worlds.worlds[world].get_block(pos, &self.gd);
-        self.liquid_of(id)
+        if let Some(l) = self.liquid_of(id) {
+            return Some(l);
+        }
+        // a waterlogged block is a water source that never gets replaced (it is not replaceable)
+        let logged = self.worlds.worlds[world].get_block_layer(pos, 1, &self.gd).is_some_and(|w| self.gd.block_name(w) == "minecraft:water");
+        logged.then_some((Liquid::Water, 0))
     }
 
     fn liquid_of(&self, id: i32) -> Option<(Liquid, i64)> {
@@ -81,7 +86,7 @@ impl Server {
         }
     }
 
-    fn set_liquid(&mut self, world: usize, pos: [i32; 3], kind: Liquid, depth: i64) {
+    pub(crate) fn set_liquid(&mut self, world: usize, pos: [i32; 3], kind: Liquid, depth: i64) {
         if let Some(id) = self.liquid_block(kind, depth) {
             self.change_block(world, pos, id);
         }
@@ -245,7 +250,19 @@ impl Server {
             "minecraft:lava_bucket" => (false, Some(Liquid::Lava)),
             _ => return false,
         };
-        let new_item_name = if fill {
+        // a block that holds water: the bucket puts water in it or takes it out
+        let clicked_id = self.worlds.worlds[world].get_block(clicked, &self.gd);
+        let holds = blocks::waterloggable(self.gd.block_name(clicked_id)) && self.players.get(&sid).is_some_and(|p| Self::in_reach(p, clicked));
+        let logged = holds && self.water_layer(world, clicked);
+        let new_item_name = if holds && fill && logged {
+            self.set_water_layer(world, clicked, false);
+            self.liquid_sound(world, clicked, "bucket.fill.water");
+            "minecraft:water_bucket"
+        } else if holds && !fill && empty_into == Some(Liquid::Water) && !logged {
+            self.set_water_layer(world, clicked, true);
+            self.liquid_sound(world, clicked, "bucket.empty.water");
+            "minecraft:bucket"
+        } else if fill {
             // pick up a source: the clicked block itself or the one in front of the clicked face
             let reachable: Vec<[i32; 3]> = [Some(clicked), target]
                 .into_iter()
@@ -260,7 +277,12 @@ impl Server {
                 return true;
             };
             let air = self.gd.air_id;
-            self.change_block(world, pos, air);
+            let main = self.worlds.worlds[world].get_block(pos, &self.gd);
+            if self.liquid_of(main).is_some() {
+                self.change_block(world, pos, air);
+            } else {
+                self.set_water_layer(world, pos, false); // a waterlogged block keeps standing
+            }
             let sound = if kind == Liquid::Water { "bucket.fill.water" } else { "bucket.fill.lava" };
             self.liquid_sound(world, pos, sound);
             if kind == Liquid::Water { "minecraft:water_bucket" } else { "minecraft:lava_bucket" }
@@ -314,12 +336,12 @@ impl Server {
         true
     }
 
-    fn liquid_sound(&mut self, world: usize, pos: [i32; 3], sound: &str) {
+    pub(crate) fn liquid_sound(&mut self, world: usize, pos: [i32; 3], sound: &str) {
         let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
         self.broadcast(&protocol::level_sound_event(sound, center, -1), |_, q| q.world == world);
     }
 
-    fn resync_held(&mut self, sid: SessionId) {
+    pub(crate) fn resync_held(&mut self, sid: SessionId) {
         if let Some(p) = self.players.get_mut(&sid) {
             let slot = (p.inventory.held_slot as usize).min(8);
             p.out.push(protocol::inventory_slot(window::INVENTORY as u32, slot as u32, &p.inventory.main[slot]));

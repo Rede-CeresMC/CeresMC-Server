@@ -500,6 +500,7 @@ pub fn open_entity_container(window_id: u8, window_type: u8, pos: [i32; 3], enti
 
 /// AddActor for a projectile (snowball, egg, ender pearl, arrow) with its shooter.
 pub fn add_projectile(entity_id: i64, kind: &str, pos: [f32; 3], motion: [f32; 3], owner: i64, potion: Option<i16>) -> Vec<u8> {
+    let (pitch, yaw) = projectile_rotation(motion);
     packet(ADD_ACTOR, |w| {
         w.varlong(entity_id);
         w.uvarlong(entity_id as u64);
@@ -507,9 +508,10 @@ pub fn add_projectile(entity_id: i64, kind: &str, pos: [f32; 3], motion: [f32; 3
         for v in pos.into_iter().chain(motion) {
             w.f32_le(v);
         }
-        for _ in 0..4 {
-            w.f32_le(0.0);
-        }
+        w.f32_le(pitch);
+        w.f32_le(yaw);
+        w.f32_le(yaw); // head yaw
+        w.f32_le(yaw); // body yaw
         w.uvarint(0); // attributes
         w.uvarint(if potion.is_some() { 2 } else { 1 }); // metadata
         w.uvarint(5); // OWNER_EID (long)
@@ -527,6 +529,18 @@ pub fn add_projectile(entity_id: i64, kind: &str, pos: [f32; 3], motion: [f32; 3
         w.uvarint(0);
         w.bool(false);
     })
+}
+
+/// (pitch, yaw) in degrees that make an arrow-like entity point along its motion.
+pub fn projectile_rotation(motion: [f32; 3]) -> (f32, f32) {
+    let h = (motion[0] * motion[0] + motion[2] * motion[2]).sqrt();
+    (motion[1].atan2(h).to_degrees(), motion[0].atan2(motion[2]).to_degrees())
+}
+
+/// MoveActorAbsolute for a projectile, turned along its motion.
+pub fn move_projectile(entity_id: i64, pos: [f32; 3], motion: [f32; 3], on_ground: bool) -> Vec<u8> {
+    let (pitch, yaw) = projectile_rotation(motion);
+    move_entity(entity_id, pos, pitch, yaw, yaw, on_ground)
 }
 
 /// AddActor for a firework rocket; `item_nbt` is the network NBT of {Fireworks: {...}}.
@@ -980,6 +994,9 @@ pub mod meta_key {
     pub const BOUNDING_BOX_WIDTH: u32 = 53;
     pub const BOUNDING_BOX_HEIGHT: u32 = 54;
     pub const FUSE_LENGTH: u32 = 55;
+    pub const POSE_INDEX: u32 = 79;
+    pub const COLOR_2: u32 = 82;
+    pub const SKIN_ID: u32 = 104;
     pub const ALWAYS_SHOW_NAMETAG: u32 = 81;
     pub const FLAGS2: u32 = 92;
 }
@@ -1099,5 +1116,25 @@ pub fn move_entity(entity_id: i64, pos: [f32; 3], pitch: f32, yaw: f32, head_yaw
         w.u8(angle(pitch));
         w.u8(angle(yaw));
         w.u8(angle(head_yaw));
+    })
+}
+
+/// PlayerStartItemCooldown (176): the client greys out items of that cooldown category.
+pub fn start_item_cooldown(category: &str, ticks: i32) -> Vec<u8> {
+    packet(0xb0, |w| {
+        w.string(category);
+        w.varint(ticks);
+    })
+}
+
+/// SetActorLink (41): `rider` gets on (type 1 driver, 2 passenger) or off (0) `vehicle`.
+pub fn set_actor_link(vehicle: i64, rider: i64, link_type: u8, immediate: bool, passenger_initiated: bool) -> Vec<u8> {
+    packet(0x29, |w| {
+        w.varlong(vehicle);
+        w.varlong(rider);
+        w.u8(link_type);
+        w.bool(immediate);
+        w.bool(passenger_initiated);
+        w.f32_le(0.0); // vehicle angular velocity
     })
 }

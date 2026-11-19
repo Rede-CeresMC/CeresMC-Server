@@ -17,6 +17,7 @@ keep-inventory=off
 force-resource-packs=on
 spawn-animals=on
 spawn-monsters=on
+mob-griefing=on
 ";
 
 pub struct Config {
@@ -37,6 +38,8 @@ pub struct Config {
     pub spawn_animals: bool,
     /// zombies appear at night near players
     pub spawn_monsters: bool,
+    /// creepers, fireballs and endermen change blocks
+    pub mob_griefing: bool,
     pub max_packets_per_sec: u32,
     pub max_batch_bytes: usize,
     /// Names in ops.txt get operator rights even though logins are not verified yet (anyone can
@@ -97,6 +100,7 @@ impl Config {
             force_resource_packs: flag(&get("force-resource-packs", "on")),
             spawn_animals: flag(&get("spawn-animals", "on")),
             spawn_monsters: flag(&get("spawn-monsters", "on")),
+            mob_griefing: flag(&get("mob-griefing", "on")),
             max_packets_per_sec: get("max-packets-per-sec", "600").parse().unwrap_or(600).max(50),
             max_batch_bytes: get("max-batch-bytes", "2097152").parse().unwrap_or(2 * 1024 * 1024).max(65536),
             allow_unverified_ops: flag(&get("allow-unverified-ops", "off")),

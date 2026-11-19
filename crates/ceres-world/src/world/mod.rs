@@ -282,6 +282,27 @@ impl World {
         chunk::biome_in(col.biomes.as_deref(), pos[0], y, pos[2])
     }
 
+    /// The block on a storage layer other than the main one (1 = water in waterlogged blocks).
+    pub fn get_block_layer(&mut self, pos: [i32; 3], layer: usize, gd: &GameData) -> Option<i32> {
+        if !(MIN_Y..=MAX_Y).contains(&pos[1]) {
+            return None;
+        }
+        self.column(pos[0] >> 4, pos[2] >> 4, gd).get_layer(pos[0], pos[1], pos[2], layer)
+    }
+
+    /// Sets a block on another storage layer (1 = water in waterlogged blocks).
+    pub fn set_block_layer(&mut self, pos: [i32; 3], layer: usize, id: i32, gd: &GameData) -> bool {
+        if !(MIN_Y..=MAX_Y).contains(&pos[1]) {
+            return false;
+        }
+        let key = (pos[0] >> 4, pos[2] >> 4);
+        let changed = self.column(key.0, key.1, gd).set_layer(pos[0], pos[1], pos[2], layer, id, gd);
+        if changed {
+            self.cache.remove(&key);
+        }
+        changed
+    }
+
     pub fn get_block(&mut self, pos: [i32; 3], gd: &GameData) -> i32 {
         if !(MIN_Y..=MAX_Y).contains(&pos[1]) {
             return gd.air_id;

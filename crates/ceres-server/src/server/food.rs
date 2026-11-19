@@ -124,7 +124,7 @@ impl Server {
 
     /// A click in the air with the held item (InventoryTransaction UseItem CLICK_AIR).
     pub(crate) fn on_click_air(&mut self, sid: SessionId) {
-        if self.throw_held(sid) || self.start_bow(sid) || self.equip_held_armor(sid) || self.use_firework_in_air(sid) {
+        if self.weapon_click_air(sid) || self.use_item_in_air(sid) || self.throw_held(sid) || self.start_bow(sid) || self.equip_held_armor(sid) || self.use_firework_in_air(sid) {
             return;
         }
         let ticks = self.ticks;
@@ -145,12 +145,19 @@ impl Server {
         if p.dead || p.gamemode == 6 || (p.hunger >= 20.0 && !f.always && p.gamemode != 1) {
             return;
         }
+        let item_name = self.gd.items_by_id.get(&held.id).map(|i| i.name.clone()).unwrap_or_default();
+        if self.on_cooldown(sid, &item_name) {
+            return;
+        }
+        let Some(p) = self.players.get_mut(&sid) else { return };
         p.eating = Some(ticks);
     }
 
     /// The client let go of the use button (InventoryTransaction ReleaseItem).
     pub(crate) fn on_release_item(&mut self, sid: SessionId) {
-        self.release_bow(sid);
+        if !self.weapon_release(sid) {
+            self.release_bow(sid);
+        }
         if let Some(p) = self.players.get_mut(&sid) {
             p.eating = None;
             p.awaiting_release = false;
@@ -176,6 +183,22 @@ impl Server {
         }
         if name == "minecraft:potion" {
             self.apply_potion(sid, held.meta, 1.0);
+        }
+        if name == "minecraft:honey_bottle" {
+            if let Some(id) = effects::effect_id("poison") {
+                self.remove_effect(sid, id); // honey cures poison
+            }
+        }
+        if name == "minecraft:suspicious_stew" {
+            if let Some((effect, secs)) = stew_effect(held.meta) {
+                if let Some(id) = effects::effect_id(effect) {
+                    self.add_effect(sid, id, 0, Some(secs), true);
+                }
+            }
+        }
+        if name == "minecraft:chorus_fruit" {
+            self.chorus_teleport(sid);
+            self.start_cooldown(sid, &name, "chorusfruit", 20);
         }
         if name != "minecraft:potion" && name != "minecraft:milk_bucket" && name != "minecraft:honey_bottle" {
             if let Some(p) = self.players.get(&sid) {
@@ -292,6 +315,52 @@ impl Server {
         }
         if starve {
             self.damage_player(sid, 1.0, &format!("§c{name} morreu de fome"), true, None);
+        }
+    }
+}
+
+/// Effect of a suspicious stew by its data value (the flower it was made with) and seconds.
+fn stew_effect(meta: u32) -> Option<(&'static str, u32)> {
+    Some(match meta {
+        0 => ("night_vision", 4),  // poppy
+        1 => ("jump_boost", 4),    // cornflower
+        2 => ("weakness", 7),      // tulips
+        3 => ("blindness", 6),     // azure bluet
+        4 => ("poison", 10),       // lily of the valley
+        5 | 6 => ("saturation", 1), // dandelion, blue orchid
+        7 => ("fire_resistance", 3), // allium
+        8 => ("regeneration", 6),  // oxeye daisy
+        9 => ("wither", 6),        // wither rose
+        10 => ("night_vision", 4), // torchflower
+        11 => ("blindness", 8),    // open eyeblossom
+        12 => ("nausea", 7),       // closed eyeblossom
+        _ => return None,
+    })
+}
+
+impl Server {
+    /// Chorus fruit: up to 16 tries to land on a free spot within 8 blocks.
+    fn chorus_teleport(&mut self, sid: SessionId) {
+        let Some(p) = self.players.get(&sid) else { return };
+        let (world, feet) = (p.world, [p.pos[0], p.pos[1] - mobs::EYE_HEIGHT, p.pos[2]]);
+        for _ in 0..16 {
+            let x = (feet[0] + (rand::random::<f32>() - 0.5) * 16.0).floor() as i32;
+            let z = (feet[2] + (rand::random::<f32>() - 0.5) * 16.0).floor() as i32;
+            let base = feet[1].floor() as i32 + (rand::random::<u32>() % 16) as i32 - 8;
+            for y in (base - 8..=base).rev() {
+                let solid = |s: &mut Server, p: [i32; 3]| s.gd.is_solid(s.worlds.worlds[world].get_block(p, &s.gd));
+                if !self.worlds.worlds[world].is_loaded([x, y, z]) || y <= ceres_world::MIN_Y {
+                    break;
+                }
+                if solid(self, [x, y - 1, z]) && !solid(self, [x, y, z]) && !solid(self, [x, y + 1, z]) {
+                    let from = feet;
+                    let to = [x as f32 + 0.5, y as f32, z as f32 + 0.5];
+                    self.broadcast(&protocol::level_sound_event("teleport", from, -1), |_, q| q.world == world);
+                    self.teleport(sid, to);
+                    self.broadcast(&protocol::level_sound_event("teleport", to, -1), |_, q| q.world == world);
+                    return;
+                }
+            }
         }
     }
 }

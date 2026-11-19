@@ -73,6 +73,35 @@ fn split_extra(item: &ItemDesc) -> Option<(Tag, Vec<u8>)> {
     Some((tag, r.rest().to_vec()))
 }
 
+/// A field of the item's NBT.
+pub(crate) fn item_field(item: &ItemDesc, key: &str) -> Option<Tag> {
+    split_extra(item).and_then(|(t, _)| t.get(key).cloned())
+}
+
+/// Sets (or with None removes) a field of the item's NBT, keeping the rest.
+pub(crate) fn set_item_field(item: &mut ItemDesc, key: &str, val: Option<Tag>) {
+    let (mut tag, tail) = split_extra(item).unwrap_or_else(|| (Tag::Compound(Vec::new()), vec![0, 0, 0, 0, 0, 0, 0, 0]));
+    match val {
+        Some(v) => tag.set(key, v),
+        None => {
+            if let Tag::Compound(fields) = &mut tag {
+                fields.retain(|(k, _)| k != key);
+            }
+        }
+    }
+    let empty = matches!(&tag, Tag::Compound(f) if f.is_empty());
+    if empty && tail.iter().all(|b| *b == 0) {
+        item.extra = ceres_world::extra_data(None);
+        return;
+    }
+    let mut w = ceres_codec::binary::W::new();
+    w.u16_le(0xffff);
+    w.u8(1);
+    nbt::write_root(&mut w, "", &tag, Flavor::LittleEndian);
+    w.bytes(&tail);
+    item.extra = w.0;
+}
+
 pub(crate) fn item_damage(item: &ItemDesc) -> u32 {
     split_extra(item)
         .and_then(|(t, _)| t.get("Damage").and_then(|v| v.as_i64()))

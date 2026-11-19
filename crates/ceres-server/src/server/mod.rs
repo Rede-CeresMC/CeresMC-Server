@@ -8,6 +8,8 @@ mod resource_packs;
 mod armor;
 mod brewing;
 mod blocks;
+mod blockuse;
+mod books;
 mod cauldron;
 mod chunks;
 mod combat;
@@ -20,24 +22,32 @@ mod effects;
 mod enchanting;
 mod environment;
 mod falling;
+mod fishing;
 mod farming;
 mod fireworks;
 mod food;
+mod frames;
 mod furnace;
+mod trees;
 mod twopart;
+mod useitems;
+mod weapons;
 mod grindstone;
 mod handler;
 mod hopper;
 mod inventory;
 mod items;
+mod lightning;
 mod liquids;
 mod loot;
 mod moderation;
 mod music;
+mod plants;
 mod players;
 mod potions;
 mod projectiles;
 mod skin;
+mod spawners;
 mod sleep;
 mod xp;
 
@@ -123,6 +133,8 @@ pub(crate) struct Player {
     punching: Option<([i32; 3], u8)>,
     /// walks through blocks and may fly, in any game mode (/noclip, plugins)
     noclip: bool,
+    /// entity id of the mob this player rides
+    riding: Option<i64>,
     /// ticks the shield stays disabled (hit by an axe)
     shield_cooldown: u32,
     /// ticks until a raised shield makes a sound and wears again
@@ -165,6 +177,18 @@ pub struct Server {
     falling: Vec<falling::FallingBlock>,
     xp_orbs: Vec<xp::XpOrb>,
     mobs: Vec<mobs::Mob>,
+    /// mob AI state: entity definitions, indexes, sensors
+    mobsys: mobs::MobSys,
+    /// arrows, fireballs, potions... shot by mobs
+    mob_projectiles: Vec<mobs::fight::MobProjectile>,
+    /// items on cooldown per player (goat horns...): tick they may be used again
+    item_cooldowns: HashMap<(SessionId, String), u64>,
+    /// fishing bobbers out
+    bobbers: Vec<fishing::Bobber>,
+    /// lightning bolts shown for a second
+    bolts: Vec<lightning::Bolt>,
+    /// players charging with a spear: where they were last tick
+    spear_prev: HashMap<SessionId, [f32; 3]>,
     projectiles: Vec<projectiles::Projectile>,
     fireworks: Vec<fireworks::Firework>,
     /// sound handle of the record each jukebox plays, to stop it
@@ -216,6 +240,12 @@ impl Server {
             falling: Vec::new(),
             xp_orbs: Vec::new(),
             mobs: Vec::new(),
+            mobsys: Default::default(),
+            mob_projectiles: Vec::new(),
+            item_cooldowns: HashMap::new(),
+            bobbers: Vec::new(),
+            bolts: Vec::new(),
+            spear_prev: HashMap::new(),
             projectiles: Vec::new(),
             fireworks: Vec::new(),
             jukebox_sounds: HashMap::new(),
@@ -327,6 +357,7 @@ impl Server {
                             breaking: None,
                             punching: None,
                             noclip: false,
+                            riding: None,
                             shield_cooldown: 0,
                             shield_block_cooldown: 0,
                             window_counter: 0,
@@ -359,6 +390,7 @@ impl Server {
                     }
                 }
                 NetEvent::Disconnected(sid, reason) => {
+                    self.dismount(sid);
                     self.close_container(sid, false);
                     self.stop_sleeping(sid);
                     if let Some(p) = self.players.remove(&sid) {

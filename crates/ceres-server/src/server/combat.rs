@@ -6,6 +6,11 @@ use ceres_protocol::{actor_event, respawn_state};
 
 const EYE_HEIGHT: f32 = 1.62;
 
+/// Damage of a weapon in the hand (the fist included).
+pub(crate) fn item_damage_of(name: &str) -> f32 {
+    item_attack_damage(name)
+}
+
 fn item_attack_damage(name: &str) -> f32 {
     match name.strip_prefix("minecraft:").unwrap_or(name) {
         "wooden_sword" | "golden_sword" => 5.0,
@@ -30,6 +35,17 @@ fn item_attack_damage(name: &str) -> f32 {
         "iron_shovel" => 4.0,
         "diamond_shovel" => 5.0,
         "netherite_shovel" => 6.0,
+        "wooden_hoe" | "golden_hoe" => 3.0,
+        "stone_hoe" | "copper_hoe" => 4.0,
+        "iron_hoe" => 5.0,
+        "diamond_hoe" => 6.0,
+        "netherite_hoe" => 7.0,
+        // item_components.nbt: minecraft:damage 1/2/2/3/1/4/5, plus the fist
+        "wooden_spear" | "golden_spear" => 2.0,
+        "stone_spear" | "copper_spear" => 3.0,
+        "iron_spear" => 4.0,
+        "diamond_spear" => 5.0,
+        "netherite_spear" => 6.0,
         _ => 1.0,
     }
 }
@@ -169,6 +185,7 @@ impl Server {
     }
 
     pub(crate) fn kill_player(&mut self, sid: SessionId, death_msg: &str) {
+        self.dismount(sid);
         self.stop_sleeping(sid);
         self.close_menu(sid, true, true);
         self.close_container(sid, true);
@@ -272,6 +289,9 @@ impl Server {
         };
         dmg = (dmg + att.attack_bonus()).max(0.0);
         dmg += 1.25 * blocks::enchant_level(held, ENCHANT_SHARPNESS) as f32;
+        if let Some((fall, density)) = self.mace_fall(sid) {
+            dmg += weapons::mace_bonus(fall, density);
+        }
         if att.fall_start_y.is_some_and(|fy| fy - (att.pos[1] - EYE_HEIGHT) > 0.2) && !att.flying {
             dmg *= 1.5; // critical hit
         }
@@ -279,12 +299,19 @@ impl Server {
     }
 
     pub(crate) fn on_attack_entity(&mut self, attacker_sid: SessionId, target_eid: i64) {
+        if !self.spear_ready(attacker_sid) {
+            return;
+        }
         // why an attack on a player did not count goes to server.log (to find PvP problems)
         let attacker_name = self.players.get(&attacker_sid).map(|p| p.name.clone()).unwrap_or_default();
         let refuse = |why: &str| crate::logfile::log(&format!("[Combat] attack by {attacker_name} on entity {target_eid} ignored: {why}"));
         if self.mobs.iter().any(|m| m.entity_id == target_eid) {
             let dmg = self.melee_damage(attacker_sid);
+            let smash = self.mace_fall(attacker_sid);
             self.attack_mob(attacker_sid, target_eid, dmg);
+            if let (Some((fall, _)), Some(pos)) = (smash, self.mobs.iter().find(|m| m.entity_id == target_eid).map(|m| m.pos)) {
+                self.mace_smash_effects(attacker_sid, pos, Some(target_eid), fall);
+            }
             return;
         }
         if !self.cfg.pvp {
@@ -327,6 +354,10 @@ impl Server {
         dmg = (dmg + att.attack_bonus()).max(0.0);
         dmg += 1.25 * blocks::enchant_level(held, ENCHANT_SHARPNESS) as f32;
         let knockback_level = blocks::enchant_level(held, ENCHANT_KNOCKBACK) as f32;
+        let smash = self.mace_fall(attacker_sid);
+        if let Some((fall, density)) = smash {
+            dmg += weapons::mace_bonus(fall, density);
+        }
         if att.fall_start_y.is_some_and(|fy| fy - (att.pos[1] - EYE_HEIGHT) > 0.2) && !att.flying {
             dmg *= 1.5; // critical hit
         }
@@ -346,6 +377,10 @@ impl Server {
         if self.damage_player(victim_sid, dmg, &msg, false, Some(kb)) {
             // only hits that count make the hit sound
             self.broadcast(&protocol::level_sound_event("attack.strong", victim_pos, -1), |_, q| q.world == world);
+            if let Some((fall, _)) = smash {
+                let feet = [victim_pos[0], victim_pos[1] - EYE_HEIGHT, victim_pos[2]];
+                self.mace_smash_effects(attacker_sid, feet, None, fall);
+            }
             self.wear_held_item(attacker_sid, true);
             self.exhaust(attacker_sid, food::exhaustion::ATTACK);
         }
@@ -424,5 +459,33 @@ impl Server {
                 p.fall_start_y = None;
             }
         }
+    }
+}
+
+/// Attack cooldown of a spear in ticks (item_components.nbt, minecraft:cooldown, category spear).
+pub(crate) fn spear_cooldown(name: &str) -> Option<u32> {
+    Some(match name.strip_prefix("minecraft:")? {
+        "wooden_spear" => 13,
+        "stone_spear" => 15,
+        "copper_spear" => 17,
+        "iron_spear" | "golden_spear" => 19,
+        "diamond_spear" => 21,
+        "netherite_spear" => 23,
+        _ => return None,
+    })
+}
+
+impl Server {
+    /// A spear that is still cooling down does not hit; one that hits starts its cooldown.
+    /// False when the attack must be ignored.
+    pub(crate) fn spear_ready(&mut self, sid: SessionId) -> bool {
+        let Some(p) = self.players.get(&sid) else { return true };
+        let name = self.gd.items_by_id.get(&p.inventory.held_item().id).map(|i| i.name.clone()).unwrap_or_default();
+        let Some(ticks) = spear_cooldown(&name) else { return true };
+        if self.on_cooldown(sid, &name) {
+            return false;
+        }
+        self.start_cooldown(sid, &name, "spear", ticks);
+        true
     }
 }
