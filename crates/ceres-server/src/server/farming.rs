@@ -72,8 +72,15 @@ impl Server {
             let result = match block_name.as_str() {
                 "minecraft:grass_block" | "minecraft:dirt" | "minecraft:grass_path" => "minecraft:farmland",
                 "minecraft:coarse_dirt" => "minecraft:dirt",
+                // rooted dirt: dirt, and the roots drop (PowerNukkitX BlockDirtWithRoots)
+                "minecraft:dirt_with_roots" => "minecraft:dirt",
                 _ => "",
             };
+            if block_name == "minecraft:dirt_with_roots" {
+                if let Some(it) = self.simple_item("minecraft:hanging_roots", 1) {
+                    self.drop_at(world, [clicked[0] as f32 + 0.5, clicked[1] as f32 + 1.1, clicked[2] as f32 + 0.5], it);
+                }
+            }
             if let Some(id) = (!result.is_empty()).then(|| self.gd.default_block(result)).flatten() {
                 self.change_block(world, clicked, id);
                 self.tool_used(sid, clicked, "use");
@@ -84,7 +91,7 @@ impl Server {
         if tool == Some(ceres_world::Tool::Shovel) && face != 0 && air_above {
             let path = matches!(
                 block_name.as_str(),
-                "minecraft:grass_block" | "minecraft:dirt" | "minecraft:coarse_dirt" | "minecraft:podzol" | "minecraft:mycelium"
+                "minecraft:grass_block" | "minecraft:dirt" | "minecraft:coarse_dirt" | "minecraft:podzol" | "minecraft:mycelium" | "minecraft:dirt_with_roots"
             );
             if let Some(id) = path.then(|| self.gd.default_block("minecraft:grass_path")).flatten() {
                 self.change_block(world, clicked, id);
@@ -242,9 +249,9 @@ impl Server {
         let name = self.gd.block_name(block);
         if is_crop(name) {
             let Some(g) = growth(&self.gd, block) else { return };
-            // grows on farmland, with light (not checked) about one stage in three ticks
+            // grows on farmland, with light (not checked) one stage in two ticks (as PowerNukkitX)
             let below = self.worlds.worlds[world].get_block([pos[0], pos[1] - 1, pos[2]], &self.gd);
-            if g < 7 && self.gd.block_name(below) == "minecraft:farmland" && rand::random::<u32>() % 3 == 0 {
+            if g < 7 && self.gd.block_name(below) == "minecraft:farmland" && rand::random::<u32>() % 2 == 0 {
                 if let Some(id) = self.gd.with_states(block, &[("growth", Tag::Int(g as i32 + 1))]) {
                     self.change_block(world, pos, id);
                 }

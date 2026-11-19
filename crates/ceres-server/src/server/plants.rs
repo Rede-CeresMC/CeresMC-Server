@@ -114,7 +114,7 @@ impl Server {
                 }
             }
             "minecraft:melon_stem" | "minecraft:pumpkin_stem" => {
-                if !roll(3) {
+                if !roll(2) {
                     return true;
                 }
                 let g = state(&self.gd, block, "growth").unwrap_or(0);
@@ -131,7 +131,7 @@ impl Server {
                 }
             }
             "minecraft:cocoa" | "minecraft:nether_wart" => {
-                let (max, chance) = if name == "minecraft:cocoa" { (2, 5) } else { (3, 10) };
+                let (max, chance) = if name == "minecraft:cocoa" { (2, 2) } else { (3, 10) };
                 let a = state(&self.gd, block, "age").unwrap_or(0);
                 if a < max && roll(chance) {
                     self.set_state(world, pos, block, "age", a + 1);
@@ -253,6 +253,14 @@ impl Server {
                 true
             }
             "minecraft:moss_block" => self.bone_meal_moss(world, pos),
+            "minecraft:dirt_with_roots" => {
+                // hanging roots grow under rooted dirt
+                let below = [pos[0], pos[1] - 1, pos[2]];
+                match (self.name_at(world, below) == "minecraft:air", self.gd.default_block("minecraft:hanging_roots")) {
+                    (true, Some(roots)) => self.change_block(world, below, roots),
+                    _ => false,
+                }
+            }
             "minecraft:cave_vines" => self.bone_meal_cave_vine(world, pos, &name),
             "minecraft:glow_lichen" => self.bone_meal_lichen(world, pos),
             "minecraft:small_dripleaf_block" | "minecraft:big_dripleaf" | "minecraft:sea_pickle" => self.bone_meal_dripleaf_pickle(world, pos, &name),

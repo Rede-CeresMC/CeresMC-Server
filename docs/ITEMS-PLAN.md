@@ -31,6 +31,8 @@ Testes de bot: `tools/weapons_test.py`, `tools/projectiles_test.py`, `tools/mobs
 - Tridente: corrigido para o PNX: força do arremesso pelo tempo segurado (min((p²+2p)/3, 1) x 2,5, mínimo 5 ticks) e Empalamento em qualquer alvo molhado (água ou chuva a céu aberto), não só criaturas aquáticas
 - Maça: mesma curva de dano; adicionadas a poeira no chão (LevelEvent 9815) e o som pesado a partir de 16 de dano
 - Lança: danos iguais; carga portada do PNX
+- Plantas: corrigidas as chances por random tick para as do PNX (plantações, caules e cacau 50 %); iguais: fungo do Nether 1/10, bambu 1/3, alga ~14 %, mudas 1/7, frutas silvestres 1/5, colheita de frutas, cana com farinha de osso. Mantido 2-5 estágios de farinha de osso nas plantações (vanilla; o PNX usa 2-4)
+- Terra com raízes: enxada vira terra e solta raízes pendentes, pá vira caminho, farinha de osso cria raízes pendentes embaixo (como o PNX)
 - Pesca: o PNX é mais simples (XP 1-3, loot fixo no código); mantida a versão com as loot tables do pack
 
 ## Lote 2: ferramentas (em andamento)
