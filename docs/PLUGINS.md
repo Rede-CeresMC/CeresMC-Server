@@ -124,6 +124,8 @@ Retornam `bool`: `true` deixa acontecer e `false` cancela. Se qualquer plugin ca
 
 `Block` tem `name` (`"minecraft:stone"`), `world`, `x`, `y` e `z`.
 
+Os eventos de bloco também vêm sem jogador (`player.name` vazio) quando não foi um jogador que agiu: um distribuidor pondo água, lava, fogo, TNT ou um mob na frente (`on_block_place`), recolhendo líquido (`on_block_break`), usando farinha de osso ou um liberador pondo item num recipiente (`on_block_interact`); o bloco é o da frente. Proteções de área devem negar esses também quando o bloco está dentro da área.
+
 ### O que o plugin pode fazer
 
 - **Comandos e console:**

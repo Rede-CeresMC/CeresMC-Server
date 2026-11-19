@@ -121,6 +121,8 @@ fn is_consumer(n: &str) -> bool {
         || s == "fence_gate"
         || s == "noteblock"
         || s == "hopper"
+        || s == "dispenser"
+        || s == "dropper"
         || is_comparator(n)
 }
 
@@ -366,7 +368,13 @@ impl Server {
     /// Sets a block without the redstone update of `change_block` (the update in progress
     /// looks at what changes).
     fn rs_set(&mut self, world: usize, pos: [i32; 3], id: i32) -> bool {
+        // a state change (same block) keeps the block entity: a dispenser's or hopper's items
+        let old = self.worlds.worlds[world].get_block(pos, &self.gd);
+        let keep = if self.gd.block_name(old) == self.gd.block_name(id) { self.worlds.worlds[world].get_block_entity(pos, &self.gd) } else { None };
         if self.worlds.worlds[world].set_block(pos, id, &self.gd) {
+            if let Some(tile) = keep {
+                self.worlds.worlds[world].set_block_entity(pos, tile, &self.gd);
+            }
             self.broadcast(&protocol::update_block(pos, id), |_, q| q.world == world);
             self.observe(world, pos);
             return true;
@@ -552,6 +560,18 @@ impl Server {
             "lit_redstone_lamp" => {
                 if self.power_at(world, pos) == 0 {
                     self.schedule_redstone(world, pos, 4);
+                }
+            }
+            "dispenser" | "dropper" => {
+                let on = self.power_at(world, pos) > 0;
+                let was = self.rs_int(id, "triggered_bit") != 0;
+                if on != was {
+                    if let Some(new) = super::dispenser::with_triggered(&self.gd, id, on) {
+                        self.rs_set(world, pos, new);
+                    }
+                    if on {
+                        self.schedule_redstone(world, pos, 4);
+                    }
                 }
             }
             "hopper" => {
@@ -780,6 +800,10 @@ impl Server {
             if had != out {
                 self.redstone_update(world, pos);
             }
+            return;
+        }
+        if super::dispenser::is_dispenser(&name) {
+            self.dispense(world, pos);
             return;
         }
         let new = if s == "observer" {

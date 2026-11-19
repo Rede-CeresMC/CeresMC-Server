@@ -39,7 +39,7 @@ impl Server {
     }
 
     /// Stores new contents of a container and shows them to whoever is looking at it.
-    fn store_items(&mut self, world: usize, pos: [i32; 3], ui: u8, tile_id: &str, items: Vec<ItemDesc>) {
+    pub(crate) fn store_items(&mut self, world: usize, pos: [i32; 3], ui: u8, tile_id: &str, items: Vec<ItemDesc>) {
         if furnace::is_furnace_ui(ui) {
             if let Some(f) = self.furnaces.get_mut(&(world, pos)) {
                 f.set_items(items);
@@ -89,7 +89,7 @@ impl Server {
     }
 
     /// Puts one of `item` into a slot of `items` (allowed slots only). Returns false if full.
-    fn insert_one(&self, items: &mut [ItemDesc], slots: std::ops::Range<usize>, item: &ItemDesc) -> bool {
+    pub(crate) fn insert_one(&self, items: &mut [ItemDesc], slots: std::ops::Range<usize>, item: &ItemDesc) -> bool {
         let max = self.gd.max_stack(item.id) as u16;
         for i in slots.clone() {
             if items[i].same_type(item) && items[i].count < max {

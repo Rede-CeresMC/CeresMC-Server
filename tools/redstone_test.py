@@ -3,7 +3,7 @@ a redstone block powers dust that lights a lamp at the end of the line, a button
 for a moment, and a redstone block next to TNT lights it."""
 import sys, os, struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bedrock_client import Client, update_blocks, block_id, uvarint, svarint, string
+from bedrock_client import Client, update_blocks, block_id, uvarint, svarint, string, read_uvarint
 
 ok = True
 def check(cond, what):
@@ -201,7 +201,49 @@ command(c, "/gamemode creative")
 c.move(BX + 5.5, G + 1.62, BZ - 2.5)
 c.pump(0.3)
 
-# 8. TNT next to a redstone block is lit
+# 8. a dispenser with arrows shoots one when powered; a dropper throws its item out
+def fill(pos, item, count):
+    """Opens the container at `pos` and moves `count` of the held item into its first slot."""
+    command(c, "/gamemode survival")
+    give(c, f"{item} {count}")
+    n = len(c.received)
+    c.place_block(pos, 1, 0)
+    c.pump(3.0, lambda: any(p == 0x2e for p, _ in c.received[n:]))
+    req = uvarint(0x93) + uvarint(1) + svarint(-950 - pos[0]) + uvarint(1)
+    req += uvarint(0) + bytes(1) + bytes([count]) + bytes([28, 0, 0]) + struct.pack("<i", 0) + bytes([7, 0, 0]) + struct.pack("<i", 0)
+    req += uvarint(0) + struct.pack("<i", 0)
+    m = len(c.received)
+    c.send(req)
+    c.pump(0.6)
+    opens = [d for p, d in c.received[n:] if p == 0x2e]
+    if opens:
+        c.send(uvarint(0x2f) + bytes([opens[-1][0], 0, 0]))
+    c.pump(0.4)
+    command(c, "/gamemode creative")
+    return bool(opens)
+
+for (DP, RP, item, kind) in (((BX + 6, G, BZ + 6), (BX + 6, G, BZ + 7), "dispenser", b"minecraft:arrow"), ((BX + 9, G, BZ + 6), (BX + 9, G, BZ + 7), "dropper", None)):
+    command(c, "/give @s stone 4")
+    for q in (DP, RP):
+        c.place_block((q[0], G - 1, q[2]), 1, STONE)
+        c.pump(0.05)
+        c.break_block(q)
+    c.pump(0.4)
+    c.move(DP[0] + 0.5, G + 1.62, DP[2] - 2.5)
+    c.pump(0.3)
+    put(item, DP)
+    check(fill(DP, "arrow" if kind else "cobblestone", 5), f"a {item} opens as a container")
+    n = len(c.received)
+    put("redstone_block", RP)
+    c.pump(1.0)
+    if kind:
+        check(any(p == 0x0d and kind in d for p, d in c.received[n:]), "a powered dispenser shoots an arrow")
+    else:
+        check(any(p == 0x0f for p, _ in c.received[n:]), "a powered dropper throws its item out")
+c.move(BX + 5.5, G + 1.62, BZ - 2.5)
+c.pump(0.3)
+
+# 9. TNT next to a redstone block is lit
 T, R2 = (BX + 11, G, BZ), (BX + 12, G, BZ)
 put("tnt", T)
 n = len(c.received)

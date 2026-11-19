@@ -652,3 +652,48 @@ impl Server {
         self.spawn_xp(world, at, 3 + rand::random::<u32>() % 9);
     }
 }
+
+/// Owner of projectiles nobody threw (dispensers).
+pub(crate) const NO_OWNER: SessionId = SessionId::MAX;
+
+impl Server {
+    /// A dispenser shoots the item named `name` (arrows, snowballs, eggs, potions, bottles o'
+    /// enchanting) from `at` along `dir`; false when it is not a projectile.
+    pub(crate) fn dispense_projectile(&mut self, world: usize, at: [f32; 3], dir: [f32; 3], name: &str, meta: u32) -> bool {
+        let (kind, speed) = match name {
+            "minecraft:arrow" => (Kind::Arrow, 1.1),
+            "minecraft:snowball" => (Kind::Snowball, 1.1),
+            "minecraft:egg" => (Kind::Egg, 1.1),
+            "minecraft:splash_potion" => (Kind::SplashPotion, 0.6),
+            "minecraft:lingering_potion" => (Kind::LingeringPotion, 0.6),
+            "minecraft:experience_bottle" => (Kind::XpBottle, 0.7),
+            _ => return false,
+        };
+        let jitter = || (rand::random::<f32>() - 0.5) * 0.06;
+        let motion = [dir[0] * speed + jitter(), dir[1] * speed + jitter(), dir[2] * speed + jitter()];
+        let eid = self.next_entity_id;
+        self.next_entity_id += 1;
+        let aux = matches!(kind, Kind::SplashPotion | Kind::LingeringPotion).then_some(meta as i16);
+        self.broadcast(&protocol::add_projectile(eid, kind.entity(), at, motion, -1, aux), |_, q| q.world == world);
+        let pickup = kind == Kind::Arrow;
+        self.projectiles.push(Projectile {
+            entity_id: eid,
+            world,
+            kind,
+            owner: NO_OWNER,
+            pos: at,
+            motion,
+            age: 0,
+            power: 0,
+            punch: 0,
+            pickup,
+            potion: meta,
+            stuck: 0,
+            item: None,
+            dealt: false,
+            pierce: 0,
+            pierced: Vec::new(),
+        });
+        true
+    }
+}

@@ -32,6 +32,8 @@ pub(crate) fn container_kind(name: &str) -> Option<(u8, &'static str, bool)> {
         "minecraft:barrel" => Some((block_container::BARREL, "Barrel", false)),
         n if n.ends_with("shulker_box") => Some((block_container::SHULKER_BOX, "ShulkerBox", true)),
         "minecraft:hopper" => Some((block_container::CHEST, "Hopper", false)),
+        "minecraft:dispenser" => Some((block_container::CHEST, "Dispenser", false)),
+        "minecraft:dropper" => Some((block_container::CHEST, "Dropper", false)),
         "minecraft:brewing_stand" => Some((brewing::UI_BREWING_INPUT, "BrewingStand", false)),
         _ => None,
     }
@@ -90,6 +92,7 @@ pub(crate) fn item_from_vanilla(t: &Tag, gd: &GameData) -> Option<ItemDesc> {
 pub(crate) fn slots_of(tile_id: &str) -> usize {
     match tile_id {
         "Hopper" => hopper::HOPPER_SLOTS,
+        "Dispenser" | "Dropper" => dispenser::SLOTS,
         "BrewingStand" => brewing::BREWING_SLOTS,
         "Furnace" | "BlastFurnace" | "Smoker" => 3,
         _ => CONTAINER_SLOTS,
@@ -101,6 +104,10 @@ fn window_type_of(ui: u8, tile_id: &str) -> u8 {
         furnace::furnace_window_type(ui)
     } else if tile_id == "Hopper" {
         protocol::WINDOW_TYPE_HOPPER
+    } else if tile_id == "Dispenser" {
+        protocol::WINDOW_TYPE_DISPENSER
+    } else if tile_id == "Dropper" {
+        protocol::WINDOW_TYPE_DROPPER
     } else if tile_id == "BrewingStand" {
         protocol::WINDOW_TYPE_BREWING_STAND
     } else {

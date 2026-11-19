@@ -14,6 +14,7 @@ mod cauldron;
 mod chunks;
 mod combat;
 mod cartography;
+mod dispenser;
 mod loom;
 mod redstone;
 mod connections;
