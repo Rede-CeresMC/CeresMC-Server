@@ -11,18 +11,44 @@ use serde_json::Value;
 
 const LINK_NONE: u8 = 0;
 const LINK_RIDER: u8 = 1;
+const LINK_PASSENGER: u8 = 2;
 
 impl Server {
     fn seat_of(m: &Mob) -> [f32; 3] {
+        Self::seat_for(m, m.riders.len().max(1), 0)
+    }
+
+    /// How many can ride it (`seat_count`, 1 when not given).
+    fn seat_count(m: &Mob) -> usize {
+        m.comps.get("minecraft:rideable").map_or(1, |r| num(r, "seat_count", 1.0).max(1.0) as usize)
+    }
+
+    /// Seat of the `i`-th rider when `n` ride: the seats whose min/max rider count allow `n`,
+    /// in order (a boat: one rider in the middle, two side by side).
+    fn seat_for(m: &Mob, n: usize, i: usize) -> [f32; 3] {
         let Some(r) = m.comps.get("minecraft:rideable") else { return [0.0, m.t.height, 0.0] };
-        let seat = match r.get("seats") {
-            Some(Value::Array(a)) => a.first().cloned(),
-            Some(o) => Some(o.clone()),
-            None => None,
+        let seats: Vec<Value> = match r.get("seats") {
+            Some(Value::Array(a)) => a.clone(),
+            Some(o) => vec![o.clone()],
+            None => Vec::new(),
         };
-        let p = seat.as_ref().and_then(|s| s.get("position"));
+        let fits = |s: &Value| (num(s, "min_rider_count", 0.0) as usize) <= n && n <= (num(s, "max_rider_count", 99.0) as usize);
+        let usable: Vec<&Value> = seats.iter().filter(|s| fits(s)).collect();
+        let seat = usable.get(i).copied().or(usable.first().copied()).or(seats.first());
+        let p = seat.and_then(|s| s.get("position"));
         let v = |i: usize| p.and_then(|p| p.get(i)).and_then(|v| as_num(Some(v))).unwrap_or(0.0);
         [v(0), if p.is_some() { v(1) } else { m.t.height }, v(2)]
+    }
+
+    /// Seat positions (metadata 56) of everyone on it, after someone got on or off.
+    fn reseat(&mut self, m: &Mob) {
+        let n = m.riders.len();
+        for (i, sid) in m.riders.iter().enumerate() {
+            let Some(peid) = self.players.get(sid).map(|p| p.entity_id) else { continue };
+            let seat = Self::seat_for(m, n, i);
+            let pk = protocol::set_actor_metadata(peid, &[Meta::Vec3(56, seat)]);
+            self.broadcast(&pk, |_, q| q.world == m.world);
+        }
     }
 
     /// The player rides `m` if its rideable component lets players on. True when they did.
@@ -32,7 +58,7 @@ impl Server {
         if !families.is_empty() && !families.iter().any(|f| f == "player") {
             return false;
         }
-        if (sneaking && boolean(&r, "crouching_skip_interact", true)) || m.t.baby || !m.riders.is_empty() {
+        if (sneaking && boolean(&r, "crouching_skip_interact", true)) || m.t.baby || m.riders.len() >= Self::seat_count(m) {
             return false;
         }
         let Some(p) = self.players.get_mut(&sid) else { return false };
@@ -41,14 +67,14 @@ impl Server {
         }
         p.riding = Some(m.entity_id);
         let peid = p.entity_id;
+        // the first one on drives, the others are passengers
+        let link = if m.riders.is_empty() { LINK_RIDER } else { LINK_PASSENGER };
         m.riders.push(sid);
         m.ctl = Ctl::default();
         m.path.clear();
-        let seat = Self::seat_of(m);
-        let pk = protocol::set_actor_link(m.entity_id, peid, LINK_RIDER, true, false);
+        let pk = protocol::set_actor_link(m.entity_id, peid, link, true, false);
         self.broadcast(&pk, |_, q| q.world == m.world);
-        let seat_meta = protocol::set_actor_metadata(peid, &[Meta::Vec3(56, [seat[0], seat[1] + EYE_HEIGHT * 0.0, seat[2]])]);
-        self.broadcast(&seat_meta, |_, q| q.world == m.world);
+        self.reseat(m);
         true
     }
 
@@ -59,12 +85,25 @@ impl Server {
         let (peid, world) = (p.entity_id, p.world);
         let pk = protocol::set_actor_link(veid, peid, LINK_NONE, true, false);
         self.broadcast(&pk, |_, q| q.world == world);
-        if let Some(i) = self.mobsys.index.get(&veid).copied() {
-            if let Some(m) = self.mobs.get_mut(i).filter(|m| m.entity_id == veid) {
-                m.riders.retain(|r| *r != sid);
+        let i = match self.mobsys.index.get(&veid).copied() {
+            Some(i) if self.mobs.get(i).is_some_and(|m| m.entity_id == veid) => Some(i),
+            _ => self.mobs.iter().position(|m| m.entity_id == veid),
+        };
+        if let Some(i) = i {
+            let was_driver = self.mobs[i].riders.first() == Some(&sid);
+            self.mobs[i].riders.retain(|r| *r != sid);
+            if !self.mobs[i].riders.is_empty() {
+                // a passenger takes the driver's place
+                if was_driver {
+                    if let Some(peid) = self.players.get(&self.mobs[i].riders[0]).map(|p| p.entity_id) {
+                        let pk = protocol::set_actor_link(veid, peid, LINK_RIDER, true, false);
+                        self.broadcast(&pk, |_, q| q.world == world);
+                    }
+                }
+                let m = std::mem::take(&mut self.mobs[i]);
+                self.reseat(&m);
+                self.mobs[i] = m;
             }
-        } else if let Some(m) = self.mobs.iter_mut().find(|m| m.entity_id == veid) {
-            m.riders.retain(|r| *r != sid);
         }
     }
 

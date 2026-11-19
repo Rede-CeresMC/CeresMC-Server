@@ -501,6 +501,24 @@ if boats:
     hit(other, boats[0], 0)
 both(other, c, 1.0)
 check(any(p == 0x29 for p, _ in other.received[n2:]), "a player gets into the boat")
+c.move(X + 490, EYE, Z + 1)
+c.pump(0.5)
+n2 = len(c.received)
+if boats:
+    hit(c, boats[0], 0)
+both(c, other, 1.0)
+# SetActorLink: vehicle, rider, link type 2 = passenger
+links = [d for p, d in c.received[n2:] if p == 0x29]
+def link_type(d):
+    _, q = read_uvarint(d, 0)
+    _, q = read_uvarint(d, q)
+    return d[q]
+check(any(link_type(d) == 2 for d in links), "a second player gets into the boat as a passenger")
+if boats:
+    c.send(uvarint(0x21) + bytes([3]) + uvarint(boats[0]))
+    both(c, other, 0.5)
+c.move(X + 3, EYE, Z)
+c.pump(0.3)
 if boats:
     other.send(uvarint(0x21) + bytes([3]) + uvarint(boats[0]))
     both(other, c, 0.5)
