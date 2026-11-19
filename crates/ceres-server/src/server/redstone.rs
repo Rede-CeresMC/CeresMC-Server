@@ -990,6 +990,10 @@ impl Server {
     /// How full a container is as a signal: 0 empty, 1 to 15 by how full its slots are
     /// (each slot counts its items over its stack size).
     fn container_signal(&mut self, world: usize, pos: [i32; 3]) -> Option<i32> {
+        // never reads (or loads) a chunk that is not loaded
+        if pos[1] < ceres_world::MIN_Y || pos[1] > ceres_world::MAX_Y || !self.worlds.worlds[world].is_loaded(pos) {
+            return None;
+        }
         let (_, _, items) = self.stored_items(world, pos)?;
         if items.is_empty() {
             return Some(0);
