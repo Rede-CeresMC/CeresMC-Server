@@ -221,12 +221,14 @@ check(counts is not None and counts[0] == 1, f"closing the inventory gives the g
 repair = ids.get("multi:00000000-0000-0000-0000-000000000001")
 check(repair is not None, "the multi recipes are listed (repair)")
 command(c, "/clear")
-give(c, "wooden_pickaxe 2")
+give(c, "wooden_pickaxe 4")
 check(request(c, [take(1, slot(HOTBAR, 0), slot(CRAFT_IN, 28)), take(1, slot(HOTBAR, 1), slot(CRAFT_IN, 29))]),
       "two pickaxes go into the grid")
-check(not request(c, [craft(repair), consume(1, CRAFT_IN, 28), take(1, slot(CREATED, 50), slot(HOTBAR, 2))]),
+check(not request(c, [craft(repair), consume(1, CRAFT_IN, 28), take(1, slot(CREATED, 50), slot(HOTBAR, 4))]),
       "a repair using up one pickaxe only is refused")
-check(request(c, [craft(repair), consume(1, CRAFT_IN, 28), consume(1, CRAFT_IN, 29), take(1, slot(CREATED, 50), slot(HOTBAR, 2))]),
+check(not request(c, [craft(repair), consume(1, HOTBAR, 2), consume(1, HOTBAR, 3), take(1, slot(CREATED, 50), slot(HOTBAR, 4))]),
+      "a repair using up items outside the grid is refused")
+check(request(c, [craft(repair), consume(1, CRAFT_IN, 28), consume(1, CRAFT_IN, 29), take(1, slot(CREATED, 50), slot(HOTBAR, 4))]),
       "two pickaxes are combined into one (repair recipe)")
 
 # 5. crafting table: place it, click it, craft a chest
@@ -246,6 +248,14 @@ command(c, "/clear")
 give(c, "oak_planks 8")
 check(request(c, [craft(chest), consume(8, HOTBAR, 0), take(1, slot(CREATED, 50), slot(HOTBAR, 1))]),
       "a chest (3x3) can be crafted at the crafting table")
+
+# 5b. decorated pot (multi recipe): 4 bricks in a plus shape at the crafting table
+pot = ids.get("multi:685a742a-c42e-4a4e-88ea-5eb83fc98e5b")
+command(c, "/clear")
+give(c, "brick 4")
+check(request(c, [take(1, slot(HOTBAR, 0), slot(CRAFT_IN, s)) for s in (33, 35, 37, 39)]), "four bricks go around the 3x3 grid")
+check(pot is not None and request(c, [craft(pot)] + [consume(1, CRAFT_IN, s) for s in (33, 35, 37, 39)] + [take(1, slot(CREATED, 50), slot(HOTBAR, 1))]),
+      "a decorated pot is crafted from four bricks")
 
 # 6. stonecutter: stone into 2 slabs, only while a stonecutter is open
 CUTTER = block_id("minecraft:stonecutter_block")

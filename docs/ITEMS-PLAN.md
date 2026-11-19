@@ -100,7 +100,9 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Copiar livro escrito: receitas "multi" (tipo 2 do recipes.json, UUID + id de rede) agora vão no CraftingData; o servidor calcula o resultado pela grade. Livro escrito + livros e penas = cópias com geração +1 (original fica; cópia de cópia não copia). Validado só por bots no CraftingData; falta conferir com o cliente real se ele consome só os livros e penas
 - [x] Reparo por combinação (receita multi, como o PowerNukkitX): dois itens iguais com durabilidade, um de cada, viram um com as duas durabilidades + 5 % do máximo, sem encantamentos nem nome (teste de bot no crafting_test)
 - [x] Estandarte no escudo (receita multi): o escudo recebe cor de base e padrões do estandarte; escudo que já tem estandarte recusa
-- [ ] Outras receitas multi (clonar/ampliar mapa, vaso decorado, fogos), mapas em molduras
+- [x] Vaso decorado (receita multi, na bancada): tijolos ou cacos de cerâmica em forma de cruz; o vaso guarda os cacos (`sherds`: fundo, esquerda, direita, frente). O PNX dá um vaso liso; seguido o vanilla. Falta o bloco colocado mostrar os cacos (entidade de bloco)
+- [x] Segurança das receitas multi: o consumo tem de sair exatamente das casas da grade usadas no resultado (antes só o id do item era conferido e dava para consumir itens do inventário e manter os da grade, duplicando)
+- [ ] Outras receitas multi (clonar/ampliar mapa, fogos), mapas em molduras
 - [x] Mob guiado ou amarrado solta o laço ao morrer
 
 ## Lote 4: consumíveis

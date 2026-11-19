@@ -187,10 +187,31 @@ fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
 /// Repairing by combining (as PowerNukkitX): two of the same damageable item, one each, give one
 /// with both durabilities plus 5 % of the maximum, without enchantments or name.
 /// Shield and banner: the shield takes the banner's base colour and patterns.
-fn multi_result(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(ItemDesc, Vec<(i16, u16)>)> {
+/// Decorated pot (crafting table): bricks or pottery sherds in a plus shape; the pot keeps the
+/// sherds (back, left, right, front: top, left, right and bottom cells).
+///
+/// Besides the result it returns what must be used up, as (grid cell, count): every item in the
+/// grid once, except the written book being copied (it stays) and all the book and quills. The
+/// request must take exactly those from exactly those cells.
+fn multi_result(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(ItemDesc, Vec<(usize, u16)>)> {
+    let (out, _) = multi_result_items(uuid, grid, gd)?;
+    let name = |it: &ItemDesc| gd.items_by_id.get(&it.id).map(|i| i.name.as_str()).unwrap_or("");
+    let book = uuid == "d1ca6b84-338e-4f2f-9c6b-76cc8b4bd98d";
+    let cells = grid
+        .iter()
+        .enumerate()
+        .filter(|(_, it)| !it.is_empty())
+        .filter(|(_, it)| !(book && name(it) == "minecraft:written_book"))
+        .map(|(i, it)| (i, if book { it.count } else { 1 }))
+        .collect();
+    Some((out, cells))
+}
+
+fn multi_result_items(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(ItemDesc, Vec<(i16, u16)>)> {
     const BOOK_CLONING: &str = "d1ca6b84-338e-4f2f-9c6b-76cc8b4bd98d";
     const REPAIR: &str = "00000000-0000-0000-0000-000000000001";
     const SHIELD_BANNER: &str = "00000000-0000-0000-0000-0000000000c8";
+    const DECORATED_POT: &str = "685a742a-c42e-4a4e-88ea-5eb83fc98e5b";
     use super::durability as dur;
     let name = |it: &ItemDesc| gd.items_by_id.get(&it.id).map(|i| i.name.as_str()).unwrap_or("");
     let items: Vec<&ItemDesc> = grid.iter().filter(|i| !i.is_empty()).collect();
@@ -208,7 +229,10 @@ fn multi_result(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(ItemDes
             if generation >= 2 {
                 return None;
             }
-            let n: u16 = blanks.iter().map(|b| b.count).sum::<u16>().min(16);
+            let n: u16 = blanks.iter().map(|b| b.count).sum::<u16>();
+            if n > 16 {
+                return None;
+            }
             let mut out = (*written[0]).clone();
             super::durability::set_item_field(&mut out, "generation", Some(Tag::Int(generation + 1)));
             out.count = n;
@@ -250,6 +274,27 @@ fn multi_result(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(ItemDes
             }
             dur::set_item_field(&mut out, "Base", Some(Tag::Int((banner.meta & 0x0f) as i32)));
             Some((out, vec![(shield.id, 1), (banner.id, 1)]))
+        }
+        DECORATED_POT => {
+            // the 3x3 grid is craft_grid[4..13]
+            let cells = grid.get(4..13)?;
+            let sides = [1usize, 3, 5, 7];
+            let ok_item = |it: &ItemDesc| name(it) == "minecraft:brick" || name(it).ends_with("_pottery_sherd");
+            if cells.iter().enumerate().any(|(i, c)| sides.contains(&i) != !c.is_empty()) || !sides.iter().all(|&i| ok_item(&cells[i])) {
+                return None;
+            }
+            let info = gd.find_item("minecraft:decorated_pot")?;
+            let mut out = ItemDesc { id: info.id, count: 1, meta: 0, stack_id: 0, block_runtime_id: info.block_runtime_id, extra: extra_data(None) };
+            let sherds = sides.iter().map(|&i| Tag::String(name(&cells[i]).to_string())).collect();
+            super::durability::set_item_field(&mut out, "sherds", Some(Tag::List(8, sherds)));
+            let mut used: Vec<(i16, u16)> = Vec::new();
+            for &i in &sides {
+                match used.iter_mut().find(|(id, _)| *id == cells[i].id) {
+                    Some(u) => u.1 += 1,
+                    None => used.push((cells[i].id, 1)),
+                }
+            }
+            Some((out, used))
         }
         _ => None,
     }
@@ -513,7 +558,7 @@ impl Inventory {
         // crafting: the recipe of this request and the ingredients the client says it used up
         let mut recipe: Option<(&ceres_world::Recipe, u16)> = None;
         // a multi recipe: the items (id, count) it must use up
-        let mut multi_use: Option<Vec<(i16, u16)>> = None;
+        let mut multi_use: Option<Vec<(usize, u16)>> = None;
         let mut consumed: Vec<ItemDesc> = Vec::new();
         // where each consumed item came from
         let mut consumed_from: Vec<Loc> = Vec::new();
@@ -855,8 +900,13 @@ impl Inventory {
             (Some(_), None) if multi_use.is_some() => {
                 let mut want = multi_use.unwrap_or_default();
                 let mut ok = true;
-                for c in &consumed {
-                    match want.iter_mut().find(|(id, n)| *id == c.id && *n >= c.count) {
+                // only from the grid cells the result was made from
+                for (loc, c) in consumed_from.iter().zip(&consumed) {
+                    let Loc::Craft(i) = loc else {
+                        ok = false;
+                        break;
+                    };
+                    match want.iter_mut().find(|(cell, n)| cell == i && *n >= c.count) {
                         Some(w) => w.1 -= c.count,
                         None => ok = false,
                     }
