@@ -49,8 +49,10 @@ pub(crate) struct Redstone {
     wires_off: bool,
     /// pressed pressure plates and the last tick something stood on them
     plates: HashMap<(usize, [i32; 3]), u64>,
-    /// doors, trapdoors and fence gates that were powered at their last look
+    /// doors, trapdoors, fence gates and note blocks that were powered at their last look
     powered: HashSet<(usize, [i32; 3])>,
+    /// daylight sensors seen (they are looked at every second)
+    sensors: HashSet<(usize, [i32; 3])>,
 }
 
 fn short(name: &str) -> &str {
@@ -72,6 +74,18 @@ fn cardinal(dir: &str) -> usize {
     }
 }
 
+/// Direction index of a `minecraft:facing_direction` name.
+fn facing_name(s: &str) -> usize {
+    match s {
+        "down" => 0,
+        "up" => 1,
+        "north" => 2,
+        "south" => 3,
+        "west" => 4,
+        _ => 5,
+    }
+}
+
 fn is_plate(n: &str) -> bool {
     n.ends_with("_pressure_plate")
 }
@@ -82,7 +96,10 @@ fn is_button(n: &str) -> bool {
 
 /// Blocks that give power (dust connects to them).
 fn is_source(n: &str) -> bool {
-    matches!(short(n), "lever" | "redstone_torch" | "redstone_block" | "redstone_wire") || is_plate(n) || is_button(n) || is_repeater(n)
+    matches!(short(n), "lever" | "redstone_torch" | "redstone_block" | "redstone_wire" | "observer" | "detector_rail" | "daylight_detector" | "daylight_detector_inverted")
+        || is_plate(n)
+        || is_button(n)
+        || is_repeater(n)
 }
 
 /// Blocks that react to power.
@@ -94,6 +111,7 @@ fn is_consumer(n: &str) -> bool {
         || s.ends_with("trapdoor")
         || s.ends_with("fence_gate")
         || s == "fence_gate"
+        || s == "noteblock"
 }
 
 impl Server {
@@ -165,6 +183,25 @@ impl Server {
                 (if side != flame { 15 } else { 0 }, if side == DOWN { 15 } else { 0 })
             }
             "redstone_block" => (15, 0),
+            // the observer pulses out of its back (it faces the block it watches)
+            "observer" => {
+                if self.rs_int(id, "powered_bit") == 0 {
+                    return (0, 0);
+                }
+                let f = facing_name(&self.rs_str(id, "minecraft:facing_direction"));
+                if side == f {
+                    (15, 15)
+                } else {
+                    (0, 0)
+                }
+            }
+            "detector_rail" => {
+                if self.rs_int(id, "rail_data_bit") == 0 {
+                    return (0, 0);
+                }
+                (15, if side == UP { 15 } else { 0 })
+            }
+            "daylight_detector" | "daylight_detector_inverted" => (self.rs_int(id, "redstone_signal") as i32, 0),
             "powered_repeater" => {
                 let f = cardinal(&self.rs_str(id, "minecraft:cardinal_direction"));
                 if side == f {
@@ -312,9 +349,25 @@ impl Server {
     fn rs_set(&mut self, world: usize, pos: [i32; 3], id: i32) -> bool {
         if self.worlds.worlds[world].set_block(pos, id, &self.gd) {
             self.broadcast(&protocol::update_block(pos, id), |_, q| q.world == world);
+            self.observe(world, pos);
             return true;
         }
         false
+    }
+
+    /// Observers facing `pos` see it change: a 2-tick pulse (PowerNukkitX's BlockObserver).
+    fn observe(&mut self, world: usize, pos: [i32; 3]) {
+        for d in 0..6 {
+            let o = add(pos, d);
+            let (id, name) = self.rs_block(world, o);
+            if name != "minecraft:observer" || self.rs_int(id, "powered_bit") != 0 {
+                continue;
+            }
+            // it watches the block in front of it
+            if add(o, facing_name(&self.rs_str(id, "minecraft:facing_direction"))) == pos {
+                self.schedule_redstone(world, o, 2);
+            }
+        }
     }
 
     /// Works out the dust networks touching `around` again; returns the dust that changed.
@@ -395,6 +448,7 @@ impl Server {
 
     /// Something changed at `pos`: dust and the blocks that react to power around it update.
     pub(crate) fn redstone_update(&mut self, world: usize, pos: [i32; 3]) {
+        self.observe(world, pos);
         self.redstone.pending.push_back((world, pos));
         if self.redstone.busy {
             return;
@@ -460,6 +514,9 @@ impl Server {
     /// A block that reacts to power looks at the power it gets.
     fn update_consumer(&mut self, world: usize, pos: [i32; 3]) {
         let (id, name) = self.rs_block(world, pos);
+        if name.starts_with("minecraft:daylight_detector") {
+            self.redstone.sensors.insert((world, pos));
+        }
         if !is_consumer(&name) {
             return;
         }
@@ -476,6 +533,16 @@ impl Server {
             "lit_redstone_lamp" => {
                 if self.power_at(world, pos) == 0 {
                     self.schedule_redstone(world, pos, 4);
+                }
+            }
+            "noteblock" => {
+                let on = self.power_at(world, pos) > 0;
+                let was = self.redstone.powered.contains(&(world, pos));
+                if on && !was {
+                    self.redstone.powered.insert((world, pos));
+                    self.play_note(world, pos);
+                } else if !on && was {
+                    self.redstone.powered.remove(&(world, pos));
                 }
             }
             "tnt" => {
@@ -646,12 +713,21 @@ impl Server {
         if now % 4 == 0 {
             self.tick_plates();
         }
+        if now % 20 == 0 && !self.redstone.sensors.is_empty() {
+            self.tick_sensors();
+        }
     }
 
     fn scheduled_redstone(&mut self, world: usize, pos: [i32; 3]) {
         let (id, name) = self.rs_block(world, pos);
         let s = short(&name).to_string();
-        let new = if is_button(&s) && self.rs_int(id, "button_pressed_bit") != 0 {
+        let new = if s == "observer" {
+            let on = self.rs_int(id, "powered_bit") == 0;
+            if on {
+                self.schedule_redstone(world, pos, 2);
+            }
+            self.gd.with_states(id, &[("powered_bit", Tag::Byte(on as i8))])
+        } else if is_button(&s) && self.rs_int(id, "button_pressed_bit") != 0 {
             self.gd.with_states(id, &[("button_pressed_bit", Tag::Byte(0))])
         } else if s == "lit_redstone_lamp" && self.power_at(world, pos) == 0 {
             self.gd.with_name(id, "minecraft:redstone_lamp")
@@ -695,10 +771,26 @@ impl Server {
             .map(|p| (p.world, [p.pos[0], p.pos[1] - 1.62, p.pos[2]]))
             .collect();
         feet.extend(self.mobs.iter().filter(|m| m.alive()).map(|m| (m.world, m.pos)));
+        let carts: Vec<(usize, [f32; 3])> = self.mobs.iter().filter(|m| m.alive() && m.id().contains("minecart")).map(|m| (m.world, m.pos)).collect();
         for (w, f) in feet {
             let b = [f[0].floor() as i32, (f[1] + 0.05).floor() as i32, f[2].floor() as i32];
             if is_plate(&self.rs_block(w, b).1) {
                 *on.entry((w, b)).or_insert(0) += 1;
+            }
+        }
+        // detector rails under a minecart
+        for (w, f) in carts {
+            let b = [f[0].floor() as i32, (f[1] + 0.05).floor() as i32, f[2].floor() as i32];
+            let (id, name) = self.rs_block(w, b);
+            if name != "minecraft:detector_rail" {
+                continue;
+            }
+            self.redstone.plates.insert((w, b), self.ticks);
+            if self.rs_int(id, "rail_data_bit") == 0 {
+                if let Some(new) = self.gd.with_states(id, &[("rail_data_bit", Tag::Byte(1))]) {
+                    self.rs_set(w, b, new);
+                    self.redstone_update(w, b);
+                }
             }
         }
         let now = self.ticks;
@@ -725,6 +817,12 @@ impl Server {
             let (id, name) = self.rs_block(w, p);
             if is_plate(&name) && self.rs_int(id, "redstone_signal") != 0 {
                 if let Some(new) = self.gd.with_states(id, &[("redstone_signal", Tag::Int(0))]) {
+                    self.rs_set(w, p, new);
+                    self.redstone_update(w, p);
+                }
+            }
+            if name == "minecraft:detector_rail" && self.rs_int(id, "rail_data_bit") != 0 {
+                if let Some(new) = self.gd.with_states(id, &[("rail_data_bit", Tag::Byte(0))]) {
                     self.rs_set(w, p, new);
                     self.redstone_update(w, p);
                 }
@@ -769,6 +867,58 @@ impl Server {
         let next = (self.rs_int(id, "repeater_delay") + 1) % 4;
         if let Some(new) = self.gd.with_states(id, &[("repeater_delay", Tag::Int(next as i32))]) {
             self.rs_set(world, pos, new);
+        }
+        self.swing_arm(sid);
+        true
+    }
+}
+
+impl Server {
+    /// Daylight sensors follow the sun (0 at night, 15 around noon; inverted ones the other
+    /// way round), under open sky only; using one swaps it between the two kinds.
+    fn tick_sensors(&mut self) {
+        let list: Vec<(usize, [i32; 3])> = self.redstone.sensors.iter().copied().collect();
+        for (w, p) in list {
+            let (id, name) = self.rs_block(w, p);
+            if !name.starts_with("minecraft:daylight_detector") {
+                self.redstone.sensors.remove(&(w, p));
+                continue;
+            }
+            let t = self.worlds.worlds[w].time.rem_euclid(24000) as f32;
+            let mut sky = true;
+            for y in (p[1] + 1)..(p[1] + 64).min(ceres_world::MAX_Y + 1) {
+                if self.conductor(w, [p[0], y, p[2]]) {
+                    sky = false;
+                    break;
+                }
+            }
+            let mut day = if sky && t < 12000.0 { ((t / 12000.0 * std::f32::consts::PI).sin() * 1.25 * 15.0).round().clamp(0.0, 15.0) as i32 } else { 0 };
+            if sky && self.raining(w) {
+                day = (day - 3).max(0);
+            }
+            let signal = if name.ends_with("_inverted") { 15 - day } else { day };
+            if self.rs_int(id, "redstone_signal") as i32 != signal {
+                if let Some(new) = self.gd.with_states(id, &[("redstone_signal", Tag::Int(signal))]) {
+                    self.rs_set(w, p, new);
+                    self.redstone_update(w, p);
+                }
+            }
+        }
+    }
+
+    /// Use on a daylight sensor: it turns into the inverted one (or back).
+    pub(crate) fn use_daylight_sensor(&mut self, sid: SessionId, pos: [i32; 3]) -> bool {
+        let Some(world) = self.players.get(&sid).map(|p| p.world) else { return false };
+        let (id, name) = self.rs_block(world, pos);
+        let other = match name.as_str() {
+            "minecraft:daylight_detector" => "minecraft:daylight_detector_inverted",
+            "minecraft:daylight_detector_inverted" => "minecraft:daylight_detector",
+            _ => return false,
+        };
+        if let Some(new) = self.gd.with_name(id, other) {
+            self.rs_set(world, pos, new);
+            self.redstone.sensors.insert((world, pos));
+            self.redstone_update(world, pos);
         }
         self.swing_arm(sid);
         true

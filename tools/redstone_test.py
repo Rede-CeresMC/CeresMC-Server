@@ -127,7 +127,44 @@ check(any(q == REP for q, _ in update_blocks(c)[-5:]), "using a repeater changes
 c.move(BX + 5.5, G + 1.62, BZ - 2.5)
 c.pump(0.3)
 
-# 5. TNT next to a redstone block is lit
+# 5. an observer placed looking east watches the west; a block there pulses the lamp east of it
+W, OBS, L5 = (BX + 6, G, BZ + 3), (BX + 7, G, BZ + 3), (BX + 8, G, BZ + 3)
+command(c, "/give @s stone 8")
+for x in (W[0], OBS[0], L5[0]):
+    c.place_block((x, G - 1, BZ + 3), 1, STONE)
+    c.pump(0.05)
+for x in (W[0], OBS[0], L5[0]):
+    c.break_block((x, G, BZ + 3))
+c.pump(0.4)
+put("redstone_lamp", L5)
+c.move(BX + 4.5, G + 1.62, BZ + 3.5, 0.0, -90.0)  # looking east
+c.pump(0.3)
+put("observer", OBS)
+check(last(c, OBS) not in (None, AIR), "an observer is placed")
+n = len(c.received)
+put("stone", W)
+c.pump(0.6)
+lamp = [b for q, b in update_blocks(c)[-40:] if q == L5]
+check(LIT in lamp, "a block appearing in front of the observer pulses the lamp behind it")
+c.move(BX + 5.5, G + 1.62, BZ - 2.5)
+c.pump(0.3)
+
+# 6. a note block plays when power reaches it
+NB, R3 = (BX + 10, G, BZ + 3), (BX + 11, G, BZ + 3)
+command(c, "/give @s stone 4")
+for x in (NB[0], R3[0]):
+    c.place_block((x, G - 1, BZ + 3), 1, STONE)
+    c.pump(0.05)
+for x in (NB[0], R3[0]):
+    c.break_block((x, G, BZ + 3))
+c.pump(0.4)
+put("noteblock", NB)
+n = len(c.received)
+put("redstone_block", R3)
+c.pump(0.4)
+check(any(p == 0x1a for p, _ in c.received[n:]), "a note block plays when powered (BlockEvent)")
+
+# 7. TNT next to a redstone block is lit
 T, R2 = (BX + 11, G, BZ), (BX + 12, G, BZ)
 put("tnt", T)
 n = len(c.received)

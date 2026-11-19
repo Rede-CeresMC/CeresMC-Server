@@ -302,7 +302,7 @@ impl Server {
             }
             return;
         }
-        if !sneaking && (self.use_button(sid, clicked) || self.use_repeater(sid, clicked)) {
+        if !sneaking && (self.use_button(sid, clicked) || self.use_repeater(sid, clicked) || self.use_daylight_sensor(sid, clicked)) {
             if let Some(t) = side(clicked, face) {
                 self.resync(sid, t);
             }

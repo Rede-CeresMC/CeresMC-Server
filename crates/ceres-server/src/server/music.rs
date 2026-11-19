@@ -45,7 +45,7 @@ fn record_sound(item: &str) -> Option<String> {
 }
 
 impl Server {
-    fn play_note(&mut self, world: usize, pos: [i32; 3]) {
+    pub(crate) fn play_note(&mut self, world: usize, pos: [i32; 3]) {
         let below = self.worlds.worlds[world].get_block([pos[0], pos[1] - 1, pos[2]], &self.gd);
         let inst = instrument(self.gd.block_name(below));
         let pitch = self
