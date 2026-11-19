@@ -150,7 +150,7 @@ impl Server {
         if id == effect::ABSORPTION {
             p.absorption = p.absorption.max(4.0 * (amplifier as f32 + 1.0));
         }
-        let pk = p.vitals_packet();
+        let pk = if id == effect::SPEED || id == effect::SLOWNESS { p.vitals_with_movement() } else { p.vitals_packet() };
         p.out.push(pk);
     }
 
@@ -163,7 +163,7 @@ impl Server {
         if id == effect::ABSORPTION {
             p.absorption = 0.0;
         }
-        let pk = p.vitals_packet();
+        let pk = if id == effect::SPEED || id == effect::SLOWNESS { p.vitals_with_movement() } else { p.vitals_packet() };
         p.out.push(pk);
     }
 

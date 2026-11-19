@@ -95,6 +95,7 @@ impl Server {
         self.broadcast(&pk, |_, p| p.world == world);
         self.queue_gravity(world, pos);
         self.queue_liquid(world, pos);
+        self.update_connections(world, pos);
         true
     }
 
@@ -147,6 +148,7 @@ impl Server {
             return;
         }
         self.break_partner(world, pos, old);
+        self.support_update(world, pos);
         self.swing_arm(sid);
         let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
         // a broken container spills what it held, in every game mode (like vanilla)
@@ -479,6 +481,15 @@ impl Server {
             self.resync(sid, clicked);
             return;
         };
+
+        // plants need their soil, torches something to hang on...
+        let in_water = self.gd.block_name(target_existing).contains("water") || self.water_layer(world, target);
+        let against = (target != clicked).then_some(clicked);
+        if !self.can_stay(world, target, final_block, against, in_water) {
+            self.resync(sid, target);
+            self.resync(sid, clicked);
+            return;
+        }
 
         let ev = self.block_event_json("block_place", sid, world, target, final_block);
         if !self.plugins_allow(ev) {

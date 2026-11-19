@@ -422,8 +422,9 @@ impl Server {
                 continue;
             }
 
-            // Fall tracking & damage in survival / adventure
-            if gm == 0 || gm == 2 {
+            // Fall tracking in every mode but spectator (the mace smash needs it in creative too);
+            // fall damage only in survival / adventure
+            if gm != 6 {
                 let on_ground = self.gd.is_solid(self.worlds.worlds[world].get_block(feet_block, &self.gd));
                 let in_liquid = {
                     let b = self.worlds.worlds[world]
@@ -438,7 +439,7 @@ impl Server {
                     let fall = self.players.get_mut(&sid).and_then(|p| p.fall_start_y.take());
                     if let Some(start_y) = fall {
                         let dist = start_y - feet_y;
-                        if dist > 3.5 {
+                        if dist > 3.5 && (gm == 0 || gm == 2) {
                             let mut dmg = (dist - 3.0).floor();
                             // Feather Falling (3 per level) and Protection soften falls
                             if let Some(p) = self.players.get(&sid) {

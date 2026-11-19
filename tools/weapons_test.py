@@ -112,6 +112,8 @@ pump_both(3.0)
 
 # trident: hold and let go to throw it
 command(archer, "/clear")
+command(archer, "/effect BotTarget instant_health 1 4")
+pump_both(0.5)
 give(archer, "trident 1")
 target.move(X, 71.62, Z + 4)
 n2 = len(target.received)
@@ -124,7 +126,9 @@ check(any(p == 0x0d and b"thrown_trident" in d for p, d in target.received[n2:])
 hp = health(target, n2)
 check(hp is not None and hp <= 12.5, f"the trident hurts like vanilla, 8 damage (health {hp})")
 
-# wind charge: thrown, bursts
+# wind charge: thrown, bursts (the target is healed first: the trident left it low)
+command(archer, "/effect BotTarget instant_health 1 4")
+pump_both(0.5)
 command(archer, "/clear")
 give(archer, "wind_charge 4")
 n2 = len(target.received)
@@ -133,6 +137,57 @@ click_air(archer)
 pump_both(1.0)
 check(any(p == 0x0d and b"wind_charge_projectile" in d for p, d in target.received[n2:]), "a wind charge is thrown")
 check(any(p == 0xb0 and b"wind_charge" in d for p, d in archer.received[na2:]), "the thrower's wind charge shows its cooldown")
+
+def level_events(c, since):
+    out = []
+    for pid, d in c.received[since:]:
+        if pid == 0x19:
+            v, _ = read_uvarint(d, 0)
+            out.append((v >> 1) ^ -(v & 1))
+    return out
+
+check(3614 in level_events(target, n2), "the wind charge bursts (wind explosion particles, LevelEvent 3614)")
+check(any(p == 0x28 for p, _ in target.received[n2:]), "the wind charge burst throws the target back (SetActorMotion)")
+
+# bottle o' enchanting: thrown, breaks and drops experience orbs
+command(archer, "/clear")
+give(archer, "experience_bottle 1")
+n2 = len(target.received)
+click_air(archer)
+pump_both(2.5)
+check(any(p == 0x0d and b"xp_bottle" in d for p, d in target.received[n2:]), "a bottle o' enchanting is thrown")
+check(any(p == 0x0d and b"xp_orb" in d for p, d in target.received[n2:]), "the bottle breaks into experience orbs")
+
+# mace smash in creative: hitting while falling makes the ground dust (LevelEvent 9815)
+def attack(c, eid):
+    pk = uvarint(0x1e) + svarint(0) + bytes(1) + uvarint(3) + uvarint(0)
+    pk += uvarint(eid) + uvarint(1) + svarint(0) + bytes(1) + bytes(8) + struct.pack("<fff", *c.pos) + struct.pack("<fff", 0, 0, 0)
+    c.send(pk)
+
+command(archer, "/effect BotTarget instant_health 1 4")
+pump_both(0.5)
+command(archer, "/clear")
+give(archer, "mace 1")
+command(archer, "/gamemode creative")
+def eid_of(cl):
+    for pid, d in cl.received:
+        if pid == 0x0b:
+            v, _ = read_uvarint(d, 0)
+            return (v >> 1) ^ -(v & 1)
+
+target_eid = eid_of(target)
+archer.move(X, 71.62 + 5, Z)
+pump_both(0.4)
+archer.move(X, 71.62 + 1.5, Z)
+archer.pump(0.05)
+n2 = len(target.received)
+if target_eid is not None:
+    attack(archer, target_eid)
+pump_both(0.8)
+check(target_eid is not None and 9815 in level_events(target, n2), "a falling hit with the mace in creative makes the smash dust")
+archer.move(X, 71.62, Z)
+pump_both(0.5)
+command(archer, "/gamemode survival")
 
 # fishing rod: cast a bobber, use again to reel it in
 command(archer, "/clear")
@@ -229,6 +284,21 @@ for _ in range(5):
     pump_both(0.4)
 sand = block_id("minecraft:sand")
 check(any(pos == SUS and bid == sand for pos, bid in update_blocks(archer)), "brushing suspicious sand four times turns it into sand")
+
+# fences next to each other connect (the server sends the connection states)
+command(archer, "/clear")
+give(archer, "oak_fence 2")
+F1, F2 = (int(X), 70, int(Z) + 1), (int(X), 70, int(Z) + 2)
+archer.place_block((F1[0], 69, F1[2]), 1, block_id("minecraft:oak_fence"))
+pump_both(0.4)
+archer.place_block((F2[0], 69, F2[2]), 1, block_id("minecraft:oak_fence"))
+pump_both(0.6)
+plain = block_id("minecraft:oak_fence")
+last = {pos: bid for pos, bid in update_blocks(archer)}
+check(F1 in last and F2 in last and last[F1] != plain and last[F2] != plain, "two fences side by side connect (connection states)")
+archer.break_block(F1)
+archer.break_block(F2)
+pump_both(0.4)
 
 # map: an empty map used in the air becomes a filled map and its image is sent (0x43);
 # a MapInfoRequest (0x44) for its id gets the image again

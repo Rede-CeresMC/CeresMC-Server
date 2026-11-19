@@ -340,7 +340,7 @@ impl Server {
         p.out.push(self.gd.biome_definitions.clone());
         p.out.push(self.gd.creative_content.clone());
         p.out.push(self.gd.crafting_data.clone());
-        let pk = p.vitals_packet();
+        let pk = p.vitals_with_movement();
         p.out.push(pk);
         p.out.push(protocol::set_actor_data_state(p.entity_id, &nametag, &p.actor_state));
         p.state = State::PreSpawn;

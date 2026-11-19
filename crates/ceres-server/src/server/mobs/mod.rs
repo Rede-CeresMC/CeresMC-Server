@@ -177,6 +177,9 @@ pub(crate) struct Mob {
     pub persistent: bool,
     /// variant given by the item that placed it (boat wood)
     pub item_variant: Option<i32>,
+    /// `minecraft:horse.jump_strength` rolled at spawn (sent as an attribute: the rider's client
+    /// does the jump)
+    pub jump_strength: Option<f32>,
     pub name_tag: Option<String>,
     pub equip: Equip,
     pub carried_block: Option<i32>,
@@ -427,6 +430,7 @@ impl Server {
         }
         // health as the groups added by the spawn event say (slime sizes, tamed wolves...)
         m.health = m.t.start_health;
+        m.jump_strength = roll_jump_strength(&m);
         self.roll_equipment(&mut m);
         let pks = self.spawn_packets(&m);
         m.sent_meta = self.mob_meta(&m);
@@ -594,7 +598,10 @@ impl Server {
 
     fn spawn_packets(&self, m: &Mob) -> Vec<Vec<u8>> {
         let meta = self.mob_meta(m);
-        let attrs = [("minecraft:health", 0.0, m.health.max(0.0), m.t.max_health), ("minecraft:movement", 0.0, m.t.speed, 1024.0)];
+        let mut attrs = vec![("minecraft:health", 0.0, m.health.max(0.0), m.t.max_health), ("minecraft:movement", 0.0, m.t.speed, 1024.0)];
+        if let Some(j) = m.jump_strength {
+            attrs.push(("minecraft:horse.jump_strength", 0.0, j, 2.0));
+        }
         let flip = if m.t.dragon { 180.0 } else { 0.0 };
         let mut out = vec![protocol::add_entity(m.entity_id, m.id(), m.pos, m.motion, m.pitch, m.yaw + flip, m.head_yaw + flip, &attrs, &meta)];
         out.extend(self.equipment_packets(m));
@@ -997,6 +1004,7 @@ impl Server {
                         "home": m.home,
                         "knot": m.knot,
                         "item_variant": m.item_variant,
+                        "jump_strength": m.jump_strength,
                         "hand": item(&m.equip.hand),
                         "offhand": item(&m.equip.offhand),
                         "armor": m.equip.armor.iter().map(item).collect::<Vec<_>>(),
@@ -1080,6 +1088,7 @@ impl Server {
                         (c.len() == 3).then(|| [c[0], c[1], c[2]])
                     });
                     m.item_variant = v["item_variant"].as_i64().map(|n| n.clamp(0, 64) as i32);
+                    m.jump_strength = v["jump_strength"].as_f64().map(|j| (j as f32).clamp(0.0, 2.0)).or_else(|| roll_jump_strength(m));
                     m.knot = v["knot"].as_array().and_then(|a| {
                         let c: Vec<i32> = a.iter().filter_map(|n| n.as_i64()).map(|n| n as i32).collect();
                         (c.len() == 3).then(|| [c[0], c[1], c[2]])
@@ -1105,4 +1114,18 @@ impl Server {
         let rz = (rand::random::<f32>() - 0.5) * 0.2;
         self.spawn_item(world, pos, [rx, 0.2, rz], item, 10);
     }
+}
+
+/// A horse's jump strength from `minecraft:horse.jump_strength` (a value or a range: the higher
+/// of two rolls, as PowerNukkitX's applyInitialRideJumpStrength).
+fn roll_jump_strength(m: &Mob) -> Option<f32> {
+    let c = m.comps.get("minecraft:horse.jump_strength")?;
+    let v = c.get("value").unwrap_or(c);
+    if let Some(n) = v.as_f64() {
+        return Some((n as f32).clamp(0.0, 2.0));
+    }
+    let lo = v.get("range_min").and_then(|n| n.as_f64()).unwrap_or(0.4) as f32;
+    let hi = v.get("range_max").and_then(|n| n.as_f64()).unwrap_or(1.0) as f32;
+    let roll = || lo + rand::random::<f32>() * (hi - lo).max(0.0);
+    Some(roll().max(roll()).clamp(0.0, 2.0))
 }

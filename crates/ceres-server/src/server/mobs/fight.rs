@@ -799,20 +799,16 @@ impl Server {
             let breaks = self.cfg.mob_griefing;
             self.explode(world, at, power, fire, breaks, Some(Ent::Mob(pr.owner)));
         }
-        if d.aoe || d.wind {
-            for e in self.entities_near(world, at, if d.aoe { 4.0 } else { 2.5 }, Some(pr.owner)) {
+        if d.aoe {
+            for e in self.entities_near(world, at, 4.0, Some(pr.owner)) {
                 if let Ent::Player(sid) = e {
-                    if d.aoe {
-                        let name = self.players.get(&sid).map(|p| p.name.clone()).unwrap_or_default();
-                        self.damage_player(sid, 3.0, &format!("§c{name} morreu pelo sopro do dragão"), true, None);
-                    } else {
-                        self.damage_player(sid, 0.0, "", false, Some([0.0, 0.8, 0.0]));
-                    }
+                    let name = self.players.get(&sid).map(|p| p.name.clone()).unwrap_or_default();
+                    self.damage_player(sid, 3.0, &format!("§c{name} morreu pelo sopro do dragão"), true, None);
                 }
             }
-            if d.wind {
-                self.broadcast(&protocol::level_sound_event("wind_charge.burst", at, -1), |_, q| q.world == world);
-            }
+        }
+        if d.wind {
+            self.wind_burst(world, at);
         }
         if d.catch_fire && target.is_none() && self.cfg.mob_griefing {
             let b = [at[0].floor() as i32, at[1].floor() as i32, at[2].floor() as i32];
@@ -1248,5 +1244,37 @@ impl Server {
         self.broadcast(&protocol::level_sound_event("throw", start, -1), |_, q| q.world == world);
         self.mob_projectiles.push(MobProjectile { entity_id: peid, world, data, owner: eid, owner_name: name, pos: start, motion, age: 0, target: None, aux: None, stuck: 0 });
         true
+    }
+}
+
+impl Server {
+    /// A wind charge bursts (as PowerNukkitX's EntityWindCharge, LGPL-3.0): wind explosion
+    /// particles (LevelEvent 3614) and sound; whatever stands within 2 blocks, the thrower too
+    /// (wind charge jumps), is thrown away from it and up, and its fall is forgiven.
+    pub(crate) fn wind_burst(&mut self, world: usize, at: [f32; 3]) {
+        self.broadcast(&protocol::level_event(3614, at, 0), |_, q| q.world == world);
+        self.broadcast(&protocol::level_sound_event("wind_charge.burst", [at[0], at[1] + 1.0, at[2]], -1), |_, q| q.world == world);
+        for e in self.entities_near(world, at, 2.0, None) {
+            match e {
+                Ent::Player(sid) => {
+                    let Some(p) = self.players.get_mut(&sid) else { continue };
+                    if p.gamemode == 6 {
+                        continue;
+                    }
+                    let feet = [p.pos[0], p.pos[1] - EYE_HEIGHT, p.pos[2]];
+                    let kb = [(feet[0] - at[0]) * 0.2, 0.6, (feet[2] - at[2]) * 0.2];
+                    p.fall_start_y = None;
+                    let pk = protocol::set_actor_motion(p.entity_id, kb);
+                    p.out.push(pk.clone());
+                    self.broadcast(&pk, |x, q| x != sid && q.world == world);
+                }
+                Ent::Mob(eid) => {
+                    self.with_mob(eid, |_, m| {
+                        m.motion = [m.motion[0] / 2.0 + (m.pos[0] - at[0]) * 0.2, m.motion[1] / 2.0 + 0.6, m.motion[2] / 2.0 + (m.pos[2] - at[2]) * 0.2];
+                        m.fall = 0.0;
+                    });
+                }
+            }
+        }
     }
 }

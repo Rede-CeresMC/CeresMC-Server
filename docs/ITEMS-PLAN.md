@@ -8,6 +8,24 @@ bedrock-protocol-docs. Clones locais em `c:\tmp\refs`.
 Testes de bot: `tools/weapons_test.py`, `tools/projectiles_test.py`, `tools/mobs_test.py` (rodam em
 `tools/run_tests.sh`).
 
+**Atenção: "teste de bot" só confere que o servidor manda os pacotes esperados, não que o jogo
+mostra e faz o certo.** Nada marcado aqui foi conferido no cliente real, a não ser onde está dito.
+
+### Conferido no cliente real (relatos do dono do servidor)
+
+- Corrigido depois do relato de 19/11/2026: carga de vento sem explosão (faltavam as partículas,
+  LevelEvent 3614, e o empurrão; agora também no próprio lançador), maça sem o efeito no
+  criativo (a queda não era acompanhada fora do sobrevivência), frasco de experiência que não
+  era arremessável. Falta o dono conferir de novo no jogo.
+- Cercas lado a lado não se conectavam: na 1.26 o servidor é quem calcula os estados
+  `minecraft:connection_*` (cercas, painéis, grades) e `wall_connection_type_*`/`wall_post_bit`
+  (muros); agora é calculado ao mudar qualquer bloco vizinho (`connections.rs`). Falta conferir.
+- "Reset" ao andar usando itens: cada atualização de vida/fome/XP reenviava o atributo
+  `minecraft:movement` sem modificadores, apagando o modificador de corrida do cliente. Agora
+  só vai ao entrar e quando velocidade/lentidão mudam. Falta conferir.
+- Com problema, ainda sem causa achada: laço não prende direito na cerca nem no mob (metadados
+  conferidos com o gophertunnel; falta ver no jogo o que acontece).
+
 ## Lote 1: armas (feito)
 
 - [x] Espadas, machados, picaretas, pás: dano (conferido com o dragonfly: nível + bônus + 1 do punho)
@@ -65,7 +83,8 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Barcos (e carrinhos parados): o pack os define sem vida, então carregam como entidades com 4 de vida (como o barco do PNX); item de barco usado no topo de um bloco ou na água põe um barco da madeira dele virado para o jogador (variante 0-9: carvalho...pálido; jangada de bambu = 7; barcos com baú); carrinho só em trilho; flutuam (`minecraft:buoyant`); montar pelo rideable; quebrado solta o item (não para o criativo); salvos com a variante (teste de bot)
 - [x] Vários passageiros: até `seat_count` (barco 2); o primeiro dirige (link 1), os outros são passageiros (link 2); assentos pelo `min/max_rider_count` de cada assento (barco: sozinho no meio, dois lado a lado) reenviados a todos quando alguém sobe ou desce; se o motorista desce, o passageiro assume (teste de bot)
 - [x] Carrinhos nos trilhos (`minecraft:rail_movement`, lógica do `EntityMinecartAbstract` do PowerNukkitX): seguem o formato do trilho (`rail_direction` 0-9, curvas e rampas), rampa puxa para baixo, trilho de ouro ligado acelera e desligado freia, arrasto maior vazio, apertar para a frente montado dá a partida, jogador andando contra empurra, fora do trilho cai e para; o servidor move o carrinho e manda o movimento também para quem está nele (teste de bot)
-- [ ] Pulo do cavalo; trilho de ouro só liga com redstone (o servidor ainda não tem redstone), trilhos detector/ativador, carrinho com baú/funil/TNT funcionando
+- [x] Pulo do cavalo: força do pulo sorteada no nascimento (maior de dois sorteios no intervalo do pack), enviada como atributo `minecraft:horse.jump_strength` e salva com o mob (sem conferir no cliente real)
+- [ ] Trilho de ouro só liga com redstone (o servidor ainda não tem redstone), trilhos detector/ativador, carrinho com baú/funil/TNT funcionando
 - [x] Evento de plugin `block_interact` (novo `on_block_interact`): usos que mudam o bloco ou o mundo em volta (decorações, pincel, laço na cerca, barcos, baldes...) podem ser cancelados, p.ex. em áreas protegidas; a última pincelada também passa por `block_break`
 - [x] Laço (guia): amarra mob com `minecraft:leashable` ao jogador (LeashHolder, metadado 37), puxa a partir de 6 blocos e arrebenta a 10 soltando o laço; usado numa cerca amarra ali os mobs que o jogador guia (entidade `minecraft:leash_knot` compartilhada, salva em mobs.json), usar a cerca de novo os devolve, usar o mob amarrado o solta, quebrar a cerca solta o laço
 - [x] Mapas: mapa vazio usado no ar vira mapa preenchido (`map_uuid`) da área de 128x128 da grade vanilla em volta do jogador (escala 0); MapInfoRequest (0x44) responde com ClientboundMapItemData (0x43); segurando o mapa dentro da área, a parte num raio de 32 blocos é redesenhada a cada segundo; imagens salvas em `<mundo>/maps/<id>.map`. Cores: paleta base vanilla escolhida pelo nome do bloco (o PNX usa uma tabela baixada no build, que não está no clone), sombreada pela altura do bloco ao norte; água mais escura quanto mais funda. Só chunks carregados aparecem
@@ -77,6 +96,8 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 
 ## Lote 3: construção e uso de blocos
 
+- [x] Conexões calculadas pelo servidor: cercas (madeira entre si, tijolo do Nether entre si, portões, blocos sólidos), painéis de vidro e grades, muros (`none`/`short`/`tall`, coluna quando não é reto ou tem bloco em cima); refeitas ao mudar o bloco ou um vizinho (lógica do dragonfly)
+- [x] Apoio dos blocos (checagens `canPlaceOn` do PowerNukkitX): flores/mudas/grama em terra, plantações em terra arada, verruga em areia das almas, cana com água ao lado, cacto em areia sem nada sólido ao lado, alga/ervas marinhas na água, tapetes/trilhos/placas de pressão/redstone em bloco sólido, tochas/botões/alavancas/escadas no bloco onde foram postas; recusado onde não pode ficar e, quebrando o bloco de baixo, o que estava em cima cai com os drops (colunas inteiras de cana, cacto e alga). Falta: blocos presos de lado caírem quando o bloco de trás quebra
 - [ ] Revisar colocação de todos os blocos com estados (orientação, meia-laje, escadas, portas, camas já feitos)
 - [x] Plantas crescendo sozinhas (random tick): cana e cacto (até 3 blocos), bambu (12-16), alga, caules de melancia/abóbora (dão o fruto ao lado e se viram para ele), arbusto de frutas silvestres, cacau, fungo do Nether, broto de flor-tocha e de jarro
 - [x] Farinha de osso: caules, frutas silvestres, cacau, flor-tocha/jarro, cana e bambu (crescem a coluna toda, como no Bedrock), alga, grama baixa e samambaia viram duplas, flores altas soltam uma cópia, bloco de grama faz brotar grama e flores em volta
@@ -124,7 +145,7 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 
 Comida, poções, totem e garrafas já existiam.
 
-- [x] Fruta do coro: teleporta para um lugar livre a até 8 blocos (até 16 tentativas), com som
+- [x] Fruta do coro: teleporta para um lugar livre a até 8 blocos (até 128 tentativas, como o PowerNukkitX), com som
 - [x] Garrafa de mel: cura o veneno
 - [x] Ensopado suspeito: efeito da flor pelo valor auxiliar (visão noturna, salto, fraqueza, cegueira, veneno, saturação, resistência ao fogo, regeneração, wither, náusea)
 - [x] Recargas de item (pacote PlayerStartItemCooldown, 176; categorias tiradas de `item_components.nbt` e do PocketMine): pérola do fim 1 s, fruta do coro 1 s (`chorusfruit`), chifre de cabra 7 s, carga de vento 0,5 s, escudo desativado por machado 5 s. O servidor também impede o uso durante a recarga

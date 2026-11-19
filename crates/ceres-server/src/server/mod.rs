@@ -13,6 +13,7 @@ mod books;
 mod cauldron;
 mod chunks;
 mod combat;
+mod connections;
 mod commands;
 mod containers;
 mod defense;
@@ -49,6 +50,7 @@ mod potions;
 mod projectiles;
 mod skin;
 mod spawners;
+mod support;
 mod sleep;
 mod xp;
 

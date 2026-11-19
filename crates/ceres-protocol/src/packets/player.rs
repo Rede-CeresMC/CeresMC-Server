@@ -647,7 +647,9 @@ pub struct Vitals {
     pub saturation: f32,
     pub exhaustion: f32,
     pub absorption: f32,
-    pub movement: f32,
+    /// sent only when it changes (speed/slowness, spawn): a plain value without modifiers
+    /// wipes the client's own sprint modifier, which feels like the movement resetting
+    pub movement: Option<f32>,
     pub xp_level: u32,
     /// 0..1 towards the next level
     pub xp_progress: f32,
@@ -661,7 +663,7 @@ impl Default for Vitals {
             saturation: 5.0,
             exhaustion: 0.0,
             absorption: 0.0,
-            movement: 0.1,
+            movement: Some(0.1),
             xp_level: 0,
             xp_progress: 0.0,
         }
@@ -687,13 +689,12 @@ pub fn mob_effect(entity_id: i64, event: u8, effect: i32, amplifier: i32, partic
 /// Every player attribute, with the real health, hunger, saturation and exhaustion.
 pub fn update_attributes_vitals(entity_id: i64, v: &Vitals) -> Vec<u8> {
     let Vitals { health, hunger, saturation, exhaustion, absorption, movement, xp_level, xp_progress } = *v;
-    let attrs: [(&str, f32, f32, f32, f32); 12] = [
+    let mut attrs: Vec<(&str, f32, f32, f32, f32)> = vec![
         ("minecraft:absorption", 0.0, F32_MAX, absorption.max(0.0), 0.0),
         ("minecraft:player.saturation", 0.0, 20.0, saturation.clamp(0.0, 20.0), 5.0),
         ("minecraft:player.exhaustion", 0.0, 5.0, exhaustion.clamp(0.0, 5.0), 0.0),
         ("minecraft:knockback_resistance", 0.0, 1.0, 0.0, 0.0),
         ("minecraft:health", 0.0, 20.0, health.clamp(0.0, 20.0), 20.0),
-        ("minecraft:movement", 0.0, F32_MAX, movement.max(0.0), 0.1),
         ("minecraft:player.hunger", 0.0, 20.0, hunger.clamp(0.0, 20.0), 20.0),
         ("minecraft:player.level", 0.0, 24791.0, (xp_level as f32).min(24791.0), 0.0),
         ("minecraft:player.experience", 0.0, 1.0, xp_progress.clamp(0.0, 1.0), 0.0),
@@ -701,6 +702,9 @@ pub fn update_attributes_vitals(entity_id: i64, v: &Vitals) -> Vec<u8> {
         ("minecraft:luck", -1024.0, 1024.0, 0.0, 0.0),
         ("minecraft:lava_movement", 0.0, F32_MAX, 0.02, 0.02),
     ];
+    if let Some(m) = movement {
+        attrs.push(("minecraft:movement", 0.0, F32_MAX, m.max(0.0), 0.1));
+    }
     packet(UPDATE_ATTRIBUTES, |w| {
         w.uvarlong(entity_id as u64);
         w.uvarint(attrs.len() as u32);

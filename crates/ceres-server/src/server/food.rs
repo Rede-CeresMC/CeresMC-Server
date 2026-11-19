@@ -95,7 +95,24 @@ impl Player {
                 saturation: self.saturation,
                 exhaustion: self.exhaustion,
                 absorption: self.absorption,
-                movement: self.movement_speed(),
+                movement: None,
+                xp_level: self.xp_level,
+                xp_progress: xp::progress(self.xp_level, self.xp_points),
+            },
+        )
+    }
+
+    /// The vitals plus the movement speed (on spawn and when speed/slowness change).
+    pub(crate) fn vitals_with_movement(&self) -> Vec<u8> {
+        protocol::update_attributes_vitals(
+            self.entity_id,
+            &protocol::Vitals {
+                health: self.health,
+                hunger: self.hunger,
+                saturation: self.saturation,
+                exhaustion: self.exhaustion,
+                absorption: self.absorption,
+                movement: Some(self.movement_speed()),
                 xp_level: self.xp_level,
                 xp_progress: xp::progress(self.xp_level, self.xp_points),
             },

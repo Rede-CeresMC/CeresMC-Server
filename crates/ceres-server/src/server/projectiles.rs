@@ -23,6 +23,7 @@ pub(crate) enum Kind {
     SplashPotion,
     LingeringPotion,
     Trident,
+    XpBottle,
 }
 
 impl Kind {
@@ -34,11 +35,13 @@ impl Kind {
             Kind::Arrow => "minecraft:arrow",
             Kind::SplashPotion | Kind::LingeringPotion => "minecraft:splash_potion",
             Kind::Trident => "minecraft:thrown_trident",
+            Kind::XpBottle => "minecraft:xp_bottle",
         }
     }
     fn gravity(self) -> f32 {
         match self {
             Kind::Arrow | Kind::SplashPotion | Kind::LingeringPotion | Kind::Trident => 0.05,
+            Kind::XpBottle => 0.1,
             _ => 0.03,
         }
     }
@@ -79,6 +82,7 @@ fn throwable(name: &str) -> Option<Kind> {
         "minecraft:ender_pearl" => Some(Kind::EnderPearl),
         "minecraft:splash_potion" => Some(Kind::SplashPotion),
         "minecraft:lingering_potion" => Some(Kind::LingeringPotion),
+        "minecraft:experience_bottle" => Some(Kind::XpBottle),
         _ => None,
     }
 }
@@ -152,7 +156,11 @@ impl Server {
             return true;
         }
         // potions are thrown a little slower and higher than snowballs
-        let speed = if matches!(kind, Kind::SplashPotion | Kind::LingeringPotion) { 0.5 } else { 1.5 };
+        let speed = match kind {
+            Kind::SplashPotion | Kind::LingeringPotion => 0.5,
+            Kind::XpBottle => 1.0,
+            _ => 1.5,
+        };
         self.launch(sid, kind, speed, 0, 0, false, held.meta);
         if kind == Kind::EnderPearl {
             self.start_cooldown(sid, &name, "ender_pearl", 20);
@@ -446,6 +454,7 @@ impl Server {
             Kind::SplashPotion | Kind::LingeringPotion => {
                 self.burst_potion(pr.world, at, pr.potion, pr.kind == Kind::LingeringPotion, target, pr.owner);
             }
+            Kind::XpBottle => self.burst_xp_bottle(pr.world, at),
             Kind::Trident => {
                 // stopped where the loaded world ends: it lands there as an item
                 if let Some(it) = pr.item.clone().filter(|_| pr.pickup) {
@@ -501,6 +510,7 @@ impl Server {
                 self.burst_potion(pr.world, at, pr.potion, pr.kind == Kind::LingeringPotion, None, pr.owner);
             }
             Kind::Trident => {}
+            Kind::XpBottle => self.burst_xp_bottle(pr.world, at),
             Kind::EnderPearl => {
                 if self.players.get(&pr.owner).is_some_and(|p| p.world == pr.world && !p.dead) {
                     self.teleport(pr.owner, [at[0], at[1].floor() + 0.1, at[2]]);
@@ -630,5 +640,15 @@ impl Server {
                 self.with_mob(eid, |s, m| s.hurt(m, dmg, "projectile", Some(mobs::Ent::Player(owner)), Some(from)));
             }
         }
+    }
+}
+
+impl Server {
+    /// A bottle o' enchanting breaks: blue splash, glass sound and 3-11 experience (as
+    /// PowerNukkitX's EntityXpBottle).
+    fn burst_xp_bottle(&mut self, world: usize, at: [f32; 3]) {
+        self.broadcast(&protocol::level_event(2002, at, 0x0038_5dc6), |_, q| q.world == world); // potion splash particles
+        self.broadcast(&protocol::level_sound_event("glass", at, -1), |_, q| q.world == world);
+        self.spawn_xp(world, at, 3 + rand::random::<u32>() % 9);
     }
 }
