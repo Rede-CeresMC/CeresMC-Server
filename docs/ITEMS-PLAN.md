@@ -98,7 +98,9 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Poses do suporte de armadura: agachar e usar passa para a próxima das 13 poses (metadata PoseIndex 79), salva com o mob
 - [x] Metadata conferida no gophertunnel (`entity_metadata.go`): todas as chaves usadas batem; agora também SkinID (104, aparência dos aldeões) e ColorTwoIndex (82, segunda cor do peixe tropical)
 - [x] Copiar livro escrito: receitas "multi" (tipo 2 do recipes.json, UUID + id de rede) agora vão no CraftingData; o servidor calcula o resultado pela grade. Livro escrito + livros e penas = cópias com geração +1 (original fica; cópia de cópia não copia). Validado só por bots no CraftingData; falta conferir com o cliente real se ele consome só os livros e penas
-- [ ] Outras receitas multi (clonar/ampliar mapa, estandarte no escudo, reparo por combinação, vaso decorado), mapas em molduras
+- [x] Reparo por combinação (receita multi, como o PowerNukkitX): dois itens iguais com durabilidade, um de cada, viram um com as duas durabilidades + 5 % do máximo, sem encantamentos nem nome (teste de bot no crafting_test)
+- [x] Estandarte no escudo (receita multi): o escudo recebe cor de base e padrões do estandarte; escudo que já tem estandarte recusa
+- [ ] Outras receitas multi (clonar/ampliar mapa, vaso decorado, fogos), mapas em molduras
 - [x] Mob guiado ou amarrado solta o laço ao morrer
 
 ## Lote 4: consumíveis

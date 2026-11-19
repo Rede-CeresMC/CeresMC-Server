@@ -183,8 +183,15 @@ fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
 /// The result of a "multi" recipe from what lies in the crafting grid, and the items (id, count)
 /// it uses up. Supported: copying a written book (one written book plus book and quills: as many
 /// copies, one generation further; copies of copies of copies cannot be made; the original stays).
-fn multi_result(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(ItemDesc, (i16, u16))> {
+///
+/// Repairing by combining (as PowerNukkitX): two of the same damageable item, one each, give one
+/// with both durabilities plus 5 % of the maximum, without enchantments or name.
+/// Shield and banner: the shield takes the banner's base colour and patterns.
+fn multi_result(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(ItemDesc, Vec<(i16, u16)>)> {
     const BOOK_CLONING: &str = "d1ca6b84-338e-4f2f-9c6b-76cc8b4bd98d";
+    const REPAIR: &str = "00000000-0000-0000-0000-000000000001";
+    const SHIELD_BANNER: &str = "00000000-0000-0000-0000-0000000000c8";
+    use super::durability as dur;
     let name = |it: &ItemDesc| gd.items_by_id.get(&it.id).map(|i| i.name.as_str()).unwrap_or("");
     let items: Vec<&ItemDesc> = grid.iter().filter(|i| !i.is_empty()).collect();
     match uuid {
@@ -206,7 +213,43 @@ fn multi_result(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(ItemDes
             super::durability::set_item_field(&mut out, "generation", Some(Tag::Int(generation + 1)));
             out.count = n;
             out.stack_id = 0;
-            Some((out, (blanks[0].id, n)))
+            Some((out, vec![(blanks[0].id, n)]))
+        }
+        REPAIR => {
+            let [a, b] = items.as_slice() else { return None };
+            let max = dur::max_durability(name(a))?;
+            if a.id != b.id || a.count != 1 || b.count != 1 || max == 0 {
+                return None;
+            }
+            let left = (max - dur::item_damage(a).min(max)) + (max - dur::item_damage(b).min(max)) + max * 5 / 100;
+            // the item without its enchantments, name and repair cost (keeping the shield's extra data)
+            let mut out = (*a).clone();
+            out.stack_id = 0;
+            dur::keep_only_enchantments(&mut out, &[]);
+            dur::set_item_field(&mut out, "display", None);
+            dur::set_item_field(&mut out, "RepairCost", None);
+            dur::set_damage(&mut out, (max + 1).saturating_sub(left));
+            Some((out, vec![(a.id, 2)]))
+        }
+        SHIELD_BANNER => {
+            let [a, b] = items.as_slice() else { return None };
+            let (shield, banner) = match (name(a), name(b)) {
+                ("minecraft:shield", "minecraft:banner") => (a, b),
+                ("minecraft:banner", "minecraft:shield") => (b, a),
+                _ => return None,
+            };
+            if shield.count != 1 || dur::item_field(shield, "Base").is_some() {
+                return None;
+            }
+            let mut out = (*shield).clone();
+            out.stack_id = 0;
+            for key in ["Type", "Patterns"] {
+                if let Some(v) = dur::item_field(banner, key) {
+                    dur::set_item_field(&mut out, key, Some(v));
+                }
+            }
+            dur::set_item_field(&mut out, "Base", Some(Tag::Int((banner.meta & 0x0f) as i32)));
+            Some((out, vec![(shield.id, 1), (banner.id, 1)]))
         }
         _ => None,
     }
@@ -470,7 +513,7 @@ impl Inventory {
         // crafting: the recipe of this request and the ingredients the client says it used up
         let mut recipe: Option<(&ceres_world::Recipe, u16)> = None;
         // a multi recipe: the items (id, count) it must use up
-        let mut multi_use: Option<(i16, u16)> = None;
+        let mut multi_use: Option<Vec<(i16, u16)>> = None;
         let mut consumed: Vec<ItemDesc> = Vec::new();
         // where each consumed item came from
         let mut consumed_from: Vec<Loc> = Vec::new();
@@ -810,8 +853,15 @@ impl Inventory {
             // a recipe and an enchantment in one request: refused
             (Some(_), Some(_)) => false,
             (Some(_), None) if multi_use.is_some() => {
-                let (id, n) = multi_use.unwrap_or_default();
-                consumed.iter().all(|c| c.id == id) && consumed.iter().map(|c| c.count).sum::<u16>() == n
+                let mut want = multi_use.unwrap_or_default();
+                let mut ok = true;
+                for c in &consumed {
+                    match want.iter_mut().find(|(id, n)| *id == c.id && *n >= c.count) {
+                        Some(w) => w.1 -= c.count,
+                        None => ok = false,
+                    }
+                }
+                ok && want.iter().all(|(_, n)| *n == 0)
             }
             (Some((r, reps)), None) => ingredients_match(r, reps, consumed, gd),
             // enchanting: exactly the item, plus 1-3 lapis (none needed in creative)

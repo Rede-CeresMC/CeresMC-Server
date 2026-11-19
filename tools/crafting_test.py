@@ -100,8 +100,11 @@ def recipe_ids(c):
             out[name] = net
     n, p = read_uvarint(d, p)  # multi recipes: UUID and network id
     for _ in range(n):
+        u = d[p:p + 8][::-1] + d[p + 8:p + 16][::-1]
         p += 16
-        _, p = read_uvarint(d, p)
+        net, p = read_uvarint(d, p)
+        h = u.hex()
+        out["multi:" + "-".join([h[:8], h[8:12], h[12:16], h[16:20], h[20:]])] = net
     for _ in range(5):  # user data, chemistry x2, smithing x2
         n, p = read_uvarint(d, p)
         if n:
@@ -213,6 +216,18 @@ c.send(uvarint(0x2f) + bytes([0, 0xff]) + b"\x00")
 c.pump(2.0, lambda: any(p == 0x31 for p, _ in c.received[n:]))
 counts = main_counts(c)
 check(counts is not None and counts[0] == 1, f"closing the inventory gives the grid items back ({counts and counts[:3]})")
+
+# 4b. multi recipe: two wooden pickaxes repaired into one (the server works the result out)
+repair = ids.get("multi:00000000-0000-0000-0000-000000000001")
+check(repair is not None, "the multi recipes are listed (repair)")
+command(c, "/clear")
+give(c, "wooden_pickaxe 2")
+check(request(c, [take(1, slot(HOTBAR, 0), slot(CRAFT_IN, 28)), take(1, slot(HOTBAR, 1), slot(CRAFT_IN, 29))]),
+      "two pickaxes go into the grid")
+check(not request(c, [craft(repair), consume(1, CRAFT_IN, 28), take(1, slot(CREATED, 50), slot(HOTBAR, 2))]),
+      "a repair using up one pickaxe only is refused")
+check(request(c, [craft(repair), consume(1, CRAFT_IN, 28), consume(1, CRAFT_IN, 29), take(1, slot(CREATED, 50), slot(HOTBAR, 2))]),
+      "two pickaxes are combined into one (repair recipe)")
 
 # 5. crafting table: place it, click it, craft a chest
 command(c, "/gamemode creative")
