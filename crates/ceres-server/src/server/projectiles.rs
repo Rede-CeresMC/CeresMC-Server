@@ -531,7 +531,8 @@ impl Server {
             mobs::Ent::Player(victim) => {
                 if victim != owner {
                     let name = self.players.get(&victim).map(|p| p.name.clone()).unwrap_or_default();
-                    let wet = self.players.get(&victim).is_some_and(|p| p.actor_state.swimming);
+                    let rain = self.raining(world);
+                    let wet = self.mobsys.penv.get(&victim).is_some_and(|e| e.in_water || (rain && e.sky));
                     let dmg = 8.0 + if wet { 2.5 * impaling } else { 0.0 };
                     let origin = [pos[0] - motion[0], pos[1], pos[2] - motion[2]];
                     if !self.shield_blocks(victim, origin, dmg, false) {
@@ -540,10 +541,10 @@ impl Server {
                 }
             }
             mobs::Ent::Mob(eid) => {
-                let aquatic = self.mob_ref(eid).is_some_and(|m| {
-                    ["fish", "squid", "guardian", "dolphin", "axolotl", "turtle", "drowned"].iter().any(|f| m.t.is(f))
-                });
-                let dmg = 8.0 + if aquatic { 2.5 * impaling } else { 0.0 };
+                // Bedrock's Impaling: anything touching water or in the rain under the sky
+                let rain = self.raining(world);
+                let wet = self.mob_ref(eid).is_some_and(|m| m.env.in_water || (rain && m.env.sky));
+                let dmg = 8.0 + if wet { 2.5 * impaling } else { 0.0 };
                 let tick = self.ticks;
                 self.mobsys.player_attacked.insert(owner, (mobs::Ent::Mob(eid), tick));
                 let from = [pos[0] - motion[0] * 5.0, pos[1], pos[2] - motion[2] * 5.0];

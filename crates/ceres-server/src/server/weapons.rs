@@ -135,8 +135,8 @@ impl Server {
             if held_for >= crossbow_charge_ticks(&held) {
                 self.load_crossbow(sid, held);
             }
-        } else if held_for >= 10 {
-            self.throw_trident(sid, held);
+        } else if held_for >= 5 {
+            self.throw_trident(sid, held, held_for);
         }
         true
     }
@@ -243,7 +243,13 @@ impl Server {
         }
     }
 
-    fn throw_trident(&mut self, sid: SessionId, trident: ItemDesc) {
+    /// Throw force grows with the time held, as PowerNukkitX's ItemTrident: min((p^2+2p)/3, 1) * 2.5.
+    fn throw_trident(&mut self, sid: SessionId, trident: ItemDesc, held_for: u64) {
+        let secs = held_for as f32 / 20.0;
+        let force = ((secs * secs + secs * 2.0) / 3.0).min(1.0) * 2.5;
+        if force < 0.1 {
+            return;
+        }
         let Some(p) = self.players.get(&sid) else { return };
         let (world, pos, rot, creative, eid) = (p.world, p.pos, p.rot, p.gamemode == 1, p.entity_id);
         let riptide = blocks::enchant_level(&trident, ENCHANT_RIPTIDE);
@@ -282,7 +288,7 @@ impl Server {
             durability::wear_item(&mut thrown, 1, &self.gd);
             self.set_held(sid, ItemDesc::default());
         }
-        self.launch_rot(sid, projectiles::Kind::Trident, 2.5, 0.0, 0, 0, !creative, 0, Some(thrown));
+        self.launch_rot(sid, projectiles::Kind::Trident, force, 0.0, 0, 0, !creative, 0, Some(thrown));
     }
 
     /// Mace smash after a hit landed: the fall is used up, nearby entities are pushed away,
@@ -295,8 +301,10 @@ impl Server {
         if let Some(p) = self.players.get_mut(&sid) {
             p.fall_start_y = Some(feet_y); // the fall that made the smash does not hurt
         }
-        let sound = if fall > 5.0 { "mace.heavy_smash_ground" } else { "mace.smash_ground" };
+        // as PowerNukkitX's ItemMace.onPostAttack: ground dust, and the heavy sound for big smashes
+        let sound = if weapons_smash_damage(fall) >= 16.0 { "mace.heavy_smash_ground" } else { "mace.smash_ground" };
         self.broadcast(&protocol::level_sound_event(sound, victim_pos, -1), |_, q| q.world == world);
+        self.broadcast(&protocol::level_event(9815, victim_pos, 0), |_, q| q.world == world); // ParticleSmashAttackGroundDust
         // push away what stands around the victim
         let near = self.entities_near(world, victim_pos, 3.5, victim);
         for e in near {
@@ -409,4 +417,8 @@ impl Server {
             self.broadcast(&protocol::level_sound_event(&snd, pos, -1), |_, q| q.world == world);
         }
     }
+}
+
+fn weapons_smash_damage(fall: f32) -> f32 {
+    7.0 + mace_bonus(fall, 0)
 }

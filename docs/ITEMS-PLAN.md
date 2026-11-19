@@ -25,6 +25,14 @@ Testes de bot: `tools/weapons_test.py`, `tools/projectiles_test.py`, `tools/mobs
 - [x] Carga da lança (lógica do PowerNukkitX `ItemSpear.whileUsing`, LGPL-3.0): segurando o uso e movendo-se a 0,13 bloco/tick ou mais, a cada 5 ticks acerta o mais próximo à frente com 1,5x o dano + 3 por bloco de velocidade (sem teste de bot)
 - [ ] Golpe com Estocada (Lunge, encantamento 41: impulso para a frente gastando fome)
 
+## Comparação com o PowerNukkitX
+
+- Besta: igual nos pontos vanilla (25 ticks, Carga Rápida -5 por nível, `chargedItem`, mão secundária primeiro). PNX desgasta ao carregar e usa velocidade 3,5; mantido o vanilla (desgaste ao disparar, 3,15)
+- Tridente: corrigido para o PNX: força do arremesso pelo tempo segurado (min((p²+2p)/3, 1) x 2,5, mínimo 5 ticks) e Empalamento em qualquer alvo molhado (água ou chuva a céu aberto), não só criaturas aquáticas
+- Maça: mesma curva de dano; adicionadas a poeira no chão (LevelEvent 9815) e o som pesado a partir de 16 de dano
+- Lança: danos iguais; carga portada do PNX
+- Pesca: o PNX é mais simples (XP 1-3, loot fixo no código); mantida a versão com as loot tables do pack
+
 ## Lote 2: ferramentas (em andamento)
 
 IDs conferidos: sons em `bedrock-protocol-docs/json/LevelSoundEvent.json`, ActorEvent em `ActorEvent.json`, LevelEvent no gophertunnel (`level_event.go`; a fumaça de explosão estava com o ID 2052, inexistente, agora 2025). Sons conferidos contra `bedrock-protocol-docs/json/LevelSoundEvent.json` (corrigidos `random.pop` e `random.enchant`, que não existem).
