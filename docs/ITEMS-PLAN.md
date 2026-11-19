@@ -147,7 +147,8 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Segurança das receitas multi: além da casa, o item consumido tem de ser o mesmo (tipo e NBT) que estava lá quando o resultado foi calculado (impede trocar por outro item no mesmo pedido)
 - [x] Duplicar estandarte (receita multi): estandarte com padrões + estandarte liso da mesma cor = cópia; o original fica na grade; o estandarte sinistro não copia
 - [x] Clonar mapa (receita multi): mapa preenchido + mapas vazios = cópias + o original (só copia o item; os mapas em si ainda não existem)
-- [ ] Padrões de estandarte no tear (receitas multi restantes), mapas em molduras
+- [x] Tear (lógica do `CraftLoomActionProcessor` do PowerNukkitX): janela 24, espaços 41/9 (estandarte), 42/10 (corante), 43/11 (item de padrão); a ação CraftLoom (16) traz o código do padrão e quantas vezes; o servidor confere o estandarte (não o sinistro), até 6 padrões, o corante (cor 0 preto ... 15 branco) e o item de padrão: flor, creeper, caveira, Mojang, globo, piglin, fluxo, rajada, tijolos e borda serrilhada só com o item deles (que não é gasto); gasta um estandarte e um corante por estandarte feito. Teste de bot: borda com corante vermelho aceita, creeper sem o item recusado
+- [ ] Mapas em molduras (conferir no cliente real)
 - [x] Mob guiado ou amarrado solta o laço ao morrer
 
 ## Lote 4: consumíveis

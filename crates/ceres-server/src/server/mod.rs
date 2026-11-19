@@ -14,6 +14,7 @@ mod cauldron;
 mod chunks;
 mod combat;
 mod cartography;
+mod loom;
 mod connections;
 mod commands;
 mod containers;

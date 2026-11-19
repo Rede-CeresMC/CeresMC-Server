@@ -227,6 +227,44 @@ check(request(c, [take(1, slot(HOTBAR, 0), slot(55, 12))]), "paper goes in again
 check(request(c, [take(1, slot(HOTBAR, 1), slot(56, 13))]), "a glass pane goes into the second slot")
 check(not carto_craft(c, [slot(55, 12), slot(56, 13)]), "paper + glass pane make nothing (refused)")
 
+# loom: a white banner and red dye weave a border; the creeper pattern needs its pattern item
+LOOM = block_id("minecraft:loom")
+LPOS = (POS[0] + 6, POS[1], POS[2] + 4)
+command(c, "/gamemode creative")
+c.break_block(LPOS)
+c.place_block((LPOS[0], 69, LPOS[2]), 1, STONE)
+c.pump(0.3)
+c.place_block((LPOS[0], 69, LPOS[2]), 1, LOOM)
+c.pump(0.6)
+command(c, "/gamemode survival")
+command(c, "/clear")
+give(c, "banner 2 15")
+give(c, "red_dye 2")
+n = len(c.received)
+c.place_block(LPOS, 1, 0)
+c.pump(3.0, lambda: any(p == 0x2e for p, _ in c.received[n:]))
+opens = [d for p, d in c.received[n:] if p == 0x2e]
+check(opens and opens[-1][1] == 24, "clicking a loom opens it")
+
+def loom_craft(c, code):
+    counter[0] -= 2
+    body = svarint(counter[0]) + uvarint(4)
+    body += uvarint(16) + bytes(1) + string(code) + bytes([1])
+    body += uvarint(5) + bytes(1) + bytes([1]) + slot(41, 9)
+    body += uvarint(5) + bytes(1) + bytes([1]) + slot(42, 10)
+    body += uvarint(0) + bytes(1) + bytes([1]) + slot(60, 50) + slot(HOTBAR, 6)
+    body += uvarint(0) + struct.pack("<i", 0)
+    n = len(c.received)
+    c.send(uvarint(0x93) + uvarint(1) + body)
+    c.pump(3.0, lambda: any(p == 0x94 for p, _ in c.received[n:]))
+    resp = [d for p, d in c.received[n:] if p == 0x94]
+    return bool(resp) and resp[-1][1] == 0
+
+check(request(c, [take(2, slot(HOTBAR, 0), slot(41, 9))]), "banners go into the loom")
+check(request(c, [take(2, slot(HOTBAR, 1), slot(42, 10))]), "dye goes into the loom")
+check(not loom_craft(c, "cre"), "the creeper pattern without its pattern item is refused")
+check(loom_craft(c, "bo"), "a white banner and red dye weave a border")
+
 c.close()
 print("PASS" if ok else "FAILED")
 sys.exit(0 if ok else 1)

@@ -38,6 +38,8 @@ pub(crate) struct Inventory {
     /// anvil slots, and the levels its last use costs
     pub(crate) anvil_input: ItemDesc,
     pub(crate) anvil_material: ItemDesc,
+    /// the loom's banner pattern item (the banner and dye use the anvil's slots)
+    pub(crate) loom_pattern: ItemDesc,
     pub(crate) anvil_paid: Option<u32>,
 }
 
@@ -89,6 +91,7 @@ impl Default for Inventory {
             grind_xp: None,
             anvil_input: ItemDesc::default(),
             anvil_material: ItemDesc::default(),
+            loom_pattern: ItemDesc::default(),
             anvil_paid: None,
         }
     }
@@ -109,6 +112,7 @@ enum Loc {
     GrindAdditional,
     AnvilInput,
     AnvilMaterial,
+    LoomPattern,
 }
 
 /// Slots of the enchanting table, grindstone and anvil: once one of them was used in a request,
@@ -116,7 +120,7 @@ enum Loc {
 fn is_station(loc: Loc) -> bool {
     matches!(
         loc,
-        Loc::EnchantInput | Loc::EnchantLapis | Loc::GrindInput | Loc::GrindAdditional | Loc::AnvilInput | Loc::AnvilMaterial
+        Loc::EnchantInput | Loc::EnchantLapis | Loc::GrindInput | Loc::GrindAdditional | Loc::AnvilInput | Loc::AnvilMaterial | Loc::LoomPattern
     )
 }
 
@@ -165,6 +169,16 @@ fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
             match (s.container, s.slot) {
                 (super::cartography::UI_CARTO_INPUT, super::cartography::SLOT_CARTO_INPUT) => Some(Loc::AnvilInput),
                 (super::cartography::UI_CARTO_ADDITIONAL, super::cartography::SLOT_CARTO_ADDITIONAL) => Some(Loc::AnvilMaterial),
+                _ => None,
+            }
+        }
+        super::loom::UI_LOOM_INPUT | super::loom::UI_LOOM_DYE | super::loom::UI_LOOM_MATERIAL
+            if open.is_some_and(|c| c.ui == super::loom::LOOM_UI) =>
+        {
+            match (s.container, s.slot) {
+                (super::loom::UI_LOOM_INPUT, super::loom::SLOT_LOOM_INPUT) => Some(Loc::AnvilInput),
+                (super::loom::UI_LOOM_DYE, super::loom::SLOT_LOOM_DYE) => Some(Loc::AnvilMaterial),
+                (super::loom::UI_LOOM_MATERIAL, super::loom::SLOT_LOOM_MATERIAL) => Some(Loc::LoomPattern),
                 _ => None,
             }
         }
@@ -460,6 +474,7 @@ impl Inventory {
             Loc::GrindAdditional => &self.grind_additional,
             Loc::AnvilInput => &self.anvil_input,
             Loc::AnvilMaterial => &self.anvil_material,
+            Loc::LoomPattern => &self.loom_pattern,
         }
     }
 
@@ -482,6 +497,7 @@ impl Inventory {
             Loc::GrindAdditional => self.grind_additional = item,
             Loc::AnvilInput => self.anvil_input = item,
             Loc::AnvilMaterial => self.anvil_material = item,
+            Loc::LoomPattern => self.loom_pattern = item,
             Loc::Container(i) => {
                 if let Some(c) = self.container.as_mut() {
                     c.items[i] = item;
@@ -621,6 +637,7 @@ impl Inventory {
             self.grind_additional.clone(),
             self.anvil_input.clone(),
             self.anvil_material.clone(),
+            self.loom_pattern.clone(),
         );
         self.anvil_paid = None;
         self.enchant_paid = None;
@@ -643,6 +660,7 @@ impl Inventory {
             self.grind_additional = backup.12;
             self.anvil_input = backup.13;
             self.anvil_material = backup.14;
+            self.loom_pattern = backup.15;
             self.anvil_paid = None;
             self.enchant_paid = None;
             self.grind_xp = None;
@@ -748,6 +766,16 @@ impl Inventory {
                     self.crafted = Some(res.item);
                     anvil_use = Some((self.anvil_input.clone(), self.anvil_material.clone(), self.anvil_input.count, res.material_used, res.cost));
                 }
+                StackAction::Loom { ref pattern, times } => {
+                    let open_ui = self.container.as_ref().map(|c| c.ui);
+                    if open_ui != Some(super::loom::LOOM_UI) || recipe.is_some() || enchant_choice.is_some() || grinding.is_some() || anvil_use.is_some() {
+                        return None;
+                    }
+                    let out = super::loom::weave(&self.anvil_input, &self.anvil_material, &self.loom_pattern, pattern, times, gd)?;
+                    let n = out.count;
+                    self.crafted = Some(out);
+                    anvil_use = Some((self.anvil_input.clone(), self.anvil_material.clone(), n, n, 0));
+                }
                 StackAction::Grindstone => {
                     let open_ui = self.container.as_ref().map(|c| c.ui);
                     if open_ui != Some(super::grindstone::GRINDSTONE_UI) || recipe.is_some() || enchant_choice.is_some() || grinding.is_some() {
@@ -789,6 +817,10 @@ impl Inventory {
                         return None;
                     }
                     let loc = locate(&src, self.container.as_ref())?;
+                    if loc == Loc::LoomPattern {
+                        touched.push(src);
+                        continue;
+                    }
                     let mut s = self.slot_ref(loc).clone();
                     if s.is_empty() || s.count < count as u16 {
                         return None;
@@ -1083,6 +1115,7 @@ impl Inventory {
             &mut self.grind_additional,
             &mut self.anvil_input,
             &mut self.anvil_material,
+            &mut self.loom_pattern,
         ] {
             if !slot.is_empty() {
                 out.push(std::mem::take(slot));

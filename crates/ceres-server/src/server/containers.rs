@@ -22,6 +22,7 @@ pub(crate) fn container_kind(name: &str) -> Option<(u8, &'static str, bool)> {
         "minecraft:grindstone" => Some((grindstone::GRINDSTONE_UI, "", false)),
         "minecraft:anvil" | "minecraft:chipped_anvil" | "minecraft:damaged_anvil" => Some((anvil::ANVIL_UI, "", false)),
         "minecraft:cartography_table" => Some((cartography::CARTOGRAPHY_UI, "", false)),
+        "minecraft:loom" => Some((loom::LOOM_UI, "", false)),
         "minecraft:furnace" | "minecraft:lit_furnace" => Some((furnace::UI_FURNACE, "Furnace", false)),
         "minecraft:blast_furnace" | "minecraft:lit_blast_furnace" => {
             Some((furnace::UI_BLAST_FURNACE, "BlastFurnace", false))
@@ -209,6 +210,7 @@ impl Server {
                 grindstone::GRINDSTONE_UI => protocol::WINDOW_TYPE_GRINDSTONE,
                 anvil::ANVIL_UI => protocol::WINDOW_TYPE_ANVIL,
                 cartography::CARTOGRAPHY_UI => protocol::WINDOW_TYPE_CARTOGRAPHY,
+                loom::LOOM_UI => protocol::WINDOW_TYPE_LOOM,
                 _ => protocol::WINDOW_TYPE_WORKBENCH,
             };
             p.out.push(protocol::open_block_container(window, ty, pos));
@@ -260,6 +262,7 @@ impl Server {
             || c.ui == grindstone::GRINDSTONE_UI
             || c.ui == anvil::ANVIL_UI
             || c.ui == cartography::CARTOGRAPHY_UI
+            || c.ui == loom::LOOM_UI
         {
             return;
         }
@@ -357,6 +360,7 @@ impl Server {
                 grindstone::GRINDSTONE_UI => protocol::WINDOW_TYPE_GRINDSTONE,
                 anvil::ANVIL_UI => protocol::WINDOW_TYPE_ANVIL,
                 cartography::CARTOGRAPHY_UI => protocol::WINDOW_TYPE_CARTOGRAPHY,
+                loom::LOOM_UI => protocol::WINDOW_TYPE_LOOM,
                 _ => window_type_of(c.ui, tile_id),
             };
             p.out.push(protocol::container_close(c.window, ty, true));

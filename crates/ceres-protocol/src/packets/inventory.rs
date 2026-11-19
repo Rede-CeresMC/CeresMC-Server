@@ -456,6 +456,8 @@ pub enum StackAction {
     Grindstone,
     /// anvil: the result is decided by the server; `filter` indexes the request's texts (the new name)
     Anvil { filter: i32 },
+    /// loom: weave the pattern with this code (`times` banners)
+    Loom { pattern: String, times: u8 },
     /// informational actions the server does not need to act on (crafting results, mining...)
     Ignored(u32),
     /// any action this server does not understand yet (crafting...)
@@ -545,6 +547,10 @@ fn read_single_stack_request(r: &mut R) -> Res<StackRequest> {
                 r.varint()?; // repair cost
                 r.u8()?; // repetitions
                 StackAction::Grindstone
+            }
+            16 => {
+                let pattern = r.string()?;
+                StackAction::Loom { pattern, times: r.u8()? }
             }
             17 => StackAction::Ignored(17),
             18 => {
@@ -698,6 +704,7 @@ pub const WINDOW_TYPE_BREWING_STAND: u8 = 4;
 pub const WINDOW_TYPE_ANVIL: u8 = 5;
 pub const WINDOW_TYPE_HOPPER: u8 = 8;
 pub const WINDOW_TYPE_STONECUTTER: u8 = 29;
+pub const WINDOW_TYPE_LOOM: u8 = 24;
 pub const WINDOW_TYPE_CARTOGRAPHY: u8 = 30;
 pub const WINDOW_TYPE_GRINDSTONE: u8 = 26;
 pub const WINDOW_TYPE_BLAST_FURNACE: u8 = 27;

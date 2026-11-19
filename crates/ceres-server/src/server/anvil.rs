@@ -247,6 +247,10 @@ impl Server {
             self.finish_cartography(sid);
             return;
         }
+        if c.ui == super::loom::LOOM_UI {
+            self.finish_loom(sid);
+            return;
+        }
         if !creative {
             self.add_xp_levels(sid, -(cost as i64));
         }
