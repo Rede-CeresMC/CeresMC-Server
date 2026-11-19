@@ -121,6 +121,12 @@ def recipe_ids(c):
         raise ValueError(f"CraftingData has {len(d) - p} bytes left over")
     return out
 
+def click_air(c):
+    item = struct.pack("<hH", 0, 0) + uvarint(0) + bytes(1) + uvarint(0) + uvarint(0)
+    data = svarint(1) + bytes([1]) + svarint(0) * 3 + bytes([255]) + svarint(0) + bytes(1) + item
+    data += struct.pack("<fff", *c.pos) + struct.pack("<fff", 0, 0, 0) + uvarint(0) + bytes([1, 0])
+    c.send(uvarint(0x1e) + svarint(0) + bytes(1) + uvarint(2) + uvarint(0) + data)
+
 def give(c, what):
     """/give and wait until the item is in the inventory."""
     n = len(c.received)
@@ -280,6 +286,20 @@ give(c, "brick 4")
 check(request(c, [take(1, slot(HOTBAR, 0), slot(CRAFT_IN, s)) for s in (33, 35, 37, 39)]), "four bricks go around the 3x3 grid")
 check(pot is not None and request(c, [craft(pot)] + [consume(1, CRAFT_IN, s) for s in (33, 35, 37, 39)] + [take(1, slot(CREATED, 50), slot(HOTBAR, 1))]),
       "a decorated pot is crafted from four bricks")
+
+# 5c. map extending (multi recipe): a filled map in the middle and 8 paper around it
+extend = ids.get("multi:d392b075-4ba1-40ae-8789-af868d56f6ce")
+command(c, "/clear")
+give(c, "empty_map 1")
+n = len(c.received)
+click_air(c)
+c.pump(3.0, lambda: any(p == 0x43 for p, _ in c.received[n:]))
+give(c, "paper 8")
+around = (32, 33, 34, 35, 37, 38, 39, 40)
+check(request(c, [take(1, slot(HOTBAR, 1), slot(CRAFT_IN, 36))] + [take(1, slot(HOTBAR, 2), slot(CRAFT_IN, s)) for s in around]),
+      "a filled map and 8 paper go into the 3x3 grid")
+check(extend is not None and request(c, [craft(extend)] + [consume(1, CRAFT_IN, s) for s in (36,) + around] + [take(1, slot(CREATED, 50), slot(HOTBAR, 5))]),
+      "a map is extended with 8 paper")
 
 # 6. stonecutter: stone into 2 slabs, only while a stonecutter is open
 CUTTER = block_id("minecraft:stonecutter_block")

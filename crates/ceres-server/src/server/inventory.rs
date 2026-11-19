@@ -222,6 +222,7 @@ fn multi_result_items(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(I
     const FIREWORK_ROCKET: &str = "00000000-0000-0000-0000-000000000002";
     const BANNER_DUPLICATE: &str = "b5c5d105-75a2-4076-af2b-923ea2bf4bf0";
     const MAP_CLONING: &str = "85939755-ba10-4d9d-a4cc-efb7a8e943c4";
+    const MAP_EXTENDING: &str = "d392b075-4ba1-40ae-8789-af868d56f6ce";
     use super::durability as dur;
     let name = |it: &ItemDesc| gd.items_by_id.get(&it.id).map(|i| i.name.as_str()).unwrap_or("");
     let items: Vec<&ItemDesc> = grid.iter().filter(|i| !i.is_empty()).collect();
@@ -284,6 +285,31 @@ fn multi_result_items(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(I
             }
             dur::set_item_field(&mut out, "Base", Some(Tag::Int((banner.meta & 0x0f) as i32)));
             Some((out, vec![(shield.id, 1), (banner.id, 1)]))
+        }
+        MAP_EXTENDING => {
+            // a filled map in the middle of the 3x3 grid and paper all around: a new map one
+            // scale up (at most 4) around the same place; the server draws it when first seen
+            let cells = grid.get(4..13)?;
+            if !cells.iter().enumerate().all(|(i, c)| if i == 4 { name(c) == "minecraft:filled_map" } else { name(c) == "minecraft:paper" }) {
+                return None;
+            }
+            let map = &cells[4];
+            let int = |k: &str| match dur::item_field(map, k) {
+                Some(Tag::Int(v)) => Some(v),
+                _ => None,
+            };
+            let scale = int("map_scale").unwrap_or(0);
+            let (Some(x), Some(z)) = (int("ceres_map_x"), int("ceres_map_z")) else { return None };
+            if scale >= 4 || map.count != 1 {
+                return None;
+            }
+            let mut out = map.clone();
+            out.stack_id = 0;
+            dur::set_item_field(&mut out, "map_uuid", Some(Tag::Long((rand::random::<u32>() as i64) | 1 << 33)));
+            dur::set_item_field(&mut out, "map_scale", Some(Tag::Int(scale + 1)));
+            dur::set_item_field(&mut out, "ceres_map_x", Some(Tag::Int(x)));
+            dur::set_item_field(&mut out, "ceres_map_z", Some(Tag::Int(z)));
+            Some((out, Vec::new()))
         }
         MAP_CLONING => {
             // a filled map and empty maps: as many copies plus the original

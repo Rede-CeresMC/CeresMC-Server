@@ -3,6 +3,8 @@
 //! The client asks for the image with MapInfoRequest (0x44) and gets ClientboundMapItemData
 //! (0x43); while a player holds the map inside its area, the part around them is drawn again.
 //! Images are kept in `<world 0>/maps/<id>.map`.
+//! A map extended (map + 8 paper) is a new map one scale up, centred on the old one's grid cell;
+//! it is drawn the first time it is held or asked for (its item carries the old centre).
 //!
 //! Colours: the vanilla base map colours, chosen for each block by its name, shaded by the
 //! height of the block to the north (as vanilla: higher brighter, lower darker); water is darker
@@ -10,6 +12,7 @@
 
 use super::*;
 use ceres_codec::nbt::Tag;
+use ceres_protocol::ItemDesc;
 use std::collections::HashMap;
 
 const SIZE: usize = 128;
@@ -18,6 +21,8 @@ pub(crate) struct MapData {
     pub world: usize,
     /// north-west corner of the area
     pub corner: [i32; 2],
+    /// 0-4: each pixel covers 2^scale blocks
+    pub scale: u8,
     pub pixels: Vec<[u8; 4]>,
     dirty: bool,
 }
@@ -218,7 +223,7 @@ impl Server {
     /// True when a pixel changed.
     fn draw_map(&mut self, id: i64, around: Option<([i32; 2], i32)>) -> bool {
         let Some(m) = self.maps.maps.get(&id) else { return false };
-        let (world, corner) = (m.world, m.corner);
+        let (world, corner, step) = (m.world, m.corner, 1i32 << m.scale);
         let wanted = |x: i32, z: i32| match around {
             Some((c, r)) => {
                 let (dx, dz) = (x - c[0], z - c[1]);
@@ -230,9 +235,9 @@ impl Server {
         let mut cols: HashMap<(i32, i32), Option<(i32, u8, i32)>> = HashMap::new();
         let mut changed = Vec::new();
         for pz in 0..SIZE as i32 {
-            let z = corner[1] + pz;
+            let z = corner[1] + pz * step;
             for px in 0..SIZE as i32 {
-                let x = corner[0] + px;
+                let x = corner[0] + px * step;
                 if !wanted(x, z) {
                     continue;
                 }
@@ -252,11 +257,11 @@ impl Server {
                         _ => 180,
                     }
                 } else {
-                    let north = match cols.get(&(x, z - 1)) {
+                    let north = match cols.get(&(x, z - step)) {
                         Some(v) => *v,
                         None => {
-                            let v = self.map_column(world, x, z - 1);
-                            cols.insert((x, z - 1), v);
+                            let v = self.map_column(world, x, z - step);
+                            cols.insert((x, z - step), v);
                             v
                         }
                     };
@@ -292,16 +297,19 @@ impl Server {
         }
         let Some(path) = self.maps_dir().map(|d| d.join(format!("{id}.map"))) else { return false };
         let Ok(b) = std::fs::read(&path) else { return false };
-        if b.len() != 12 + SIZE * SIZE * 4 {
-            return false;
-        }
+        // old files have no scale byte
+        let (scale, px_at) = match b.len() {
+            n if n == 12 + SIZE * SIZE * 4 => (0, 12),
+            n if n == 13 + SIZE * SIZE * 4 => (b[12].min(4), 13),
+            _ => return false,
+        };
         let int = |i: usize| i32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
         let world = int(0).max(0) as usize;
         if world >= self.worlds.worlds.len() {
             return false;
         }
-        let pixels = b[12..].chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
-        self.maps.maps.insert(id, MapData { world, corner: [int(4), int(8)], pixels, dirty: false });
+        let pixels = b[px_at..].chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
+        self.maps.maps.insert(id, MapData { world, corner: [int(4), int(8)], scale, pixels, dirty: false });
         true
     }
 
@@ -316,6 +324,7 @@ impl Server {
             b.extend((m.world as i32).to_le_bytes());
             b.extend(m.corner[0].to_le_bytes());
             b.extend(m.corner[1].to_le_bytes());
+            b.push(m.scale);
             for p in &m.pixels {
                 b.extend(p);
             }
@@ -328,21 +337,26 @@ impl Server {
 
     fn map_packet(&self, id: i64) -> Option<Vec<u8>> {
         let m = self.maps.maps.get(&id)?;
-        let center = [m.corner[0] + 64, 0, m.corner[1] + 64];
-        Some(protocol::map_item_data(id, 0, center, 0, &m.pixels))
+        let half = 64 << m.scale;
+        let center = [m.corner[0] + half, 0, m.corner[1] + half];
+        Some(protocol::map_item_data(id, 0, center, m.scale, &m.pixels))
     }
 
-    /// The players inside a map's area as white markers pointing where they look.
+    /// The players who carry this map, inside its area and not invisible, as white markers
+    /// pointing where they look.
     fn map_marks_packet(&self, id: i64) -> Option<Vec<u8>> {
         let m = self.maps.maps.get(&id)?;
-        let center = [m.corner[0] + 64, m.corner[1] + 64];
+        let half = 64 << m.scale;
+        let step = (1 << m.scale) as f32;
+        let center = [m.corner[0] + half, m.corner[1] + half];
         let marks: Vec<(u8, u8, i8, i8)> = self
             .players
             .values()
             .filter(|p| p.state == State::Spawned && !p.dead && p.world == m.world && p.gamemode != 6)
+            .filter(|p| !p.effects.contains_key(&INVISIBILITY) && carries_map(p, id))
             .filter_map(|p| {
-                let dx = ((p.pos[0] - center[0] as f32) * 2.0).round();
-                let dz = ((p.pos[2] - center[1] as f32) * 2.0).round();
+                let dx = ((p.pos[0] - center[0] as f32) * 2.0 / step).round();
+                let dz = ((p.pos[2] - center[1] as f32) * 2.0 / step).round();
                 if !(-128.0..=127.0).contains(&dx) || !(-128.0..=127.0).contains(&dz) {
                     return None;
                 }
@@ -350,7 +364,7 @@ impl Server {
                 Some((0, rot, dx as i8, dz as i8))
             })
             .collect();
-        Some(protocol::map_decorations(id, 0, [center[0], 0, center[1]], 0, &marks))
+        Some(protocol::map_decorations(id, 0, [center[0], 0, center[1]], m.scale, &marks))
     }
 
     /// An empty map used: a new filled map of the area around the player.
@@ -363,19 +377,20 @@ impl Server {
             return true;
         }
         self.item_cooldowns.insert(key, self.ticks + 20);
-        // vanilla grid: areas of 128 blocks centred on multiples of 128 (corner at -64)
-        let cell = |v: f32| ((v.floor() as i32 + 64).div_euclid(128)) * 128 - 64;
-        let corner = [cell(pos[0]), cell(pos[2])];
+        let corner = map_corner([pos[0].floor() as i32, pos[2].floor() as i32], 0);
         let mut id = (rand::random::<u32>() as i64) | 1 << 32;
         if self.load_map(id) {
             id += 1;
         }
-        self.maps.maps.insert(id, MapData { world, corner, pixels: vec![[0, 0, 0, 0]; SIZE * SIZE], dirty: true });
+        self.maps.maps.insert(id, MapData { world, corner, scale: 0, pixels: vec![[0, 0, 0, 0]; SIZE * SIZE], dirty: true });
         self.draw_map(id, None);
         let Some(mut item) = self.simple_item("minecraft:filled_map", 1) else { return false };
         durability::set_item_field(&mut item, "map_uuid", Some(Tag::Long(id)));
         durability::set_item_field(&mut item, "map_scale", Some(Tag::Int(0)));
         durability::set_item_field(&mut item, "map_is_init", Some(Tag::Byte(1)));
+        // the centre, so the map can be extended without the server's map store
+        durability::set_item_field(&mut item, "ceres_map_x", Some(Tag::Int(corner[0] + 64)));
+        durability::set_item_field(&mut item, "ceres_map_z", Some(Tag::Int(corner[1] + 64)));
         if gm != 1 {
             self.consume_held(sid, gm);
         }
@@ -390,9 +405,20 @@ impl Server {
     }
 
     /// MapInfoRequest: the client wants the image of a map.
+    /// Only for a map the player carries or sees in an item frame within 64 blocks (a map shows
+    /// where its carriers are).
     pub(crate) fn on_map_request(&mut self, sid: SessionId, id: i64) {
-        if !self.load_map(id) {
+        let Some(p) = self.players.get(&sid) else { return };
+        let (world, pos) = (p.world, p.pos);
+        if !carries_map(p, id) && !self.map_in_frame_near(world, pos, id) {
             return;
+        }
+        if !self.load_map(id) {
+            let Some(p) = self.players.get(&sid) else { return };
+            let (world, held) = (p.world, p.inventory.held_item().clone());
+            if !self.init_extended_map(id, world, &held) {
+                return;
+            }
         }
         for pk in [self.map_packet(id), self.map_marks_packet(id)].into_iter().flatten() {
             if let Some(p) = self.players.get_mut(&sid) {
@@ -420,7 +446,7 @@ impl Server {
             self.maps.maps.retain(|id, m| m.dirty || held.contains(id));
         }
         let filled = self.gd.find_item("minecraft:filled_map").map(|i| i.id);
-        let holders: Vec<(SessionId, usize, [i32; 2], i64)> = self
+        let holders: Vec<(SessionId, usize, [i32; 2], i64, ItemDesc)> = self
             .players
             .iter()
             .filter(|(_, p)| p.state == State::Spawned && !p.dead)
@@ -430,16 +456,18 @@ impl Server {
                     return None;
                 }
                 let Some(Tag::Long(id)) = durability::item_field(held, "map_uuid") else { return None };
-                Some((*s, p.world, [p.pos[0].floor() as i32, p.pos[2].floor() as i32], id))
+                Some((*s, p.world, [p.pos[0].floor() as i32, p.pos[2].floor() as i32], id, held.clone()))
             })
             .collect();
-        for (sid, world, at, id) in holders {
-            if !self.load_map(id) {
+        for (sid, world, at, id, held) in holders {
+            if !self.load_map(id) && !self.init_extended_map(id, world, &held) {
                 continue;
             }
             let Some(m) = self.maps.maps.get(&id) else { continue };
-            let inside = m.world == world && (0..SIZE as i32).contains(&(at[0] - m.corner[0])) && (0..SIZE as i32).contains(&(at[1] - m.corner[1]));
-            if inside && self.draw_map(id, Some((at, 32))) {
+            let span = (SIZE as i32) << m.scale;
+            let radius = (32 << m.scale).min(64);
+            let inside = m.world == world && (0..span).contains(&(at[0] - m.corner[0])) && (0..span).contains(&(at[1] - m.corner[1]));
+            if inside && self.draw_map(id, Some((at, radius))) {
                 if let Some(pk) = self.map_packet(id) {
                     if let Some(p) = self.players.get_mut(&sid) {
                         p.out.push(pk);
@@ -452,5 +480,62 @@ impl Server {
                 }
             }
         }
+    }
+}
+
+/// North-west corner of the vanilla map cell holding `at` at a scale: cells of 128 x 2^scale
+/// blocks, the scale 0 ones centred on multiples of 128.
+pub(crate) fn map_corner(at: [i32; 2], scale: u8) -> [i32; 2] {
+    let size = 128i32 << scale;
+    let c = |v: i32| (v + 64).div_euclid(size) * size - 64;
+    [c(at[0]), c(at[1])]
+}
+
+impl Server {
+    /// A map made by extending another (its item has `map_scale` and the old centre in
+    /// `ceres_map_x`/`ceres_map_z`): created and drawn the first time it is seen.
+    fn init_extended_map(&mut self, id: i64, world: usize, item: &ItemDesc) -> bool {
+        if durability::item_field(item, "map_uuid") != Some(Tag::Long(id)) {
+            return false;
+        }
+        let int = |k: &str| match durability::item_field(item, k) {
+            Some(Tag::Int(v)) => Some(v),
+            _ => None,
+        };
+        let (Some(scale), Some(x), Some(z)) = (int("map_scale"), int("ceres_map_x"), int("ceres_map_z")) else { return false };
+        let scale = scale.clamp(0, 4) as u8;
+        let corner = map_corner([x, z], scale);
+        self.maps.maps.insert(id, MapData { world, corner, scale, pixels: vec![[0, 0, 0, 0]; SIZE * SIZE], dirty: true });
+        self.draw_map(id, Some(([x, z], 64)));
+        true
+    }
+}
+
+const INVISIBILITY: u8 = 14;
+
+fn map_id_of(item: &ItemDesc) -> Option<i64> {
+    match durability::item_field(item, "map_uuid") {
+        Some(Tag::Long(id)) => Some(id),
+        _ => None,
+    }
+}
+
+/// The player has this map in their inventory (hand, offhand, cursor included).
+fn carries_map(p: &Player, id: i64) -> bool {
+    let inv = &p.inventory;
+    inv.main.iter().chain([&inv.offhand, &inv.cursor]).any(|it| !it.is_empty() && map_id_of(it) == Some(id))
+}
+
+impl Server {
+    fn map_in_frame_near(&self, world: usize, pos: [f32; 3], id: i64) -> bool {
+        let Some(w) = self.worlds.worlds.get(world) else { return false };
+        let in_frame = |t: &Tag| match t.get("Item").and_then(|i| i.get("tag")).and_then(|t| t.get("map_uuid")) {
+            Some(Tag::Long(v)) => *v == id,
+            _ => false,
+        };
+        w.find_block_entities(in_frame).iter().any(|b| {
+            let d = [b[0] as f32 + 0.5 - pos[0], b[1] as f32 + 0.5 - pos[1], b[2] as f32 + 0.5 - pos[2]];
+            d[0] * d[0] + d[1] * d[1] + d[2] * d[2] <= 64.0 * 64.0
+        })
     }
 }
