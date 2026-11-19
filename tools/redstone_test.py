@@ -3,7 +3,7 @@ a redstone block powers dust that lights a lamp at the end of the line, a button
 for a moment, and a redstone block next to TNT lights it."""
 import sys, os, struct
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bedrock_client import Client, update_blocks, block_id, uvarint, string
+from bedrock_client import Client, update_blocks, block_id, uvarint, svarint, string
 
 ok = True
 def check(cond, what):
@@ -164,7 +164,44 @@ put("redstone_block", R3)
 c.pump(0.4)
 check(any(p == 0x1a for p, _ in c.received[n:]), "a note block plays when powered (BlockEvent)")
 
-# 7. TNT next to a redstone block is lit
+# 7. a comparator reads a chest: empty gives nothing, a full stack lights the lamp in front
+CH, CMP, L7 = (BX + 1, G, BZ + 6), (BX + 2, G, BZ + 6), (BX + 3, G, BZ + 6)
+command(c, "/give @s stone 8")
+for x in (CH[0], CMP[0], L7[0]):
+    c.place_block((x, G - 1, BZ + 6), 1, STONE)
+    c.pump(0.05)
+for x in (CH[0], CMP[0], L7[0]):
+    c.break_block((x, G, BZ + 6))
+c.pump(0.4)
+put("redstone_lamp", L7)
+put("chest", CH)
+c.move(BX - 1.5, G + 1.62, BZ + 6.5, 0.0, -90.0)  # looking east
+c.pump(0.3)
+put("comparator", CMP, block="minecraft:unpowered_comparator")
+check(last(c, CMP) not in (None, AIR), "a comparator is placed")
+c.pump(0.6)
+check(last(c, L7) == LAMP, "an empty chest gives the comparator nothing")
+command(c, "/gamemode survival")
+give(c, "cobblestone 64")
+n = len(c.received)
+c.place_block(CH, 1, 0)
+c.pump(3.0, lambda: any(p == 0x2e for p, _ in c.received[n:]))
+# move the 64 cobblestone from hotbar slot 0 into the chest's first slot
+req = uvarint(0x93) + uvarint(1) + svarint(-900) + uvarint(1)
+req += uvarint(0) + bytes(1) + bytes([64]) + bytes([28, 0, 0]) + struct.pack("<i", 0) + bytes([7, 0, 0]) + struct.pack("<i", 0)
+req += uvarint(0) + struct.pack("<i", 0)
+c.send(req)
+c.pump(0.6)
+opens = [d for p, d in c.received[n:] if p == 0x2e]
+if opens:
+    c.send(uvarint(0x2f) + bytes([opens[-1][0], 0, 0]))
+c.pump(1.0)
+check(last(c, L7) == LIT, "a chest with items makes the comparator light the lamp")
+command(c, "/gamemode creative")
+c.move(BX + 5.5, G + 1.62, BZ - 2.5)
+c.pump(0.3)
+
+# 8. TNT next to a redstone block is lit
 T, R2 = (BX + 11, G, BZ), (BX + 12, G, BZ)
 put("tnt", T)
 n = len(c.received)

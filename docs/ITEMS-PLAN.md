@@ -173,5 +173,7 @@ Comida, poções, totem e garrafas já existiam.
 - [x] Trilho detector: com um carrinho em cima liga (`rail_data_bit`, 15 fraca e forte para o bloco de baixo) e solta 1 s depois que ele sai (sem teste de bot)
 - [x] Sensor de luz do dia: segue o sol a cada segundo (0 à noite, 15 perto do meio-dia, menos na chuva, só a céu aberto; o invertido ao contrário), usar troca entre os dois; o servidor passa a acompanhar os sensores que uma atualização de redstone encontra (sem teste de bot)
 - [x] Bloco de nota toca quando a energia chega (só na subida) (teste de bot: BlockEvent ao pôr um bloco de redstone ao lado)
-- [ ] Comparador, pistões, distribuidor/liberador, funil travado, alvo; queimar a tocha (muitas trocas seguidas)
+- [x] Comparador (como o `BlockRedstoneComparator` do PowerNukkitX): lê a energia de trás, ou o quanto está cheio o recipiente atrás (ou atrás do bloco de trás: 1 + 14 x enchimento médio dos espaços); compara com a maior entrada lateral (pó, bloco de redstone, repetidor/comparador apontando para ele) ou subtrai no modo subtração (usar troca, `output_subtract_bit`); muda 2 tiques depois; o sinal de cada comparador fica guardado e é conferido a cada 4 tiques (o conteúdo dos baús muda sem atualização de bloco) (teste de bot: baú vazio não liga, baú com itens acende a lâmpada)
+- [x] Funil travado: com energia (`toggle_bit`) não puxa nem empurra itens (sem teste de bot)
+- [ ] Pistões, distribuidor/liberador, alvo; queimar a tocha (muitas trocas seguidas)
 

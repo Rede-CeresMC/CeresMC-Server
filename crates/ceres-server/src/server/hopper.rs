@@ -22,7 +22,7 @@ fn facing_offset(facing: i64) -> [i32; 3] {
 
 impl Server {
     /// Items of the container at `pos` (furnaces: their live state) and its slot layout.
-    fn stored_items(&mut self, world: usize, pos: [i32; 3]) -> Option<(u8, &'static str, Vec<ItemDesc>)> {
+    pub(crate) fn stored_items(&mut self, world: usize, pos: [i32; 3]) -> Option<(u8, &'static str, Vec<ItemDesc>)> {
         let block = self.worlds.worlds[world].get_block(pos, &self.gd);
         let (ui, tile_id, _) = containers::container_kind(self.gd.block_name(block))?;
         if tile_id.is_empty() || tile_id == "BrewingStand" {
@@ -122,6 +122,10 @@ impl Server {
     fn tick_hopper(&mut self, world: usize, pos: [i32; 3]) {
         let block = self.worlds.worlds[world].get_block(pos, &self.gd);
         if self.gd.block_name(block) != "minecraft:hopper" {
+            return;
+        }
+        // locked by redstone
+        if self.gd.block_states.get(&block).and_then(|s| s.states.get("toggle_bit")).and_then(|t| t.as_i64()) == Some(1) {
             return;
         }
         let facing =

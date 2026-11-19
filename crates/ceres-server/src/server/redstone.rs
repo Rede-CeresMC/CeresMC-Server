@@ -53,10 +53,17 @@ pub(crate) struct Redstone {
     powered: HashSet<(usize, [i32; 3])>,
     /// daylight sensors seen (they are looked at every second)
     sensors: HashSet<(usize, [i32; 3])>,
+    /// comparators seen and the signal each gives out (looked at every 4 ticks: the
+    /// containers they read change without block updates)
+    comparators: HashMap<(usize, [i32; 3]), i32>,
 }
 
 fn short(name: &str) -> &str {
     name.strip_prefix("minecraft:").unwrap_or(name)
+}
+
+fn is_comparator(n: &str) -> bool {
+    matches!(short(n), "unpowered_comparator" | "powered_comparator")
 }
 
 fn is_repeater(n: &str) -> bool {
@@ -100,6 +107,7 @@ fn is_source(n: &str) -> bool {
         || is_plate(n)
         || is_button(n)
         || is_repeater(n)
+        || is_comparator(n)
 }
 
 /// Blocks that react to power.
@@ -112,6 +120,8 @@ fn is_consumer(n: &str) -> bool {
         || s.ends_with("fence_gate")
         || s == "fence_gate"
         || s == "noteblock"
+        || s == "hopper"
+        || is_comparator(n)
 }
 
 impl Server {
@@ -191,6 +201,15 @@ impl Server {
                 let f = facing_name(&self.rs_str(id, "minecraft:facing_direction"));
                 if side == f {
                     (15, 15)
+                } else {
+                    (0, 0)
+                }
+            }
+            n if is_comparator(n) => {
+                let f = cardinal(&self.rs_str(id, "minecraft:cardinal_direction"));
+                let out = self.redstone.comparators.get(&(world, pos)).copied().unwrap_or(0);
+                if side == f {
+                    (out, out)
                 } else {
                     (0, 0)
                 }
@@ -285,7 +304,7 @@ impl Server {
     /// Dust beside `n` (on its side `d`) joins it: dust, a source, a repeater along its axis.
     fn wire_joins(&mut self, world: usize, n: [i32; 3], d: usize) -> bool {
         let (id, name) = self.rs_block(world, n);
-        if is_repeater(&name) {
+        if is_repeater(&name) || is_comparator(&name) {
             let f = cardinal(&self.rs_str(id, "minecraft:cardinal_direction"));
             return f == d || f == (d ^ 1);
         }
@@ -535,6 +554,20 @@ impl Server {
                     self.schedule_redstone(world, pos, 4);
                 }
             }
+            "hopper" => {
+                let on = self.power_at(world, pos) > 0;
+                if on != (self.rs_int(id, "toggle_bit") != 0) {
+                    if let Some(new) = self.gd.with_states(id, &[("toggle_bit", Tag::Byte(on as i8))]) {
+                        self.rs_set(world, pos, new);
+                    }
+                }
+            }
+            n if is_comparator(n) => {
+                let have = *self.redstone.comparators.entry((world, pos)).or_insert(0);
+                if self.comparator_output(world, pos, id) != have {
+                    self.schedule_redstone(world, pos, 2);
+                }
+            }
             "noteblock" => {
                 let on = self.power_at(world, pos) > 0;
                 let was = self.redstone.powered.contains(&(world, pos));
@@ -716,11 +749,39 @@ impl Server {
         if now % 20 == 0 && !self.redstone.sensors.is_empty() {
             self.tick_sensors();
         }
+        if now % 4 == 2 && !self.redstone.comparators.is_empty() {
+            let list: Vec<(usize, [i32; 3])> = self.redstone.comparators.keys().copied().collect();
+            for (w, p) in list {
+                let (id, name) = self.rs_block(w, p);
+                if !is_comparator(&name) {
+                    self.redstone.comparators.remove(&(w, p));
+                    continue;
+                }
+                let have = self.redstone.comparators.get(&(w, p)).copied().unwrap_or(0);
+                if self.comparator_output(w, p, id) != have {
+                    self.schedule_redstone(w, p, 2);
+                }
+            }
+        }
     }
 
     fn scheduled_redstone(&mut self, world: usize, pos: [i32; 3]) {
         let (id, name) = self.rs_block(world, pos);
         let s = short(&name).to_string();
+        if is_comparator(&s) {
+            let out = self.comparator_output(world, pos, id);
+            let had = self.redstone.comparators.insert((world, pos), out).unwrap_or(-1);
+            let name = if out > 0 { "minecraft:powered_comparator" } else { "minecraft:unpowered_comparator" };
+            if let Some(n) = self.gd.with_name(id, name).and_then(|b| self.gd.with_states(b, &[("output_lit_bit", Tag::Byte((out > 0) as i8))])) {
+                if n != id {
+                    self.rs_set(world, pos, n);
+                }
+            }
+            if had != out {
+                self.redstone_update(world, pos);
+            }
+            return;
+        }
         let new = if s == "observer" {
             let on = self.rs_int(id, "powered_bit") == 0;
             if on {
@@ -920,6 +981,90 @@ impl Server {
             self.redstone.sensors.insert((world, pos));
             self.redstone_update(world, pos);
         }
+        self.swing_arm(sid);
+        true
+    }
+}
+
+impl Server {
+    /// How full a container is as a signal: 0 empty, 1 to 15 by how full its slots are
+    /// (each slot counts its items over its stack size).
+    fn container_signal(&mut self, world: usize, pos: [i32; 3]) -> Option<i32> {
+        let (_, _, items) = self.stored_items(world, pos)?;
+        if items.is_empty() {
+            return Some(0);
+        }
+        let mut full = 0.0f32;
+        let mut any = false;
+        for it in &items {
+            if it.is_empty() {
+                continue;
+            }
+            any = true;
+            full += it.count as f32 / self.gd.max_stack(it.id).max(1) as f32;
+        }
+        Some(if any { (1.0 + full / items.len() as f32 * 14.0).floor() as i32 } else { 0 })
+    }
+
+    /// A comparator's signal (PowerNukkitX's BlockRedstoneComparator): the power from behind, or
+    /// how full the container behind it (or behind the block behind it) is; compared with the
+    /// strongest side input, or that taken away in subtract mode.
+    fn comparator_output(&mut self, world: usize, pos: [i32; 3], id: i32) -> i32 {
+        let f = cardinal(&self.rs_str(id, "minecraft:cardinal_direction"));
+        let back = add(pos, f);
+        let mut input = match self.container_signal(world, back) {
+            Some(v) => v,
+            None => {
+                let mut v = self.power_from(world, pos, f);
+                let (bid, bname) = self.rs_block(world, back);
+                if bname == "minecraft:redstone_wire" {
+                    v = v.max(self.rs_int(bid, "redstone_signal") as i32);
+                }
+                if v < 15 && self.conductor(world, back) {
+                    if let Some(c) = self.container_signal(world, add(back, f)) {
+                        v = v.max(c);
+                    }
+                }
+                v
+            }
+        };
+        input = input.clamp(0, 15);
+        let mut side = 0;
+        for d in perpendicular(f) {
+            let n = add(pos, d);
+            let (nid, name) = self.rs_block(world, n);
+            let v = match short(&name) {
+                "redstone_wire" => self.rs_int(nid, "redstone_signal") as i32,
+                "redstone_block" => 15,
+                _ if is_repeater(&name) || is_comparator(&name) => self.emitted(world, n, d).0,
+                _ => 0,
+            };
+            side = side.max(v);
+        }
+        if self.rs_int(id, "output_subtract_bit") != 0 {
+            (input - side).max(0)
+        } else if input >= side {
+            input
+        } else {
+            0
+        }
+    }
+
+    /// Use on a comparator: compare and subtract modes swap.
+    pub(crate) fn use_comparator(&mut self, sid: SessionId, pos: [i32; 3]) -> bool {
+        let Some(world) = self.players.get(&sid).map(|p| p.world) else { return false };
+        let (id, name) = self.rs_block(world, pos);
+        if !is_comparator(&name) {
+            return false;
+        }
+        let sub = self.rs_int(id, "output_subtract_bit") == 0;
+        if let Some(new) = self.gd.with_states(id, &[("output_subtract_bit", Tag::Byte(sub as i8))]) {
+            self.rs_set(world, pos, new);
+            self.redstone.comparators.entry((world, pos)).or_insert(0);
+            self.schedule_redstone(world, pos, 2);
+        }
+        let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
+        self.broadcast(&protocol::level_event(level_event::SOUND_CLICK, center, 0), |_, q| q.world == world);
         self.swing_arm(sid);
         true
     }
