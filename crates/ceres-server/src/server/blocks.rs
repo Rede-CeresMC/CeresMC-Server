@@ -683,6 +683,7 @@ impl Server {
             }
             use_item_action::CLICK_BLOCK => self.place_block(sid, u),
             use_item_action::CLICK_AIR => self.on_click_air(sid),
+            3 => self.spear_stab(sid), // use as attack
             _ => {}
         }
     }

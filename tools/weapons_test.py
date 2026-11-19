@@ -178,6 +178,40 @@ archer.place_block((int(X), 70, int(Z) + 1), 1, 0)
 pump_both(0.8)
 check(any(p == 0x38 and b"minecraft:diamond" in d for p, d in archer.received[n2:]), "an item frame takes the held item")
 
+# spear stab (UseItem "use as attack"): misses when walking, hits a pig in front when sprinting
+def use_as_attack(c):
+    item = struct.pack("<hH", 0, 0) + uvarint(0) + bytes(1) + uvarint(0) + uvarint(0)
+    data = svarint(3) + bytes([1]) + svarint(0) * 3 + bytes([255]) + svarint(0) + bytes(1) + item
+    data += struct.pack("<fff", *c.pos) + struct.pack("<fff", 0, 0, 0) + uvarint(0) + bytes([1, 0])
+    c.send(uvarint(0x1e) + svarint(0) + bytes(1) + uvarint(2) + uvarint(0) + data)
+
+def input_flag(c, flag):
+    x, y, z = c.pos
+    body = struct.pack("<ff", 0, 0) + struct.pack("<fff", x, y, z) + struct.pack("<fff", 0, 0, 0)
+    body += uvarint(1) + svarint(flag) + uvarint(1) + uvarint(0) + svarint(0) + struct.pack("<ff", 0, 0)
+    body += uvarint(1) + struct.pack("<fff", 0, 0, 0)
+    body += bytes(3)
+    body += bytes(2) + struct.pack("<ff", 0, 0) + struct.pack("<fff", 0, 0, 0) + struct.pack("<ff", 0, 0)
+    c.send(uvarint(0x90) + body)
+
+command(archer, "/clear")
+give(archer, "wooden_spear 1")
+command(archer, f"/summon pig {X} 70 {Z + 3} spawn_adult")
+pump_both(1.0)
+n2 = len(archer.received)
+use_as_attack(archer)
+pump_both(1.0)
+walk_hits = [d for p, d in archer.received[n2:] if p == 0x1b]
+input_flag(archer, 25)  # START_SPRINTING
+pump_both(0.5)
+n2 = len(archer.received)
+use_as_attack(archer)
+pump_both(1.0)
+sprint_hits = [d for p, d in archer.received[n2:] if p == 0x1b]
+check(not walk_hits and sprint_hits, f"a spear stab misses walking and hits a mob in front when sprinting ({len(walk_hits)}, {len(sprint_hits)})")
+input_flag(archer, 26)  # STOP_SPRINTING
+command(archer, "/kill @e[type=pig]")
+
 # map: an empty map used in the air becomes a filled map and its image is sent (0x43);
 # a MapInfoRequest (0x44) for its id gets the image again
 command(archer, "/clear")

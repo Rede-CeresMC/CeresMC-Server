@@ -23,7 +23,7 @@ Testes de bot: `tools/weapons_test.py`, `tools/projectiles_test.py`, `tools/mobs
 - [x] Canalização: tridente que acerta algo a céu aberto numa tempestade chama um raio
 - [x] Apelidos de identificador que os arquivos do pack ainda usam (`pig_zombie`, `evoker`...)
 - [x] Carga da lança (lógica do PowerNukkitX `ItemSpear.whileUsing`, LGPL-3.0): segurando o uso e movendo-se a 0,13 bloco/tick ou mais, a cada 5 ticks acerta o mais próximo à frente com 1,5x o dano + 3 por bloco de velocidade (sem teste de bot)
-- [ ] Golpe com Estocada (Lunge, encantamento 41: impulso para a frente gastando fome)
+- [x] Estocada da lança (UseItem 3 "usar como ataque", lógica do PowerNukkitX `ItemSpear.onSpearStab`): recarga de 1 s; Lunge (41) empurra o jogador para a frente 0,5 + 0,4/nível gastando 4 de exaustão por nível (não na água nem com fome < 6 no sobrevivência, som `item.enchant.lungeN`); correndo ou montado, acerta o melhor alvo a até 5 blocos num cone estreito com o dano da lança + 1,5 por nível de Lunge; parado, som de erro (teste de bot)
 
 ## Comparação com o PowerNukkitX
 

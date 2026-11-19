@@ -422,3 +422,104 @@ impl Server {
 fn weapons_smash_damage(fall: f32) -> f32 {
     7.0 + mace_bonus(fall, 0)
 }
+
+/// Lunge enchantment id (minecraft:lunge).
+const LUNGE: i16 = 41;
+
+impl Server {
+    /// A spear stab (UseItem "use as attack", logic of PowerNukkitX's ItemSpear.onSpearStab,
+    /// LGPL-3.0): the Lunge enchantment first pushes the player forward (0.5 + 0.4 per level,
+    /// costing 4 exhaustion per level; not in water, and not under 6 hunger in survival); then,
+    /// sprinting or riding, the spear hits the best target within 5 blocks in a narrow cone in
+    /// front for its damage + 1.5 per Lunge level.
+    pub(crate) fn spear_stab(&mut self, sid: SessionId) {
+        let Some(p) = self.players.get(&sid) else { return };
+        if p.dead || p.gamemode == 6 {
+            return;
+        }
+        let held = p.inventory.held_item().clone();
+        let Some(name) = self.gd.items_by_id.get(&held.id).map(|i| i.name.clone()) else { return };
+        if !name.ends_with("_spear") {
+            return;
+        }
+        let (pos, rot, world, gm, hunger, eid) = (p.pos, p.rot, p.world, p.gamemode, p.hunger, p.entity_id);
+        let moving = p.actor_state.sprinting || p.riding.is_some();
+        let riding = p.riding;
+        if self.on_cooldown(sid, &name) {
+            return;
+        }
+        self.start_cooldown(sid, &name, "spear", 20);
+        let level = super::blocks::enchant_level(&held, LUNGE) as f32;
+        let feet = [pos[0].floor() as i32, (pos[1] - EYE_HEIGHT).floor() as i32, pos[2].floor() as i32];
+        let wet = self.liquid_at(world, feet).is_some() || self.liquid_at(world, [feet[0], feet[1] + 1, feet[2]]).is_some();
+        let yaw = rot[1].to_radians();
+        if level > 0.0 && !wet && !((gm == 0 || gm == 2) && hunger < 6.0) {
+            let k = 0.5 + level * 0.4;
+            let push = [-yaw.sin() * k, 0.0, yaw.cos() * k];
+            if let Some(p) = self.players.get_mut(&sid) {
+                p.out.push(protocol::set_actor_motion(eid, push));
+            }
+            self.exhaust(sid, 4.0 * level);
+            let snd = format!("item.enchant.lunge{}", (level as u32).clamp(1, 3));
+            self.broadcast(&protocol::level_sound_event(&snd, pos, -1), |_, q| q.world == world);
+        }
+        let short = name.trim_start_matches("minecraft:");
+        if !moving {
+            self.broadcast(&protocol::level_sound_event(&format!("item.{short}.attack_miss"), pos, -1), |_, q| q.world == world);
+            return;
+        }
+        let pitch = rot[0].to_radians();
+        let dir = [-yaw.sin() * pitch.cos(), -pitch.sin(), yaw.cos() * pitch.cos()];
+        let min_dot = if riding.is_some() { 0.75 } else { 0.866 };
+        let mut best: Option<(mobs::Ent, f32, [f32; 3])> = None;
+        for e in self.entities_near(world, pos, 6.0, None) {
+            if e == mobs::Ent::Player(sid) || riding.is_some_and(|v| e == mobs::Ent::Mob(v)) {
+                continue;
+            }
+            let Some(s) = self.subj(e) else { continue };
+            let f = s.feet();
+            let h = match e {
+                mobs::Ent::Player(_) => 1.8,
+                mobs::Ent::Mob(m) => self.mobs.iter().find(|x| x.entity_id == m).map_or(1.0, |x| x.t.height),
+            };
+            let t = [f[0], f[1] + h * 0.5, f[2]];
+            let d = [t[0] - pos[0], t[1] - pos[1], t[2] - pos[2]];
+            let dist = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+            if dist > 5.0 || dist < 1e-3 {
+                continue;
+            }
+            let dot = (d[0] * dir[0] + d[1] * dir[1] + d[2] * dir[2]) / dist;
+            if dot < min_dot {
+                continue;
+            }
+            let score = dot - dist / 5.0 * 0.1;
+            if best.as_ref().is_none_or(|b| score > b.1) {
+                best = Some((e, score, f));
+            }
+        }
+        let Some((target, _, _)) = best else {
+            self.broadcast(&protocol::level_sound_event(&format!("item.{short}.attack_miss"), pos, -1), |_, q| q.world == world);
+            return;
+        };
+        let dmg = combat::item_damage_of(&name) + level * 1.5;
+        let kb = [dir[0] * 0.4, 0.3, dir[2] * 0.4];
+        let attacker_feet = [pos[0], pos[1] - EYE_HEIGHT, pos[2]];
+        match target {
+            mobs::Ent::Player(o) => {
+                if !self.cfg.pvp {
+                    return;
+                }
+                let victim = self.players.get(&o).map(|p| p.name.clone()).unwrap_or_default();
+                let attacker = self.players.get(&sid).map(|p| p.name.clone()).unwrap_or_default();
+                self.damage_player(o, dmg, &format!("§c{victim} foi atravessado por {attacker}"), false, Some(kb));
+            }
+            mobs::Ent::Mob(m) => {
+                self.with_mob(m, |s, mob| s.hurt(mob, dmg, "entity_attack", Some(mobs::Ent::Player(sid)), Some(attacker_feet)));
+            }
+        }
+        if gm != 1 {
+            self.wear_held(sid, 1);
+        }
+        self.broadcast(&protocol::level_sound_event(&format!("item.{short}.attack_hit"), pos, -1), |_, q| q.world == world);
+    }
+}
