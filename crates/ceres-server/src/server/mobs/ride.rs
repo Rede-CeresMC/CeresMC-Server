@@ -219,7 +219,7 @@ impl Server {
         true
     }
 
-    fn snap_leash(&mut self, m: &mut Mob) {
+    pub(crate) fn snap_leash(&mut self, m: &mut Mob) {
         m.leash = None;
         if m.knot.take().is_some() {
             self.prune_knots();

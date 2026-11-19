@@ -211,6 +211,10 @@ impl Server {
             let peid = self.players.get(&r).map(|p| p.entity_id).unwrap_or(0);
             self.broadcast(&protocol::set_actor_link(m.entity_id, peid, 0, true, false), |_, q| q.world == m.world);
         }
+        // a mob on a lead drops it
+        if m.leash.is_some() || m.knot.is_some() {
+            self.snap_leash(m);
+        }
         dbg(|| format!("{} {} died ({cause}, by {attacker:?})", m.def.id, m.entity_id));
         m.health = 0.0;
         m.death_ticks = Some(if m.t.dragon { 200 } else { 20 });

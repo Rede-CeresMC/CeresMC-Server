@@ -28,6 +28,24 @@ pub struct Recipe {
     pub block: String,
     /// needs the 3x3 grid of a crafting table
     pub big: bool,
+    /// a "multi" recipe (book copying, map copying...): the server works out the result from
+    /// the grid; this is its UUID
+    pub multi: Option<String>,
+}
+
+/// A UUID as the protocol writes it: each 8-byte half little-endian.
+fn uuid_bytes(s: &str) -> Option<[u8; 16]> {
+    let hex: String = s.chars().filter(|c| *c != '-').collect();
+    if hex.len() != 32 {
+        return None;
+    }
+    let mut b = [0u8; 16];
+    for i in 0..16 {
+        b[i] = u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).ok()?;
+    }
+    b[..8].reverse();
+    b[8..].reverse();
+    Some(b)
 }
 
 fn ingredient_of(v: &serde_json::Value) -> Option<(Ingredient, u16)> {
@@ -156,12 +174,21 @@ pub(crate) fn load_recipes(dir: &Path, items: &HashMap<String, ItemInfo>) -> Res
     let mut recipes = HashMap::new();
     let mut net_id = 0i32;
     let mut smelting: Smelting = HashMap::new();
+    let mut multi = W::with_capacity(1024);
+    let mut multi_n = 0u32;
+    let mut multi_uuids: Vec<String> = Vec::new();
 
     for r in data["recipes"].as_array().ok_or("recipes.json: no recipes")? {
         let ty = r["type"].as_i64().unwrap_or(-1);
         let block = r["block"].as_str().unwrap_or("");
         let name = r["id"].as_str().unwrap_or("");
         let priority = r["priority"].as_i64().unwrap_or(0) as i32;
+        if ty == 2 {
+            if let Some(u) = r["uuid"].as_str() {
+                multi_uuids.push(u.to_string());
+            }
+            continue;
+        }
         if block == "deprecated" || !(ty == 0 || ty == 1 || ty == 3) {
             continue; // multi, smithing and deprecated recipes are not supported yet
         }
@@ -224,6 +251,7 @@ pub(crate) fn load_recipes(dir: &Path, items: &HashMap<String, ItemInfo>) -> Res
                     output: first,
                     block: block.to_string(),
                     big: width > 2 || height > 2,
+                    multi: None,
                 },
             );
         } else {
@@ -254,8 +282,17 @@ pub(crate) fn load_recipes(dir: &Path, items: &HashMap<String, ItemInfo>) -> Res
             shapeless.varint(net_id);
             shapeless_n += 1;
             let big = inputs.iter().map(|(_, c)| *c as usize).sum::<usize>() > 4;
-            recipes.insert(net_id, Recipe { inputs, output: first, block: block.to_string(), big });
+            recipes.insert(net_id, Recipe { inputs, output: first, block: block.to_string(), big, multi: None });
         }
+    }
+    // multi recipes get network ids after the others
+    for u in multi_uuids {
+        let Some(b) = uuid_bytes(&u) else { continue };
+        net_id += 1;
+        multi.bytes(&b);
+        multi.uvarint(net_id as u32);
+        multi_n += 1;
+        recipes.insert(net_id, Recipe { inputs: Vec::new(), output: ItemDesc::default(), block: "crafting_table".into(), big: false, multi: Some(u) });
     }
 
     let id_of = |name: &str| items.get(name).map(|i| i.id as i32);
@@ -264,8 +301,10 @@ pub(crate) fn load_recipes(dir: &Path, items: &HashMap<String, ItemInfo>) -> Res
         w.bytes(&shaped.0);
         w.uvarint(shapeless_n);
         w.bytes(&shapeless.0);
-        for _ in 0..6 {
-            w.uvarint(0); // multi, user data shapeless, chemistry x2, smithing transform, smithing trim
+        w.uvarint(multi_n);
+        w.bytes(&multi.0);
+        for _ in 0..5 {
+            w.uvarint(0); // user data shapeless, chemistry x2, smithing transform, smithing trim
         }
         let potions: Vec<[i32; 6]> = data["potionMixes"]
             .as_array()

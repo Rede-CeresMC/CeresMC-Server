@@ -98,7 +98,11 @@ def recipe_ids(c):
                 p = skip_output(d, p)
             net, p = skip_tail(d, p, shaped)
             out[name] = net
-    for _ in range(6):  # multi, user data, chemistry x2, smithing x2
+    n, p = read_uvarint(d, p)  # multi recipes: UUID and network id
+    for _ in range(n):
+        p += 16
+        _, p = read_uvarint(d, p)
+    for _ in range(5):  # user data, chemistry x2, smithing x2
         n, p = read_uvarint(d, p)
         if n:
             raise ValueError("unexpected recipes in an empty bucket")

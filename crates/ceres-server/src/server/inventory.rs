@@ -180,6 +180,38 @@ fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
     }
 }
 
+/// The result of a "multi" recipe from what lies in the crafting grid, and the items (id, count)
+/// it uses up. Supported: copying a written book (one written book plus book and quills: as many
+/// copies, one generation further; copies of copies of copies cannot be made; the original stays).
+fn multi_result(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(ItemDesc, (i16, u16))> {
+    const BOOK_CLONING: &str = "d1ca6b84-338e-4f2f-9c6b-76cc8b4bd98d";
+    let name = |it: &ItemDesc| gd.items_by_id.get(&it.id).map(|i| i.name.as_str()).unwrap_or("");
+    let items: Vec<&ItemDesc> = grid.iter().filter(|i| !i.is_empty()).collect();
+    match uuid {
+        BOOK_CLONING => {
+            let written: Vec<&&ItemDesc> = items.iter().filter(|i| name(i) == "minecraft:written_book").collect();
+            let blanks: Vec<&&ItemDesc> = items.iter().filter(|i| name(i) == "minecraft:writable_book").collect();
+            if written.len() != 1 || blanks.is_empty() || written.len() + blanks.len() != items.len() {
+                return None;
+            }
+            let generation = match super::durability::item_field(written[0], "generation") {
+                Some(Tag::Int(g)) => g,
+                _ => 0,
+            };
+            if generation >= 2 {
+                return None;
+            }
+            let n: u16 = blanks.iter().map(|b| b.count).sum::<u16>().min(16);
+            let mut out = (*written[0]).clone();
+            super::durability::set_item_field(&mut out, "generation", Some(Tag::Int(generation + 1)));
+            out.count = n;
+            out.stack_id = 0;
+            Some((out, (blanks[0].id, n)))
+        }
+        _ => None,
+    }
+}
+
 /// The used-up items must be exactly the recipe's ingredients, `reps` times.
 /// Exact item ingredients are matched before wildcard and tag ones, so a specific ingredient is not
 /// taken by a looser one.
@@ -437,6 +469,8 @@ impl Inventory {
         let mut dropped: Vec<ItemDesc> = Vec::new();
         // crafting: the recipe of this request and the ingredients the client says it used up
         let mut recipe: Option<(&ceres_world::Recipe, u16)> = None;
+        // a multi recipe: the items (id, count) it must use up
+        let mut multi_use: Option<(i16, u16)> = None;
         let mut consumed: Vec<ItemDesc> = Vec::new();
         // where each consumed item came from
         let mut consumed_from: Vec<Loc> = Vec::new();
@@ -530,6 +564,13 @@ impl Inventory {
                     };
                     if recipe.is_some() || reps == 0 || !allowed {
                         return None;
+                    }
+                    if let Some(u) = &r.multi {
+                        let (out, used) = multi_result(u, &self.craft_grid, gd)?;
+                        multi_use = Some(used);
+                        self.crafted = Some(out);
+                        recipe = Some((r, 1));
+                        continue;
                     }
                     let mut out = r.output.clone();
                     out.count = out.count.checked_mul(reps as u16)?;
@@ -768,6 +809,10 @@ impl Inventory {
         let craft_ok = match (recipe, enchant_choice) {
             // a recipe and an enchantment in one request: refused
             (Some(_), Some(_)) => false,
+            (Some(_), None) if multi_use.is_some() => {
+                let (id, n) = multi_use.unwrap_or_default();
+                consumed.iter().all(|c| c.id == id) && consumed.iter().map(|c| c.count).sum::<u16>() == n
+            }
             (Some((r, reps)), None) => ingredients_match(r, reps, consumed, gd),
             // enchanting: exactly the item, plus 1-3 lapis (none needed in creative)
             (None, Some(i)) => {

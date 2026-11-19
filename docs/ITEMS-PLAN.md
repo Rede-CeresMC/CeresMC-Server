@@ -97,7 +97,9 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Suporte de armadura: o item coloca a entidade do pack virada para o jogador (passos de 45°); usar com item veste (o que estava volta), mão vazia tira o item da mão ou a peça mais alta; quebrar solta o suporte (loot table do pack) e tudo o que vestia
 - [x] Poses do suporte de armadura: agachar e usar passa para a próxima das 13 poses (metadata PoseIndex 79), salva com o mob
 - [x] Metadata conferida no gophertunnel (`entity_metadata.go`): todas as chaves usadas batem; agora também SkinID (104, aparência dos aldeões) e ColorTwoIndex (82, segunda cor do peixe tropical)
-- [ ] Copiar livro escrito (receita), mapas em molduras
+- [x] Copiar livro escrito: receitas "multi" (tipo 2 do recipes.json, UUID + id de rede) agora vão no CraftingData; o servidor calcula o resultado pela grade. Livro escrito + livros e penas = cópias com geração +1 (original fica; cópia de cópia não copia). Validado só por bots no CraftingData; falta conferir com o cliente real se ele consome só os livros e penas
+- [ ] Outras receitas multi (clonar/ampliar mapa, estandarte no escudo, reparo por combinação, vaso decorado), mapas em molduras
+- [x] Mob guiado ou amarrado solta o laço ao morrer
 
 ## Lote 4: consumíveis
 
