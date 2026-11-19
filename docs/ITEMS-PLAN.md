@@ -160,3 +160,13 @@ Comida, poções, totem e garrafas já existiam.
 - [x] Ensopado suspeito: efeito da flor pelo valor auxiliar (visão noturna, salto, fraqueza, cegueira, veneno, saturação, resistência ao fogo, regeneração, wither, náusea)
 - [x] Recargas de item (pacote PlayerStartItemCooldown, 176; categorias tiradas de `item_components.nbt` e do PocketMine): pérola do fim 1 s, fruta do coro 1 s (`chorusfruit`), chifre de cabra 7 s, carga de vento 0,5 s, escudo desativado por machado 5 s. O servidor também impede o uso durante a recarga
 - [x] Recarga de ataque das lanças (componente `minecraft:cooldown`, categoria `spear`: madeira 0,65 s, pedra 0,75, cobre 0,85, ferro/ouro 0,95, diamante 1,05, netherite 1,15); golpes durante a recarga são ignorados
+
+## Lote 5: redstone
+
+- [x] Modelo de energia (do `Level.getRedstonePower`/`getStrongPower` do PowerNukkitX): fontes dão energia fraca a todos os vizinhos e forte numa direção (alavanca e botão ao bloco onde estão, tocha de redstone acesa ao bloco de cima e nunca ao seu, placa de pressão ao bloco de baixo; bloco de redstone só fraca); bloco cheio repassa a energia forte que recebe
+- [x] Pó de redstone (lógica do `BlockRedstoneWire`): a rede inteira é recalculada de uma vez (energia de fora menos 1 por bloco), sobe pela lateral de um bloco e desce quando não há nada no caminho; liga o bloco de baixo e o bloco para onde aponta; formas `side`/`up`/`none` (`redstone_north`...) como o cliente desenha; o item `redstone` (que não tem bloco com o mesmo nome) coloca o pó, e também repetidor, comparador e linha (bloco de nome diferente)
+- [x] Fontes: alavanca (já alternava), botão (fica apertado 1 s, ou 1,5 s se for de madeira), placas de pressão (madeira e pedra 15; leve: uma por entidade; pesada: uma a cada 10; soltam 1 s depois de vazias), bloco de redstone, tocha de redstone (apaga 2 tiques depois que o bloco onde está recebe energia)
+- [x] O que reage: lâmpada (acende na hora, apaga 4 tiques depois), portas (as duas metades), alçapões e portões abrem quando a energia chega e fecham quando ela some (só na mudança: uma porta aberta à mão continua aberta), trilho de ouro e trilho ativador (até 8 trilhos do que recebe energia), TNT acende (vira a entidade `minecraft:tnt` do pacote, 4 s de pavio); isqueiro e carga de fogo também acendem TNT
+- [x] Teste de bot (`redstone_test.py`): alavanca acende e apaga lâmpada, bloco de redstone + pó acende lâmpada no fim da linha e apaga ao tirar o bloco, botão acende e solta, bloco de redstone acende TNT
+- [ ] Repetidor, comparador, observador, pistões, distribuidor/liberador, funil travado, sensor de luz, trilho detector, alvo, bloco de nota com redstone; queimar a tocha (muitas trocas seguidas)
+

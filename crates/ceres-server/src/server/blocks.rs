@@ -96,6 +96,7 @@ impl Server {
         self.queue_gravity(world, pos);
         self.queue_liquid(world, pos);
         self.update_connections(world, pos);
+        self.redstone_update(world, pos);
         true
     }
 
@@ -301,6 +302,12 @@ impl Server {
             }
             return;
         }
+        if !sneaking && self.use_button(sid, clicked) {
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
         if !sneaking {
             // iron doors and trapdoors only open with redstone
             let iron = self.gd.block_name(clicked_id).starts_with("minecraft:iron_");
@@ -400,6 +407,10 @@ impl Server {
                     if b == 0 {
                         b = self.gd.default_block(&info.name).unwrap_or(0);
                     }
+                    // items placed as a block of another name (redstone dust...)
+                    if b == 0 {
+                        b = item_block_alias(&info.name).and_then(|n| self.gd.default_block(n)).unwrap_or(0);
+                    }
                 }
             }
             (b, None)
@@ -425,6 +436,10 @@ impl Server {
                     // items placed as the block of the same name (beds, doors...)
                     if b == 0 {
                         b = self.gd.default_block(&info.name).unwrap_or(0);
+                    }
+                    // items placed as a block of another name (redstone dust...)
+                    if b == 0 {
+                        b = item_block_alias(&info.name).and_then(|n| self.gd.default_block(n)).unwrap_or(0);
                     }
                 }
             }
@@ -811,6 +826,17 @@ pub(crate) fn enchant_level(item: &ItemDesc, id: i16) -> u8 {
         .and_then(|e| e.get("lvl").and_then(|v| v.as_i64()))
         .unwrap_or(0)
         .clamp(0, 255) as u8
+}
+
+/// The block an item places when it has no block of its own name.
+fn item_block_alias(item: &str) -> Option<&'static str> {
+    Some(match item {
+        "minecraft:redstone" => "minecraft:redstone_wire",
+        "minecraft:repeater" => "minecraft:unpowered_repeater",
+        "minecraft:comparator" => "minecraft:unpowered_comparator",
+        "minecraft:string" => "minecraft:tripwire",
+        _ => return None,
+    })
 }
 
 /// Blocks that hold water in Bedrock when placed in it (not full cubes).

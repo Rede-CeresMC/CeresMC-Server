@@ -62,6 +62,15 @@ impl Server {
             }
             return true;
         }
+        // lighting TNT
+        if lighter && name == "minecraft:tnt" {
+            self.prime_tnt(world, clicked);
+            self.swing_arm(sid);
+            if gm != 1 {
+                if item == "minecraft:fire_charge" { self.consume_held(sid, gm) } else { self.wear_held(sid, 1) }
+            }
+            return true;
+        }
         // lighting
         if lighter && (candle || name.ends_with("candle_cake")) && state(&self.gd, block, "lit") == Some(0) {
             self.set_block_state(world, clicked, block, "lit", 1);

@@ -1,0 +1,687 @@
+//! Redstone (power model of PowerNukkitX's `Level.getRedstonePower`/`getStrongPower` and its
+//! `BlockRedstoneWire`, LGPL-3.0):
+//! - sources give weak power to every neighbour and strong power one way: a lever or button to
+//!   the block it is on, a lit redstone torch to the block above (never to its own block), a
+//!   pressure plate to the block below; the redstone block only weak power;
+//! - a full block passes on the strong power it gets (it is "strongly powered");
+//! - dust carries the strongest power around it minus one per block (a network is worked out at
+//!   once), powers the block below it and the one it points into, and takes the `side`/`up`
+//!   connection shapes the client draws;
+//! - what reacts: lamps (off after 4 ticks), doors/trapdoors/fence gates follow the power,
+//!   powered and activator rails (up to 8 rails from the powered one), TNT lights, a redstone
+//!   torch goes out while its block is powered (after 2 ticks).
+//!
+//! Every block change near redstone runs an update; buttons spring back after 1 or 1.5 s and
+//! pressure plates follow who stands on them.
+
+use super::*;
+use ceres_codec::nbt::Tag;
+use ceres_protocol::level_event;
+use std::collections::{HashMap, HashSet, VecDeque};
+
+/// down, up, north, south, west, east
+const DIRS: [[i32; 3]; 6] = [[0, -1, 0], [0, 1, 0], [0, 0, -1], [0, 0, 1], [-1, 0, 0], [1, 0, 0]];
+const DOWN: usize = 0;
+const UP: usize = 1;
+/// horizontal faces with their state suffix
+const HORIZ: [(usize, &str); 4] = [(2, "north"), (3, "south"), (4, "west"), (5, "east")];
+
+fn add(p: [i32; 3], d: usize) -> [i32; 3] {
+    [p[0] + DIRS[d][0], p[1] + DIRS[d][1], p[2] + DIRS[d][2]]
+}
+
+/// The two horizontal faces at right angles to `d`.
+fn perpendicular(d: usize) -> [usize; 2] {
+    if d == 2 || d == 3 {
+        [4, 5]
+    } else {
+        [2, 3]
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct Redstone {
+    busy: bool,
+    pending: VecDeque<(usize, [i32; 3])>,
+    /// (tick, world, pos): look at the block again then (buttons, lamps, torches)
+    scheduled: Vec<(u64, usize, [i32; 3])>,
+    /// while a dust network is worked out its wires give no power
+    wires_off: bool,
+    /// pressed pressure plates and the last tick something stood on them
+    plates: HashMap<(usize, [i32; 3]), u64>,
+    /// doors, trapdoors and fence gates that were powered at their last look
+    powered: HashSet<(usize, [i32; 3])>,
+}
+
+fn short(name: &str) -> &str {
+    name.strip_prefix("minecraft:").unwrap_or(name)
+}
+
+fn is_plate(n: &str) -> bool {
+    n.ends_with("_pressure_plate")
+}
+
+fn is_button(n: &str) -> bool {
+    n.ends_with("_button")
+}
+
+/// Blocks that give power (dust connects to them).
+fn is_source(n: &str) -> bool {
+    matches!(short(n), "lever" | "redstone_torch" | "redstone_block" | "redstone_wire") || is_plate(n) || is_button(n)
+}
+
+/// Blocks that react to power.
+fn is_consumer(n: &str) -> bool {
+    let s = short(n);
+    matches!(s, "redstone_lamp" | "lit_redstone_lamp" | "tnt" | "golden_rail" | "activator_rail" | "redstone_torch" | "unlit_redstone_torch")
+        || s.ends_with("_door")
+        || s.ends_with("trapdoor")
+        || s.ends_with("fence_gate")
+        || s == "fence_gate"
+}
+
+impl Server {
+    fn rs_block(&mut self, world: usize, pos: [i32; 3]) -> (i32, String) {
+        if pos[1] < ceres_world::MIN_Y || pos[1] > ceres_world::MAX_Y || !self.worlds.worlds[world].is_loaded(pos) {
+            return (self.gd.air_id, "minecraft:air".into());
+        }
+        let id = self.worlds.worlds[world].get_block(pos, &self.gd);
+        (id, self.gd.block_name(id).to_string())
+    }
+
+    fn rs_state(&self, id: i32, key: &str) -> Option<Tag> {
+        self.gd.block_states.get(&id).and_then(|s| s.states.get(key)).cloned()
+    }
+
+    fn rs_int(&self, id: i32, key: &str) -> i64 {
+        self.rs_state(id, key).and_then(|t| t.as_i64()).unwrap_or(0)
+    }
+
+    fn rs_str(&self, id: i32, key: &str) -> String {
+        self.rs_state(id, key).and_then(|t| t.as_str().map(String::from)).unwrap_or_default()
+    }
+
+    /// A full block that passes power on (not a source itself).
+    fn conductor(&mut self, world: usize, pos: [i32; 3]) -> bool {
+        let (id, name) = self.rs_block(world, pos);
+        !is_source(&name) && self.gd.is_opaque_cube(id)
+    }
+
+    fn is_wire(&mut self, world: usize, pos: [i32; 3]) -> bool {
+        self.rs_block(world, pos).1 == "minecraft:redstone_wire"
+    }
+
+    /// Power the block at `pos` gives to the neighbour on its `side`, where `side` is the
+    /// direction from that neighbour to `pos`: (weak, strong).
+    fn emitted(&mut self, world: usize, pos: [i32; 3], side: usize) -> (i32, i32) {
+        let (id, name) = self.rs_block(world, pos);
+        match short(&name) {
+            "lever" => {
+                if self.rs_int(id, "open_bit") == 0 {
+                    return (0, 0);
+                }
+                let facing = match self.rs_str(id, "lever_direction").as_str() {
+                    "east" => 5,
+                    "west" => 4,
+                    "south" => 3,
+                    "north" => 2,
+                    s if s.starts_with("up") => UP,
+                    _ => DOWN,
+                };
+                (15, if side == facing { 15 } else { 0 })
+            }
+            n if is_button(n) => {
+                if self.rs_int(id, "button_pressed_bit") == 0 {
+                    return (0, 0);
+                }
+                let facing = self.rs_int(id, "facing_direction") as usize;
+                (15, if side == facing { 15 } else { 0 })
+            }
+            "redstone_torch" => {
+                // the flame points away from the block the torch is on
+                let flame = match self.rs_str(id, "torch_facing_direction").as_str() {
+                    "west" => 5,
+                    "east" => 4,
+                    "north" => 3,
+                    "south" => 2,
+                    _ => UP,
+                };
+                (if side != flame { 15 } else { 0 }, if side == DOWN { 15 } else { 0 })
+            }
+            "redstone_block" => (15, 0),
+            n if is_plate(n) => {
+                let s = self.rs_int(id, "redstone_signal") as i32;
+                (s, if side == UP { s } else { 0 })
+            }
+            "redstone_wire" => {
+                if self.redstone.wires_off {
+                    return (0, 0);
+                }
+                let s = self.rs_int(id, "redstone_signal") as i32;
+                let w = if s == 0 || side == DOWN {
+                    0
+                } else if side == UP {
+                    s
+                } else {
+                    let points: Vec<usize> = HORIZ.iter().map(|(d, _)| *d).filter(|d| self.wire_points(world, pos, *d)).collect();
+                    let [a, b] = perpendicular(side);
+                    if points.is_empty() || (points.contains(&side) && !points.contains(&a) && !points.contains(&b)) {
+                        s
+                    } else {
+                        0
+                    }
+                };
+                (w, w)
+            }
+            _ => (0, 0),
+        }
+    }
+
+    /// Strong power a block gets from around it.
+    fn strong_received(&mut self, world: usize, pos: [i32; 3]) -> i32 {
+        let mut best = 0;
+        for d in 0..6 {
+            best = best.max(self.emitted(world, add(pos, d), d).1);
+            if best >= 15 {
+                break;
+            }
+        }
+        best
+    }
+
+    /// Power coming to a block from its neighbour on side `d`.
+    fn power_from(&mut self, world: usize, pos: [i32; 3], d: usize) -> i32 {
+        let n = add(pos, d);
+        if self.conductor(world, n) {
+            self.strong_received(world, n)
+        } else {
+            self.emitted(world, n, d).0
+        }
+    }
+
+    /// The strongest power reaching a block (0 = not powered).
+    pub(crate) fn power_at(&mut self, world: usize, pos: [i32; 3]) -> i32 {
+        let mut best = 0;
+        for d in 0..6 {
+            best = best.max(self.power_from(world, pos, d));
+            if best >= 15 {
+                break;
+            }
+        }
+        best
+    }
+
+    /// Whether dust at `pos` runs towards its horizontal side `d` (PowerNukkitX's
+    /// `isPowerSourceAt`): up the side of a block to dust on top, to a source or dust beside
+    /// it, or down to dust below.
+    fn wire_points(&mut self, world: usize, pos: [i32; 3], d: usize) -> bool {
+        let n = add(pos, d);
+        let n_full = self.conductor(world, n);
+        let covered = self.conductor(world, add(pos, UP));
+        (!covered && n_full && self.is_wire(world, add(n, UP)))
+            || is_source(&self.rs_block(world, n).1)
+            || (!n_full && self.is_wire(world, add(n, DOWN)))
+    }
+
+    /// The dust neighbours power flows between (same level, one up past an open top, one down
+    /// past an open side).
+    fn wire_links(&mut self, world: usize, pos: [i32; 3]) -> Vec<[i32; 3]> {
+        let mut out = Vec::new();
+        let covered = self.conductor(world, add(pos, UP));
+        for (d, _) in HORIZ {
+            let n = add(pos, d);
+            if self.is_wire(world, n) {
+                out.push(n);
+            }
+            if !covered && self.is_wire(world, add(n, UP)) {
+                out.push(add(n, UP));
+            }
+            if !self.conductor(world, n) && self.is_wire(world, add(n, DOWN)) {
+                out.push(add(n, DOWN));
+            }
+        }
+        out
+    }
+
+    /// The dust shape: each side `none`, `side` or `up`; a lone line stretches across, a dot
+    /// with no neighbours is a cross.
+    fn wire_shape(&mut self, world: usize, pos: [i32; 3]) -> [&'static str; 4] {
+        let covered = self.conductor(world, add(pos, UP));
+        let mut out = ["none"; 4];
+        for (i, (d, _)) in HORIZ.iter().enumerate() {
+            let n = add(pos, *d);
+            let n_full = self.conductor(world, n);
+            out[i] = if !covered && n_full && self.is_wire(world, add(n, UP)) {
+                "up"
+            } else if is_source(&self.rs_block(world, n).1) || (!n_full && self.is_wire(world, add(n, DOWN))) {
+                "side"
+            } else {
+                "none"
+            };
+        }
+        // north, south, west, east
+        let ns_none = out[0] == "none" && out[1] == "none";
+        let ew_none = out[2] == "none" && out[3] == "none";
+        for i in 0..2 {
+            if out[i] == "none" && ew_none {
+                out[i] = "side";
+            }
+        }
+        for i in 2..4 {
+            if out[i] == "none" && ns_none {
+                out[i] = "side";
+            }
+        }
+        out
+    }
+
+    /// Sets a block without the redstone update of `change_block` (the update in progress
+    /// looks at what changes).
+    fn rs_set(&mut self, world: usize, pos: [i32; 3], id: i32) -> bool {
+        if self.worlds.worlds[world].set_block(pos, id, &self.gd) {
+            self.broadcast(&protocol::update_block(pos, id), |_, q| q.world == world);
+            return true;
+        }
+        false
+    }
+
+    /// Works out the dust networks touching `around` again; returns the dust that changed.
+    fn update_wires(&mut self, world: usize, around: [i32; 3]) -> Vec<[i32; 3]> {
+        let mut seeds = vec![around];
+        for d in 0..6 {
+            let n = add(around, d);
+            seeds.push(n);
+            if d >= 2 {
+                seeds.push(add(n, UP));
+                seeds.push(add(n, DOWN));
+            }
+        }
+        let mut net: Vec<[i32; 3]> = Vec::new();
+        let mut seen: HashSet<[i32; 3]> = HashSet::new();
+        let mut queue: VecDeque<[i32; 3]> = seeds.into_iter().filter(|p| self.is_wire(world, *p)).collect();
+        while let Some(p) = queue.pop_front() {
+            if !seen.insert(p) || net.len() >= 4096 {
+                continue;
+            }
+            net.push(p);
+            for n in self.wire_links(world, p) {
+                if !seen.contains(&n) {
+                    queue.push_back(n);
+                }
+            }
+        }
+        if net.is_empty() {
+            return Vec::new();
+        }
+        // power from outside the network, with the network's own dust switched off
+        self.redstone.wires_off = true;
+        let mut level: HashMap<[i32; 3], i32> = HashMap::new();
+        for p in &net {
+            let v = self.power_at(world, *p);
+            level.insert(*p, v);
+        }
+        self.redstone.wires_off = false;
+        // spread: each step loses one
+        let mut order: Vec<[i32; 3]> = net.clone();
+        order.sort_by_key(|p| -level[p]);
+        let mut q: VecDeque<[i32; 3]> = order.into_iter().filter(|p| level[p] > 1).collect();
+        while let Some(p) = q.pop_front() {
+            let v = level[&p] - 1;
+            for n in self.wire_links(world, p) {
+                if let Some(cur) = level.get_mut(&n) {
+                    if *cur < v {
+                        *cur = v;
+                        if v > 1 {
+                            q.push_back(n);
+                        }
+                    }
+                }
+            }
+        }
+        let mut changed = Vec::new();
+        for p in net {
+            let (id, _) = self.rs_block(world, p);
+            let shape = self.wire_shape(world, p);
+            let mut states: Vec<(&str, Tag)> = vec![("redstone_signal", Tag::Int(level[&p]))];
+            for (i, (_, side)) in HORIZ.iter().enumerate() {
+                let key: &'static str = match *side {
+                    "north" => "redstone_north",
+                    "south" => "redstone_south",
+                    "west" => "redstone_west",
+                    _ => "redstone_east",
+                };
+                states.push((key, Tag::String(shape[i].into())));
+            }
+            if let Some(new) = self.gd.with_states(id, &states) {
+                if new != id && self.rs_set(world, p, new) {
+                    changed.push(p);
+                }
+            }
+        }
+        changed
+    }
+
+    /// Something changed at `pos`: dust and the blocks that react to power around it update.
+    pub(crate) fn redstone_update(&mut self, world: usize, pos: [i32; 3]) {
+        self.redstone.pending.push_back((world, pos));
+        if self.redstone.busy {
+            return;
+        }
+        self.redstone.busy = true;
+        let mut rounds = 0;
+        while let Some((w, p)) = self.redstone.pending.pop_front() {
+            rounds += 1;
+            if rounds > 512 {
+                self.redstone.pending.clear();
+                break;
+            }
+            if !self.near_redstone(w, p) {
+                continue;
+            }
+            let mut centres = self.update_wires(w, p);
+            centres.push(p);
+            let mut looked: HashSet<[i32; 3]> = HashSet::new();
+            for c in centres {
+                for dx in -2i32..=2 {
+                    for dy in -2i32..=2 {
+                        for dz in -2i32..=2 {
+                            if dx.abs() + dy.abs() + dz.abs() > 2 {
+                                continue;
+                            }
+                            let at = [c[0] + dx, c[1] + dy, c[2] + dz];
+                            if looked.insert(at) {
+                                self.update_consumer(w, at);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        self.redstone.busy = false;
+    }
+
+    /// Whether any dust, source or reacting block is within 2 blocks (cheap test before an update).
+    fn near_redstone(&mut self, world: usize, pos: [i32; 3]) -> bool {
+        for dx in -2i32..=2 {
+            for dy in -2i32..=2 {
+                for dz in -2i32..=2 {
+                    if dx.abs() + dy.abs() + dz.abs() > 2 {
+                        continue;
+                    }
+                    let n = self.rs_block(world, [pos[0] + dx, pos[1] + dy, pos[2] + dz]).1;
+                    if is_source(&n) || is_consumer(&n) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    fn schedule_redstone(&mut self, world: usize, pos: [i32; 3], ticks: u64) {
+        let at = self.ticks + ticks;
+        if !self.redstone.scheduled.iter().any(|(t, w, p)| *t == at && *w == world && *p == pos) {
+            self.redstone.scheduled.push((at, world, pos));
+        }
+    }
+
+    /// A block that reacts to power looks at the power it gets.
+    fn update_consumer(&mut self, world: usize, pos: [i32; 3]) {
+        let (id, name) = self.rs_block(world, pos);
+        if !is_consumer(&name) {
+            return;
+        }
+        let s = short(&name).to_string();
+        match s.as_str() {
+            "redstone_lamp" => {
+                if self.power_at(world, pos) > 0 {
+                    if let Some(lit) = self.gd.default_block("minecraft:lit_redstone_lamp") {
+                        self.rs_set(world, pos, lit);
+                        self.redstone.pending.push_back((world, pos));
+                    }
+                }
+            }
+            "lit_redstone_lamp" => {
+                if self.power_at(world, pos) == 0 {
+                    self.schedule_redstone(world, pos, 4);
+                }
+            }
+            "tnt" => {
+                if self.power_at(world, pos) > 0 {
+                    self.prime_tnt(world, pos);
+                }
+            }
+            "golden_rail" | "activator_rail" => {
+                let on = self.rail_powered(world, pos, &name);
+                if on != (self.rs_int(id, "rail_data_bit") != 0) {
+                    if let Some(new) = self.gd.with_states(id, &[("rail_data_bit", Tag::Byte(on as i8))]) {
+                        self.rs_set(world, pos, new);
+                    }
+                }
+            }
+            "redstone_torch" | "unlit_redstone_torch" => {
+                let lit = s == "redstone_torch";
+                if self.torch_should_light(world, pos, id) != lit {
+                    self.schedule_redstone(world, pos, 2);
+                }
+            }
+            _ => {
+                // doors (both halves), trapdoors, fence gates: open while powered
+                let mut on = self.power_at(world, pos) > 0;
+                let other = if s.ends_with("_door") { twopart::partner(&self.gd, pos, id) } else { None };
+                if let Some(o) = other {
+                    on |= self.power_at(world, o) > 0;
+                }
+                // only a change of power moves them (as vanilla): a door opened by hand stays
+                // open while no power reaches it
+                let key = (world, other.map_or(pos, |o| if o[1] < pos[1] { o } else { pos }));
+                let was = self.redstone.powered.contains(&key);
+                if on == was {
+                    return;
+                }
+                if on {
+                    self.redstone.powered.insert(key);
+                } else {
+                    self.redstone.powered.remove(&key);
+                }
+                let open = self.rs_int(id, "open_bit") != 0;
+                if on != open {
+                    if let Some(new) = self.gd.with_states(id, &[("open_bit", Tag::Byte(on as i8))]) {
+                        self.rs_set(world, pos, new);
+                        if other.is_some() {
+                            self.toggle_partner(world, pos, new);
+                        }
+                        let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
+                        let sound = if s.ends_with("trapdoor") {
+                            if on { "trapdoor.open" } else { "trapdoor.close" }
+                        } else if s.ends_with("_door") {
+                            if on { "door.open" } else { "door.close" }
+                        } else if on {
+                            "fence_gate.open"
+                        } else {
+                            "fence_gate.close"
+                        };
+                        self.broadcast(&protocol::level_sound_event(sound, center, new), |_, q| q.world == world);
+                    }
+                }
+            }
+        }
+    }
+
+    /// A redstone torch is lit unless the block it is on is powered.
+    fn torch_should_light(&mut self, world: usize, pos: [i32; 3], id: i32) -> bool {
+        let to_support = match self.rs_str(id, "torch_facing_direction").as_str() {
+            "west" => 4,
+            "east" => 5,
+            "north" => 2,
+            "south" => 3,
+            _ => DOWN,
+        };
+        let support = add(pos, to_support);
+        // the power the support gets, not counting this torch
+        let mut best = 0;
+        for d in 0..6 {
+            let n = add(support, d);
+            if n == pos {
+                continue;
+            }
+            best = best.max(if self.conductor(world, support) { self.emitted(world, n, d).1 } else { 0 });
+            if self.is_wire(world, n) && d == DOWN {
+                // dust on top of the support powers it
+                best = best.max(self.emitted(world, n, d).0);
+            }
+        }
+        best == 0
+    }
+
+    /// A powered or activator rail is on when it, or one of the next 8 rails of its kind along
+    /// the track, is powered.
+    fn rail_powered(&mut self, world: usize, pos: [i32; 3], name: &str) -> bool {
+        let mut seen: HashSet<[i32; 3]> = HashSet::new();
+        let mut q: VecDeque<([i32; 3], u32)> = VecDeque::from([(pos, 0)]);
+        while let Some((p, depth)) = q.pop_front() {
+            if !seen.insert(p) {
+                continue;
+            }
+            if self.power_at(world, p) > 0 {
+                return true;
+            }
+            if depth >= 8 {
+                continue;
+            }
+            for (d, _) in HORIZ {
+                for dy in [-1, 0, 1] {
+                    let n = [p[0] + DIRS[d][0], p[1] + dy, p[2] + DIRS[d][2]];
+                    if self.rs_block(world, n).1 == name {
+                        q.push_back((n, depth + 1));
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// TNT lit by redstone or a lighter: the block goes and a primed TNT entity (the pack's
+    /// `minecraft:tnt`, 4 s fuse) takes its place.
+    pub(crate) fn prime_tnt(&mut self, world: usize, pos: [i32; 3]) {
+        let air = self.gd.air_id;
+        self.rs_set(world, pos, air);
+        let at = [pos[0] as f32 + 0.5, pos[1] as f32, pos[2] as f32 + 0.5];
+        self.spawn_entity(world, "minecraft:tnt", at, None);
+        self.broadcast(&protocol::level_sound_event("fuse", at, -1), |_, q| q.world == world);
+        self.redstone.pending.push_back((world, pos));
+    }
+
+    /// Use on a button: it is pressed (and springs back later).
+    pub(crate) fn use_button(&mut self, sid: SessionId, pos: [i32; 3]) -> bool {
+        let Some(world) = self.players.get(&sid).map(|p| p.world) else { return false };
+        let (id, name) = self.rs_block(world, pos);
+        if !is_button(&name) {
+            return false;
+        }
+        self.swing_arm(sid);
+        if self.rs_int(id, "button_pressed_bit") != 0 {
+            return true;
+        }
+        if let Some(new) = self.gd.with_states(id, &[("button_pressed_bit", Tag::Byte(1))]) {
+            self.rs_set(world, pos, new);
+            let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
+            self.broadcast(&protocol::level_event(level_event::SOUND_CLICK, center, 0), |_, q| q.world == world);
+            let wooden = !matches!(short(&name), "stone_button" | "polished_blackstone_button");
+            self.schedule_redstone(world, pos, if wooden { 30 } else { 20 });
+            self.redstone_update(world, pos);
+        }
+        true
+    }
+
+    /// Scheduled looks and pressure plates.
+    pub(crate) fn tick_redstone(&mut self) {
+        let now = self.ticks;
+        if !self.redstone.scheduled.is_empty() {
+            let due: Vec<(usize, [i32; 3])> = self.redstone.scheduled.iter().filter(|(t, _, _)| *t <= now).map(|(_, w, p)| (*w, *p)).collect();
+            self.redstone.scheduled.retain(|(t, _, _)| *t > now);
+            for (w, p) in due {
+                self.scheduled_redstone(w, p);
+            }
+        }
+        if now % 4 == 0 {
+            self.tick_plates();
+        }
+    }
+
+    fn scheduled_redstone(&mut self, world: usize, pos: [i32; 3]) {
+        let (id, name) = self.rs_block(world, pos);
+        let s = short(&name).to_string();
+        let new = if is_button(&s) && self.rs_int(id, "button_pressed_bit") != 0 {
+            self.gd.with_states(id, &[("button_pressed_bit", Tag::Byte(0))])
+        } else if s == "lit_redstone_lamp" && self.power_at(world, pos) == 0 {
+            self.gd.with_name(id, "minecraft:redstone_lamp")
+        } else if s == "redstone_torch" || s == "unlit_redstone_torch" {
+            let lit = self.torch_should_light(world, pos, id);
+            if lit != (s == "redstone_torch") {
+                self.gd.with_name(id, if lit { "minecraft:redstone_torch" } else { "minecraft:unlit_redstone_torch" })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        if let Some(n) = new.filter(|n| *n != id) {
+            self.rs_set(world, pos, n);
+            if is_button(&s) {
+                let center = [pos[0] as f32 + 0.5, pos[1] as f32 + 0.5, pos[2] as f32 + 0.5];
+                self.broadcast(&protocol::level_event(level_event::SOUND_CLICK, center, 0), |_, q| q.world == world);
+            }
+            self.redstone_update(world, pos);
+        }
+    }
+
+    /// Pressure plates under players and mobs: wooden and stone ones give 15, the weighted
+    /// ones more the more stand on them (light: one per entity, heavy: one per 10); a plate
+    /// nobody stood on for a second lets go.
+    fn tick_plates(&mut self) {
+        let mut on: HashMap<(usize, [i32; 3]), i32> = HashMap::new();
+        let mut feet: Vec<(usize, [f32; 3])> = self
+            .players
+            .values()
+            .filter(|p| p.state == State::Spawned && !p.dead && p.gamemode != 6)
+            .map(|p| (p.world, [p.pos[0], p.pos[1] - 1.62, p.pos[2]]))
+            .collect();
+        feet.extend(self.mobs.iter().filter(|m| m.alive()).map(|m| (m.world, m.pos)));
+        for (w, f) in feet {
+            let b = [f[0].floor() as i32, (f[1] + 0.05).floor() as i32, f[2].floor() as i32];
+            if is_plate(&self.rs_block(w, b).1) {
+                *on.entry((w, b)).or_insert(0) += 1;
+            }
+        }
+        let now = self.ticks;
+        for ((w, p), count) in on {
+            let (id, name) = self.rs_block(w, p);
+            let signal = match short(&name) {
+                "light_weighted_pressure_plate" => count.min(15),
+                "heavy_weighted_pressure_plate" => ((count + 9) / 10).min(15),
+                _ => 15,
+            };
+            self.redstone.plates.insert((w, p), now);
+            if self.rs_int(id, "redstone_signal") as i32 != signal {
+                if let Some(new) = self.gd.with_states(id, &[("redstone_signal", Tag::Int(signal))]) {
+                    self.rs_set(w, p, new);
+                    let at = [p[0] as f32 + 0.5, p[1] as f32 + 0.1, p[2] as f32 + 0.5];
+                    self.broadcast(&protocol::level_event(level_event::SOUND_CLICK, at, 0), |_, q| q.world == w);
+                    self.redstone_update(w, p);
+                }
+            }
+        }
+        let gone: Vec<(usize, [i32; 3])> = self.redstone.plates.iter().filter(|(_, t)| now.saturating_sub(**t) >= 20).map(|(k, _)| *k).collect();
+        for (w, p) in gone {
+            self.redstone.plates.remove(&(w, p));
+            let (id, name) = self.rs_block(w, p);
+            if is_plate(&name) && self.rs_int(id, "redstone_signal") != 0 {
+                if let Some(new) = self.gd.with_states(id, &[("redstone_signal", Tag::Int(0))]) {
+                    self.rs_set(w, p, new);
+                    self.redstone_update(w, p);
+                }
+            }
+        }
+    }
+}

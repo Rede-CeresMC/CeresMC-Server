@@ -72,6 +72,7 @@ BotMenu
 BotApi
 BotMobs
 BotMobs2
+BotRed
 " > "$RUN/ops.txt"
 cat > "$RUN/server.properties" <<EOF
 motd=CeresMC Test
@@ -120,6 +121,7 @@ python -I tools/brewing_test.py || status=1
 python -I tools/music_test.py || status=1
 python -I tools/enchanting_test.py || status=1
 python -I tools/cauldron_test.py || status=1
+python -I tools/redstone_test.py || status=1
 python -I tools/gameplay_test.py || status=1
 python -I tools/packs_test.py || status=1
 python -I tools/plugins_test.py || status=1

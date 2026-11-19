@@ -15,6 +15,7 @@ mod chunks;
 mod combat;
 mod cartography;
 mod loom;
+mod redstone;
 mod connections;
 mod commands;
 mod containers;
@@ -196,6 +197,8 @@ pub struct Server {
     bolts: Vec<lightning::Bolt>,
     /// filled maps (images)
     maps: maps::Maps,
+    /// redstone: pending updates, scheduled looks, pressed plates
+    redstone: redstone::Redstone,
     /// players charging with a spear: where they were last tick
     spear_prev: HashMap<SessionId, [f32; 3]>,
     projectiles: Vec<projectiles::Projectile>,
@@ -255,6 +258,7 @@ impl Server {
             bobbers: Vec::new(),
             bolts: Vec::new(),
             maps: maps::Maps::default(),
+            redstone: redstone::Redstone::default(),
             spear_prev: HashMap::new(),
             projectiles: Vec::new(),
             fireworks: Vec::new(),

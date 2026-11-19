@@ -130,7 +130,9 @@ impl EntityDef {
             && !self.components.contains_key("minecraft:projectile")
             && (self.components.contains_key("minecraft:health")
                 || self.groups.values().any(|g| g.contains_key("minecraft:health"))
-                || self.is_vehicle())
+                || self.is_vehicle()
+                // primed TNT: no health, only a lit fuse
+                || self.components.contains_key("minecraft:explode"))
     }
 
     /// Boats and minecarts: rideable things with physics but no health.
