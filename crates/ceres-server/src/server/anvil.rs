@@ -41,6 +41,16 @@ fn join(item: &mut ItemDesc, tag: &Tag, tail: &[u8]) {
     item.extra = w.0;
 }
 
+/// Sets the item's custom name (display.Name), at most 30 characters.
+pub(crate) fn set_name(item: &mut ItemDesc, name: &str) {
+    let name: String = name.trim().chars().take(30).collect();
+    let (mut tag, tail) = split(item);
+    let mut display = tag.get("display").cloned().unwrap_or(Tag::Compound(Vec::new()));
+    display.set("Name", Tag::String(name));
+    tag.set("display", display);
+    join(item, &tag, &tail);
+}
+
 fn repair_cost(item: &ItemDesc) -> u32 {
     split(item).0.get("RepairCost").and_then(|v| v.as_i64()).unwrap_or(0).max(0) as u32
 }
@@ -233,6 +243,10 @@ impl Server {
         let creative = p.gamemode == 1;
         let Some(c) = p.inventory.container.as_ref() else { return };
         let (world, pos) = (c.world, c.pos);
+        if c.ui == super::cartography::CARTOGRAPHY_UI {
+            self.finish_cartography(sid);
+            return;
+        }
         if !creative {
             self.add_xp_levels(sid, -(cost as i64));
         }

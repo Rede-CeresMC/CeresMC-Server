@@ -13,6 +13,7 @@ mod books;
 mod cauldron;
 mod chunks;
 mod combat;
+mod cartography;
 mod connections;
 mod commands;
 mod containers;

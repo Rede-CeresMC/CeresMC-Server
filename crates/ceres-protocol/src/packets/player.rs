@@ -1144,11 +1144,11 @@ pub fn set_actor_link(vehicle: i64, rider: i64, link_type: u8, immediate: bool, 
 }
 
 /// ClientboundMapItemData (0x43): the whole 128x128 image of a map. `pixels` are RGBA.
-pub fn map_item_data(map_id: i64, dimension: u8, origin: [i32; 3], scale: u8, pixels: &[[u8; 4]]) -> Vec<u8> {
+pub fn map_item_data(map_id: i64, dimension: u8, origin: [i32; 3], scale: u8, locked: bool, pixels: &[[u8; 4]]) -> Vec<u8> {
     packet(0x43, |w| {
         w.varlong(map_id);
         w.u8(dimension);
-        w.bool(false); // locked
+        w.bool(locked);
         for v in origin {
             w.varint(v);
         }

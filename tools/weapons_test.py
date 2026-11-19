@@ -303,7 +303,7 @@ pump_both(0.4)
 # map: an empty map used in the air becomes a filled map and its image is sent (0x43);
 # a MapInfoRequest (0x44) for its id gets the image again
 command(archer, "/clear")
-give(archer, "empty_map 1")
+give(archer, "empty_map 1 2")  # an empty locator map (data 2): the map shows its carriers
 n2 = len(archer.received)
 click_air(archer)
 archer.pump(3.0, lambda: any(p == 0x43 for p, _ in archer.received[n2:]))
@@ -318,7 +318,7 @@ if maps:
     check(any(p == 0x43 for p, _ in archer.received[n2:]), "MapInfoRequest gets the map image")
     archer.pump(1.0)
     small = [d for p, d in archer.received[n2:] if p == 0x43 and len(d) < 1000]
-    check(small, "the map also gets the player markers")
+    check(small, "the locator map also gets the player markers")
     painted = sum(1 for i in range(len(maps[0]) - 4 * 16384, len(maps[0]), 4) if maps[0][i + 3] != 0)
     check(painted > 1000, f"the map shows the ground ({painted} pixels drawn)")
 

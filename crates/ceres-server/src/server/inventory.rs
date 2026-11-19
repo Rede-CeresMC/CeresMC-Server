@@ -158,6 +158,16 @@ fn locate(s: &SlotRef, open: Option<&OpenContainer>) -> Option<Loc> {
                 _ => None,
             }
         }
+        // the cartography table keeps its two slots where the anvil does (only one is open)
+        super::cartography::UI_CARTO_INPUT | super::cartography::UI_CARTO_ADDITIONAL
+            if open.is_some_and(|c| c.ui == super::cartography::CARTOGRAPHY_UI) =>
+        {
+            match (s.container, s.slot) {
+                (super::cartography::UI_CARTO_INPUT, super::cartography::SLOT_CARTO_INPUT) => Some(Loc::AnvilInput),
+                (super::cartography::UI_CARTO_ADDITIONAL, super::cartography::SLOT_CARTO_ADDITIONAL) => Some(Loc::AnvilMaterial),
+                _ => None,
+            }
+        }
         super::grindstone::UI_GRIND_INPUT | super::grindstone::UI_GRIND_ADDITIONAL => {
             if !open.is_some_and(|c| c.ui == super::grindstone::GRINDSTONE_UI) {
                 return None;
@@ -300,7 +310,7 @@ fn multi_result_items(uuid: &str, grid: &[ItemDesc], gd: &GameData) -> Option<(I
             };
             let scale = int("map_scale").unwrap_or(0);
             let (Some(x), Some(z)) = (int("ceres_map_x"), int("ceres_map_z")) else { return None };
-            if scale >= 4 || map.count != 1 {
+            if scale >= 4 || map.count != 1 || map.meta == super::cartography::LOCKED {
                 return None;
             }
             let mut out = map.clone();
@@ -659,8 +669,8 @@ impl Inventory {
         let mut enchant_choice: Option<usize> = None;
         // grindstone: (expected input, expected additional) and the experience
         let mut grinding: Option<(ItemDesc, ItemDesc, u32)> = None;
-        // anvil: (input, material, material used, cost)
-        let mut anvil_use: Option<(ItemDesc, ItemDesc, u16, u32)> = None;
+        // anvil or cartography table: (input, material, input used, material used, cost)
+        let mut anvil_use: Option<(ItemDesc, ItemDesc, u16, u16, u32)> = None;
 
         for action in &req.actions {
             match *action {
@@ -707,7 +717,8 @@ impl Inventory {
                 }
                 StackAction::Anvil { filter } => {
                     let open_ui = self.container.as_ref().map(|c| c.ui);
-                    if open_ui != Some(super::anvil::ANVIL_UI)
+                    let carto = open_ui == Some(super::cartography::CARTOGRAPHY_UI);
+                    if (open_ui != Some(super::anvil::ANVIL_UI) && !carto)
                         || recipe.is_some()
                         || enchant_choice.is_some()
                         || grinding.is_some()
@@ -716,12 +727,26 @@ impl Inventory {
                         return None;
                     }
                     let rename = usize::try_from(filter).ok().and_then(|i| req.filters.get(i)).map(String::as_str);
+                    if carto {
+                        // one of each filled slot, no levels
+                        let out = super::cartography::result(&self.anvil_input, &self.anvil_material, rename, gd)?;
+                        let used = |i: &ItemDesc| if i.is_empty() { 0 } else { 1 };
+                        self.crafted = Some(out);
+                        anvil_use = Some((
+                            self.anvil_input.clone(),
+                            self.anvil_material.clone(),
+                            used(&self.anvil_input),
+                            used(&self.anvil_material),
+                            0,
+                        ));
+                        continue;
+                    }
                     let res = super::anvil::combine(&self.anvil_input, &self.anvil_material, rename, gd)?;
                     if !creative && (super::anvil::too_expensive(res.cost) || self.player_level < res.cost) {
                         return None;
                     }
                     self.crafted = Some(res.item);
-                    anvil_use = Some((self.anvil_input.clone(), self.anvil_material.clone(), res.material_used, res.cost));
+                    anvil_use = Some((self.anvil_input.clone(), self.anvil_material.clone(), self.anvil_input.count, res.material_used, res.cost));
                 }
                 StackAction::Grindstone => {
                     let open_ui = self.container.as_ref().map(|c| c.ui);
@@ -950,7 +975,7 @@ impl Inventory {
         }
 
         // anvil: the whole input and exactly the material it needed, nothing else
-        if let Some((input, material, material_used, cost)) = anvil_use {
+        if let Some((input, material, input_used, material_used, cost)) = anvil_use {
             let mut from_input = 0;
             let mut from_material = 0;
             for (loc, c) in consumed_from.iter().zip(&consumed) {
@@ -960,7 +985,7 @@ impl Inventory {
                     _ => return None,
                 }
             }
-            if from_input != input.count || from_material != material_used {
+            if from_input != input_used || from_material != material_used {
                 return None;
             }
             self.anvil_paid = Some(cost);

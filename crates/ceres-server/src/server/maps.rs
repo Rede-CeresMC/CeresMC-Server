@@ -24,8 +24,16 @@ pub(crate) struct MapData {
     /// 0-4: each pixel covers 2^scale blocks
     pub scale: u8,
     pub pixels: Vec<[u8; 4]>,
+    /// locked on a cartography table: never drawn again
+    pub locked: bool,
+    /// locator map: shows where its carriers are
+    pub players: bool,
     dirty: bool,
 }
+
+/// Flags kept in the scale byte of a map file (old files: none set, players shown).
+const FILE_LOCKED: u8 = 0x10;
+const FILE_NO_PLAYERS: u8 = 0x20;
 
 #[derive(Default)]
 pub(crate) struct Maps {
@@ -300,7 +308,7 @@ impl Server {
         // old files have no scale byte
         let (scale, px_at) = match b.len() {
             n if n == 12 + SIZE * SIZE * 4 => (0, 12),
-            n if n == 13 + SIZE * SIZE * 4 => (b[12].min(4), 13),
+            n if n == 13 + SIZE * SIZE * 4 => (b[12], 13),
             _ => return false,
         };
         let int = |i: usize| i32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
@@ -309,7 +317,9 @@ impl Server {
             return false;
         }
         let pixels = b[px_at..].chunks_exact(4).map(|c| [c[0], c[1], c[2], c[3]]).collect();
-        self.maps.maps.insert(id, MapData { world, corner: [int(4), int(8)], scale, pixels, dirty: false });
+        let (locked, players) = (scale & FILE_LOCKED != 0, scale & FILE_NO_PLAYERS == 0);
+        let scale = (scale & 0x0f).min(4);
+        self.maps.maps.insert(id, MapData { world, corner: [int(4), int(8)], scale, pixels, locked, players, dirty: false });
         true
     }
 
@@ -324,7 +334,7 @@ impl Server {
             b.extend((m.world as i32).to_le_bytes());
             b.extend(m.corner[0].to_le_bytes());
             b.extend(m.corner[1].to_le_bytes());
-            b.push(m.scale);
+            b.push(m.scale | if m.locked { FILE_LOCKED } else { 0 } | if m.players { 0 } else { FILE_NO_PLAYERS });
             for p in &m.pixels {
                 b.extend(p);
             }
@@ -339,13 +349,16 @@ impl Server {
         let m = self.maps.maps.get(&id)?;
         let half = 64 << m.scale;
         let center = [m.corner[0] + half, 0, m.corner[1] + half];
-        Some(protocol::map_item_data(id, 0, center, m.scale, &m.pixels))
+        Some(protocol::map_item_data(id, 0, center, m.scale, m.locked, &m.pixels))
     }
 
     /// The players who carry this map, inside its area and not invisible, as white markers
     /// pointing where they look.
     fn map_marks_packet(&self, id: i64) -> Option<Vec<u8>> {
         let m = self.maps.maps.get(&id)?;
+        if !m.players {
+            return None;
+        }
         let half = 64 << m.scale;
         let step = (1 << m.scale) as f32;
         let center = [m.corner[0] + half, m.corner[1] + half];
@@ -371,6 +384,8 @@ impl Server {
     pub(crate) fn create_map(&mut self, sid: SessionId) -> bool {
         let Some(p) = self.players.get(&sid) else { return false };
         let (world, gm, pos) = (p.world, p.gamemode, p.pos);
+        // an empty locator map (data 2) makes a map that shows where its carriers are
+        let players = p.inventory.held_item().meta == super::cartography::LOCATOR;
         // one new map per second per player (each one is drawn in full and saved)
         let key = (sid, "minecraft:empty_map".to_string());
         if self.item_cooldowns.get(&key).is_some_and(|t| self.ticks < *t) {
@@ -382,9 +397,13 @@ impl Server {
         if self.load_map(id) {
             id += 1;
         }
-        self.maps.maps.insert(id, MapData { world, corner, scale: 0, pixels: vec![[0, 0, 0, 0]; SIZE * SIZE], dirty: true });
+        self.maps.maps.insert(id, MapData { world, corner, scale: 0, pixels: vec![[0, 0, 0, 0]; SIZE * SIZE], locked: false, players, dirty: true });
         self.draw_map(id, None);
         let Some(mut item) = self.simple_item("minecraft:filled_map", 1) else { return false };
+        if players {
+            item.meta = super::cartography::LOCATOR;
+        }
+        durability::set_item_field(&mut item, "map_display_players", Some(Tag::Byte(players as i8)));
         durability::set_item_field(&mut item, "map_uuid", Some(Tag::Long(id)));
         durability::set_item_field(&mut item, "map_scale", Some(Tag::Int(0)));
         durability::set_item_field(&mut item, "map_is_init", Some(Tag::Byte(1)));
@@ -464,6 +483,9 @@ impl Server {
                 continue;
             }
             let Some(m) = self.maps.maps.get(&id) else { continue };
+            if m.locked {
+                continue;
+            }
             let span = (SIZE as i32) << m.scale;
             let radius = (32 << m.scale).min(64);
             let inside = m.world == world && (0..span).contains(&(at[0] - m.corner[0])) && (0..span).contains(&(at[1] - m.corner[1]));
@@ -498,6 +520,17 @@ impl Server {
         if durability::item_field(item, "map_uuid") != Some(Tag::Long(id)) {
             return false;
         }
+        // a copy locked on the cartography table: the image of its source, frozen
+        if let Some(Tag::Long(src)) = durability::item_field(item, "ceres_lock_of") {
+            if !self.load_map(src) {
+                return false;
+            }
+            let Some(s) = self.maps.maps.get(&src) else { return false };
+            let m = MapData { world: s.world, corner: s.corner, scale: s.scale, pixels: s.pixels.clone(), locked: true, players: false, dirty: true };
+            self.maps.maps.insert(id, m);
+            return true;
+        }
+        let players = !matches!(durability::item_field(item, "map_display_players"), Some(Tag::Byte(0)));
         let int = |k: &str| match durability::item_field(item, k) {
             Some(Tag::Int(v)) => Some(v),
             _ => None,
@@ -505,7 +538,7 @@ impl Server {
         let (Some(scale), Some(x), Some(z)) = (int("map_scale"), int("ceres_map_x"), int("ceres_map_z")) else { return false };
         let scale = scale.clamp(0, 4) as u8;
         let corner = map_corner([x, z], scale);
-        self.maps.maps.insert(id, MapData { world, corner, scale, pixels: vec![[0, 0, 0, 0]; SIZE * SIZE], dirty: true });
+        self.maps.maps.insert(id, MapData { world, corner, scale, pixels: vec![[0, 0, 0, 0]; SIZE * SIZE], locked: false, players, dirty: true });
         self.draw_map(id, Some(([x, z], 64)));
         true
     }

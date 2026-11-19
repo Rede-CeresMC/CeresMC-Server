@@ -184,6 +184,49 @@ c.pump(1.0)
 lv = level(c, n)
 check(lv is not None and lv < level(c, 0) + 0.5 and lv >= 0, f"renaming costs a level (now {lv})")
 
+# cartography table: paper + compass make an empty locator map; paper + glass pane make nothing
+CARTO = block_id("minecraft:cartography_table")
+CPOS = (POS[0] + 4, POS[1], POS[2] + 4)
+command(c, "/gamemode creative")
+c.break_block(CPOS)
+c.place_block((CPOS[0], 69, CPOS[2]), 1, STONE)
+c.pump(0.3)
+c.place_block((CPOS[0], 69, CPOS[2]), 1, CARTO)
+c.pump(0.6)
+command(c, "/gamemode survival")
+command(c, "/clear")
+give(c, "paper 2")
+give(c, "compass 1")
+n = len(c.received)
+c.place_block(CPOS, 1, 0)
+c.pump(3.0, lambda: any(p == 0x2e for p, _ in c.received[n:]))
+opens = [d for p, d in c.received[n:] if p == 0x2e]
+check(opens and opens[-1][1] == 30, "clicking a cartography table opens it")
+
+def carto_craft(c, consume):
+    counter[0] -= 2
+    body = svarint(counter[0]) + uvarint(2 + len(consume))
+    body += uvarint(13) + bytes(1) + svarint(0) + struct.pack("<i", -1)
+    for src in consume:
+        body += uvarint(5) + bytes(1) + bytes([1]) + src
+    body += uvarint(0) + bytes(1) + bytes([1]) + slot(60, 50) + slot(HOTBAR, 6)
+    body += uvarint(0) + struct.pack("<i", 0)
+    n = len(c.received)
+    c.send(uvarint(0x93) + uvarint(1) + body)
+    c.pump(3.0, lambda: any(p == 0x94 for p, _ in c.received[n:]))
+    resp = [d for p, d in c.received[n:] if p == 0x94]
+    return bool(resp) and resp[-1][1] == 0
+
+check(request(c, [take(1, slot(HOTBAR, 0), slot(55, 12))]), "paper goes into the cartography table")
+check(request(c, [take(1, slot(HOTBAR, 1), slot(56, 13))]), "a compass goes into the second slot")
+check(carto_craft(c, [slot(55, 12), slot(56, 13)]), "paper + compass make an empty locator map")
+command(c, "/clear")
+give(c, "paper 1")
+give(c, "glass_pane 1")
+check(request(c, [take(1, slot(HOTBAR, 0), slot(55, 12))]), "paper goes in again")
+check(request(c, [take(1, slot(HOTBAR, 1), slot(56, 13))]), "a glass pane goes into the second slot")
+check(not carto_craft(c, [slot(55, 12), slot(56, 13)]), "paper + glass pane make nothing (refused)")
+
 c.close()
 print("PASS" if ok else "FAILED")
 sys.exit(0 if ok else 1)

@@ -97,7 +97,9 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Mapas: no máximo um mapa novo por segundo por jogador (cada um é desenhado inteiro e salvo); mapas salvos que ninguém segura saem da memória a cada minuto
 - [x] Mapas: escalas 0-4 (cada pixel cobre 2^escala blocos, área de 128x2^escala na grade vanilla); ampliar mapa (receita multi d392b075: mapa no meio + 8 papéis na bancada) dá um mapa novo uma escala acima, criado e desenhado na primeira vez que é segurado ou pedido (o item guarda o centro em `ceres_map_x/z`). Mapas criados antes disso não ampliam
 - [x] Mapas: MapInfoRequest só é respondido para um mapa que o jogador carrega ou que está numa moldura a até 64 blocos; marcadores só de quem carrega aquele mapa e não está invisível (antes qualquer id mostrava onde todos estavam)
-- [ ] Mapas: travar, mapa localizador; conferir no cliente real os mapas em molduras
+- [x] Mesa de cartografia (lógica do `CraftRecipeOptionalProcessor` do PowerNukkitX): mesmo pedido "craft recipe optional" da bigorna, janela 30, espaços 55/12 e 56/13; o servidor decide o resultado e tira um de cada espaço: papel = mapa vazio; mapa sozinho = o mesmo (para renomear); papel/mapa + bússola = mapa localizador (dado 2); mapa + painel de vidro = cópia travada (dado 6, mapa novo com a imagem do original e que nunca é redesenhado; ClientboundMapItemData com `locked`); mapa + mapa vazio = 2 cópias; mapa + papel = uma escala acima. Mapas travados não ampliam (nem na bancada). Teste de bot: abrir, papel + bússola aceito, papel + vidro recusado
+- [x] Mapa localizador: como no Bedrock, só o mapa feito de um mapa vazio localizador (dado 2) mostra os marcadores dos jogadores (`map_display_players`); o mapa comum não. Mapas salvos antes disso continuam mostrando
+- [ ] Mapas: conferir no cliente real os mapas em molduras
 
 ## Lote 3: construção e uso de blocos
 
@@ -143,7 +145,7 @@ Já existiam: enxada (terra arada), pá (caminho), machado (descascar tronco), i
 - [x] Segurança das receitas multi: além da casa, o item consumido tem de ser o mesmo (tipo e NBT) que estava lá quando o resultado foi calculado (impede trocar por outro item no mesmo pedido)
 - [x] Duplicar estandarte (receita multi): estandarte com padrões + estandarte liso da mesma cor = cópia; o original fica na grade; o estandarte sinistro não copia
 - [x] Clonar mapa (receita multi): mapa preenchido + mapas vazios = cópias + o original (só copia o item; os mapas em si ainda não existem)
-- [ ] Ampliar/travar mapa e padrões de estandarte na bancada (receitas multi restantes), mapas em molduras
+- [ ] Padrões de estandarte no tear (receitas multi restantes), mapas em molduras
 - [x] Mob guiado ou amarrado solta o laço ao morrer
 
 ## Lote 4: consumíveis
