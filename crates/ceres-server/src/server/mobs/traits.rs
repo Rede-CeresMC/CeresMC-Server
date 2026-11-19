@@ -254,7 +254,9 @@ impl Traits {
         let g = |k: &str| c.get(k);
         let has = |k: &str| c.contains_key(k);
         let empty = Value::Null;
-        let health = g("minecraft:health").unwrap_or(&empty);
+        // vehicles (boats, minecarts) have no health component: 4, as PowerNukkitX's boat
+        let vehicle = serde_json::json!({"value": 4, "max": 4});
+        let health = g("minecraft:health").unwrap_or(if has("minecraft:rideable") && has("minecraft:physics") { &vehicle } else { &empty });
         let max_health = range(health.get("max"), (0.0, 0.0)).1.max(range(health.get("value"), (0.0, 0.0)).1).max(1.0);
         let start_health = range(health.get("value"), (max_health, max_health));
         let start_health = rand_f(start_health.0, start_health.1).clamp(1.0, max_health);

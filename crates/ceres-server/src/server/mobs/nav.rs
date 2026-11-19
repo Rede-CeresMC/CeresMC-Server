@@ -395,7 +395,7 @@ impl Server {
             mot[1] = mot[1] * 0.6 + want[1];
             want[1] = 0.0;
         } else if in_liquid {
-            let floats = m.goals.iter().any(|g| g.def.kind == traits::G::Float) || t.is("player");
+            let floats = m.goals.iter().any(|g| g.def.kind == traits::G::Float) || t.is("player") || m.comps.contains_key("minecraft:buoyant");
             if (m.ctl.jump || floats) && !t.walks_on_lava {
                 mot[1] = (mot[1] + 0.05).min(0.12);
             } else if t.walks_on_lava && m.env.in_lava {

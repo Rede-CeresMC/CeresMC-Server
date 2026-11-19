@@ -151,7 +151,11 @@ impl Server {
             self.block_sound(world, pos, "brush", block);
             return;
         }
-        // done: the hidden item comes out
+        // done: the block is replaced and its item comes out, as breaking it would
+        let ev = self.block_event_json("block_break", sid, world, pos, block);
+        if !self.plugins_allow(ev) {
+            return;
+        }
         let be = self.worlds.worlds[world].get_block_entity(pos, &self.gd);
         let mut drops = Vec::new();
         if let Some(t) = &be {

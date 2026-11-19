@@ -341,6 +341,12 @@ pub trait Plugin {
     fn on_block_place(&mut self, player: &Player, block: &Block) -> bool {
         true
     }
+    /// A player uses an item or their hand on a block in a way that changes it or the world
+    /// around it (lighting candles, eating cake, brushing, tying a lead to a fence, placing a
+    /// boat...). Return false to cancel it.
+    fn on_block_interact(&mut self, player: &Player, block: &Block) -> bool {
+        true
+    }
     /// A player is about to take damage. Return false to cancel it.
     fn on_damage(&mut self, player: &Player, amount: f32) -> bool {
         true
@@ -452,7 +458,7 @@ pub fn dispatch(plugin: &mut dyn Plugin, event: &[u8]) {
         "menu_click" => plugin.on_menu_click(&player(), e["menu"].as_str().unwrap_or_default(), e["slot"].as_u64().unwrap_or(0) as u32),
         "menu_close" => plugin.on_menu_close(&player(), e["menu"].as_str().unwrap_or_default()),
         "task" => plugin.on_task(e["task"].as_u64().unwrap_or(0) as u32),
-        "chat" | "block_break" | "block_place" | "damage" | "attack" => {
+        "chat" | "block_break" | "block_place" | "block_interact" | "damage" | "attack" => {
             let block = || Block {
                 name: e["block"].as_str().unwrap_or_default().to_string(),
                 world: e["world"].as_str().unwrap_or_default().to_string(),
@@ -464,6 +470,7 @@ pub fn dispatch(plugin: &mut dyn Plugin, event: &[u8]) {
                 "chat" => plugin.on_chat(&player(), e["message"].as_str().unwrap_or_default()),
                 "block_break" => plugin.on_block_break(&player(), &block()),
                 "block_place" => plugin.on_block_place(&player(), &block()),
+                "block_interact" => plugin.on_block_interact(&player(), &block()),
                 "damage" => plugin.on_damage(&player(), e["amount"].as_f64().unwrap_or(0.0) as f32),
                 _ => plugin.on_attack(&player(), &Player::new(e["target"].as_str().unwrap_or_default())),
             };

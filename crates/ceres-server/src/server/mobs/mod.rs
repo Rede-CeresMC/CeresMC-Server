@@ -26,6 +26,7 @@ mod nav;
 mod ride;
 mod spawn;
 mod traits;
+mod vehicles;
 
 use super::*;
 use ceres_protocol::{ItemDesc, Meta, actor_event, meta_key};
@@ -174,6 +175,8 @@ pub(crate) struct Mob {
     pub interested: bool,
     pub charging: bool,
     pub persistent: bool,
+    /// variant given by the item that placed it (boat wood)
+    pub item_variant: Option<i32>,
     pub name_tag: Option<String>,
     pub equip: Equip,
     pub carried_block: Option<i32>,
@@ -527,7 +530,7 @@ impl Server {
             Meta::Short(meta_key::AIR, m.air.clamp(0, i16::MAX as i32) as i16),
             Meta::Short(meta_key::MAX_AIR, t.air_ticks.clamp(0, i16::MAX as i32) as i16),
         ];
-        if let Some(v) = t.variant {
+        if let Some(v) = t.variant.or(m.item_variant) {
             meta.push(Meta::Int(meta_key::VARIANT, v));
         }
         if let Some(v) = t.mark_variant {
@@ -985,6 +988,7 @@ impl Server {
                         "grow": m.grow_ticks,
                         "home": m.home,
                         "knot": m.knot,
+                        "item_variant": m.item_variant,
                         "hand": item(&m.equip.hand),
                         "offhand": item(&m.equip.offhand),
                         "armor": m.equip.armor.iter().map(item).collect::<Vec<_>>(),
@@ -1067,6 +1071,7 @@ impl Server {
                         let c: Vec<i32> = a.iter().filter_map(|n| n.as_i64()).map(|n| n as i32).collect();
                         (c.len() == 3).then(|| [c[0], c[1], c[2]])
                     });
+                    m.item_variant = v["item_variant"].as_i64().map(|n| n.clamp(0, 64) as i32);
                     m.knot = v["knot"].as_array().and_then(|a| {
                         let c: Vec<i32> = a.iter().filter_map(|n| n.as_i64()).map(|n| n as i32).collect();
                         (c.len() == 3).then(|| [c[0], c[1], c[2]])

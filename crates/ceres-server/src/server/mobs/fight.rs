@@ -237,7 +237,9 @@ impl Server {
         });
         let center = [m.pos[0], m.pos[1] + 0.5, m.pos[2]];
         let exploded_self = cause == "self_explosion";
-        if !exploded_self {
+        if m.def.is_vehicle() {
+            self.vehicle_drop(m, attacker);
+        } else if !exploded_self {
             if let Some(table) = m.comps.get("minecraft:loot").and_then(|l| string(l, "table")).map(String::from) {
                 let cx = loot::LootCx {
                     killed_by_player: by_player,

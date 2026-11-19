@@ -118,6 +118,7 @@ Retornam `bool`: `true` deixa acontecer e `false` cancela. Se qualquer plugin ca
 | `on_chat(player, mensagem)` | a mensagem no chat |
 | `on_block_break(player, bloco)` | quebrar o bloco (ele volta para o jogador) |
 | `on_block_place(player, bloco)` | colocar o bloco |
+| `on_block_interact(player, bloco)` | usar a mão ou um item num bloco mudando-o ou o mundo em volta (acender vela, comer bolo, pincelar, amarrar laço na cerca, pôr barco...) |
 | `on_damage(player, dano)` | o dano (queda, fogo, golpe...) |
 | `on_attack(atacante, alvo)` | um jogador bater em outro |
 

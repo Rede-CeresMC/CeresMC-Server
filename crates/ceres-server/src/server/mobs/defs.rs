@@ -128,7 +128,14 @@ impl EntityDef {
     pub(crate) fn is_mob(&self) -> bool {
         self.id != "minecraft:player"
             && !self.components.contains_key("minecraft:projectile")
-            && (self.components.contains_key("minecraft:health") || self.groups.values().any(|g| g.contains_key("minecraft:health")))
+            && (self.components.contains_key("minecraft:health")
+                || self.groups.values().any(|g| g.contains_key("minecraft:health"))
+                || self.is_vehicle())
+    }
+
+    /// Boats and minecarts: rideable things with physics but no health.
+    pub(crate) fn is_vehicle(&self) -> bool {
+        self.components.contains_key("minecraft:rideable") && self.components.contains_key("minecraft:physics") && !self.components.contains_key("minecraft:health")
     }
 
     pub(crate) fn prop(&self, name: &str) -> Option<&PropDef> {

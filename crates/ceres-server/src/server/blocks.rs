@@ -251,6 +251,22 @@ impl Server {
             }
             return;
         }
+        // the uses below change the block or the world around it: plugins may cancel them
+        // (block_interact), e.g. in protected areas
+        let ev = self.block_event_json("block_interact", sid, world, clicked, clicked_id);
+        if !self.plugins_allow(ev) {
+            self.resync(sid, clicked);
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
+        if self.place_vehicle(sid, clicked, face) {
+            if let Some(t) = side(clicked, face) {
+                self.resync(sid, t);
+            }
+            return;
+        }
         if !sneaking && self.use_fence_leash(sid, clicked) {
             if let Some(t) = side(clicked, face) {
                 self.resync(sid, t);

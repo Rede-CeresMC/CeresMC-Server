@@ -483,6 +483,35 @@ command(other, "/clear")
 other.move(X + 3, EYE, Z)
 other.pump(0.3)
 
+# a boat placed on the ground can be ridden and broken
+other.move(X + 490, EYE, Z)
+other.pump(0.3)
+command(other, "/clear")
+n2 = len(other.received)
+command(other, "/give @s oak_boat 1")
+other.pump(3.0, lambda: any(p == 0x32 for p, _ in other.received[n2:]))
+n2 = len(other.received)
+other.place_block((int(X + 490), G - 1, int(Z + 2)), 1, 0)
+both(other, c, 1.0)
+boats = mob_adds(other, n2, "minecraft:boat")
+check(boats, "a boat item places a boat")
+command(other, "/clear")
+n2 = len(other.received)
+if boats:
+    hit(other, boats[0], 0)
+both(other, c, 1.0)
+check(any(p == 0x29 for p, _ in other.received[n2:]), "a player gets into the boat")
+if boats:
+    other.send(uvarint(0x21) + bytes([3]) + uvarint(boats[0]))
+    both(other, c, 0.5)
+    n2 = len(other.received)
+    for _ in range(6):
+        hit(other, boats[0], 1)
+        both(other, c, 0.6)
+check(boats and any(p == 0x0e for p, _ in other.received[n2:]), "hitting the boat breaks it")
+other.move(X + 3, EYE, Z)
+other.pump(0.3)
+
 # two cows fed with wheat make a baby
 c.move(X + 80, EYE, Z)
 c.pump(0.3)
