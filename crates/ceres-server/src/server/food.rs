@@ -63,8 +63,8 @@ fn food_effects(name: &str) -> &'static [(u8, u8, u32, u32)] {
     use super::effects::effect::*;
     match name.strip_prefix("minecraft:").unwrap_or(name) {
         "golden_apple" => &[(REGENERATION, 1, 5, 100), (ABSORPTION, 0, 120, 100)],
-        "enchanted_golden_apple" => &[(REGENERATION, 1, 30, 100), (ABSORPTION, 3, 120, 100), (RESISTANCE, 0, 300, 100), (FIRE_RESISTANCE, 0, 300, 100)],
-        "pufferfish" => &[(HUNGER, 2, 15, 100), (NAUSEA, 0, 15, 100), (POISON, 1, 60, 100)],
+        "enchanted_golden_apple" => &[(REGENERATION, 4, 30, 100), (ABSORPTION, 3, 120, 100), (RESISTANCE, 0, 300, 100), (FIRE_RESISTANCE, 0, 300, 100)],
+        "pufferfish" => &[(HUNGER, 2, 15, 100), (NAUSEA, 1, 15, 100), (POISON, 1, 60, 100)],
         "rotten_flesh" => &[(HUNGER, 0, 30, 80)],
         "chicken" => &[(HUNGER, 0, 30, 30)],
         "spider_eye" => &[(POISON, 0, 5, 100)],
@@ -322,37 +322,39 @@ impl Server {
 /// Effect of a suspicious stew by its data value (the flower it was made with) and seconds.
 fn stew_effect(meta: u32) -> Option<(&'static str, u32)> {
     Some(match meta {
-        0 => ("night_vision", 4),  // poppy
-        1 => ("jump_boost", 4),    // cornflower
+        0 => ("night_vision", 5),  // poppy
+        1 => ("jump_boost", 5),    // cornflower
         2 => ("weakness", 7),      // tulips
-        3 => ("blindness", 6),     // azure bluet
-        4 => ("poison", 10),       // lily of the valley
+        3 => ("blindness", 7),     // azure bluet
+        4 => ("poison", 11),       // lily of the valley
         5 | 6 => ("saturation", 1), // dandelion, blue orchid
         7 => ("fire_resistance", 3), // allium
-        8 => ("regeneration", 6),  // oxeye daisy
-        9 => ("wither", 6),        // wither rose
-        10 => ("night_vision", 4), // torchflower
-        11 => ("blindness", 8),    // open eyeblossom
+        8 => ("regeneration", 7),  // oxeye daisy
+        9 => ("wither", 7),        // wither rose
+        10 => ("night_vision", 5), // torchflower
+        11 => ("blindness", 7),    // open eyeblossom
         12 => ("nausea", 7),       // closed eyeblossom
         _ => return None,
     })
 }
 
 impl Server {
-    /// Chorus fruit: up to 16 tries to land on a free spot within 8 blocks.
+    /// Chorus fruit (as PowerNukkitX): up to 128 tries at a random spot within 8 blocks, dropped
+    /// onto the ground below it, needing two free blocks without liquid.
     fn chorus_teleport(&mut self, sid: SessionId) {
         let Some(p) = self.players.get(&sid) else { return };
         let (world, feet) = (p.world, [p.pos[0], p.pos[1] - mobs::EYE_HEIGHT, p.pos[2]]);
-        for _ in 0..16 {
+        for _ in 0..128 {
             let x = (feet[0] + (rand::random::<f32>() - 0.5) * 16.0).floor() as i32;
             let z = (feet[2] + (rand::random::<f32>() - 0.5) * 16.0).floor() as i32;
             let base = feet[1].floor() as i32 + (rand::random::<u32>() % 16) as i32 - 8;
-            for y in (base - 8..=base).rev() {
+            for y in (base - 16..=base).rev() {
                 let solid = |s: &mut Server, p: [i32; 3]| s.gd.is_solid(s.worlds.worlds[world].get_block(p, &s.gd));
                 if !self.worlds.worlds[world].is_loaded([x, y, z]) || y <= ceres_world::MIN_Y {
                     break;
                 }
-                if solid(self, [x, y - 1, z]) && !solid(self, [x, y, z]) && !solid(self, [x, y + 1, z]) {
+                let wet = |s: &mut Server, p: [i32; 3]| s.liquid_at(world, p).is_some();
+                if solid(self, [x, y - 1, z]) && !solid(self, [x, y, z]) && !solid(self, [x, y + 1, z]) && !wet(self, [x, y, z]) && !wet(self, [x, y + 1, z]) {
                     let from = feet;
                     let to = [x as f32 + 0.5, y as f32, z as f32 + 0.5];
                     self.broadcast(&protocol::level_sound_event("teleport", from, -1), |_, q| q.world == world);

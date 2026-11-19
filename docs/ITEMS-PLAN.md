@@ -33,6 +33,7 @@ Testes de bot: `tools/weapons_test.py`, `tools/projectiles_test.py`, `tools/mobs
 - Lança: danos iguais; carga portada do PNX
 - Plantas: corrigidas as chances por random tick para as do PNX (plantações, caules e cacau 50 %); iguais: fungo do Nether 1/10, bambu 1/3, alga ~14 %, mudas 1/7, frutas silvestres 1/5, colheita de frutas, cana com farinha de osso. Mantido 2-5 estágios de farinha de osso nas plantações (vanilla; o PNX usa 2-4)
 - Terra com raízes: enxada vira terra e solta raízes pendentes, pá vira caminho, farinha de osso cria raízes pendentes embaixo (como o PNX)
+- Comida: corrigidas para o PNX as durações do ensopado suspeito (visão noturna 5 s, salto 5 s, cegueira 7 s, veneno 11 s, regeneração 7 s, wither 7 s), a Regeneração V da maçã dourada encantada e a Náusea II do baiacu; fruta do coro com até 128 tentativas num raio de 8 blocos, descendo até o chão e sem destino com líquido (o PNX não deixa comer dentro da água; mantido o vanilla, que deixa). Iguais: maçã dourada, carne podre, valores de fome/saturação
 - Pesca: o PNX é mais simples (XP 1-3, loot fixo no código); mantida a versão com as loot tables do pack
 
 ## Lote 2: ferramentas (em andamento)
